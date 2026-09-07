@@ -1,0 +1,659 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/foxzi/baton/scenario.schema.json",
+  "title": "baton scenario",
+  "description": "Scenario format of baton v1 (docs/ru/spec.md, section 3). Step kinds the runner does not execute yet are accepted as objects and gain their fields in the milestone that implements them.",
+  "type": "object",
+  "required": [
+    "version",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/input"
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "budget_usd": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "time": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/secret"
+      }
+    },
+    "apis": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/api"
+      }
+    },
+    "commands": {
+      "type": "object"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "on_failure": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "$defs": {
+    "duration": {
+      "description": "A Go duration string such as 10m, or a number of seconds.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h)([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))*$"
+        },
+        {
+          "type": "number",
+          "minimum": 0
+        }
+      ]
+    },
+    "size": {
+      "description": "A byte count, optionally with a k, m or g suffix in powers of 1024.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9]+\\s*[kKmMgG]?$"
+        },
+        {
+          "type": "integer",
+          "minimum": 0
+        }
+      ]
+    },
+    "template": {
+      "description": "A string that may contain {{ }} template actions.",
+      "type": "string"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "string",
+            "int",
+            "number",
+            "bool",
+            "list",
+            "map"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": true,
+        "pattern": {
+          "type": "string",
+          "format": "regex"
+        }
+      }
+    },
+    "secret": {
+      "type": "object",
+      "required": [
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "enum": [
+            "env",
+            "file"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "trim": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "from": {
+                "const": "env"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "then": {
+            "required": [
+              "key"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "from": {
+                "const": "file"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "then": {
+            "required": [
+              "path"
+            ]
+          }
+        }
+      ]
+    },
+    "api": {
+      "description": "An apis entry: a pack, its source, configuration and authorisation (spec section 7.4.1).",
+      "type": "object",
+      "required": [
+        "pack",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "interface": {
+          "type": "string",
+          "pattern": "^[a-z][\\w-]*/v[0-9]+$"
+        },
+        "pack": {
+          "$ref": "#/$defs/template"
+        },
+        "from": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "auth": {
+          "description": "The secret feeding the authorisation scheme of the pack (spec section 7.4.1). A step overrides it with the plain secret name in http.auth.",
+          "type": "object",
+          "required": [
+            "secret"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "secret": {
+              "type": "string"
+            }
+          }
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+        },
+        "when": {
+          "type": "string"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "on_error": {
+          "enum": [
+            "fail",
+            "continue",
+            "fallback"
+          ]
+        },
+        "fallback": {
+          "$ref": "#/$defs/step"
+        },
+        "cache": {
+          "type": "boolean"
+        },
+        "dedupe_key": {
+          "$ref": "#/$defs/template"
+        },
+        "message": {
+          "$ref": "#/$defs/template"
+        },
+        "run": {
+          "$ref": "#/$defs/run"
+        },
+        "http": {
+          "$ref": "#/$defs/http"
+        },
+        "assert": {
+          "$ref": "#/$defs/assert"
+        },
+        "llm": {
+          "type": "object"
+        },
+        "agent": {
+          "type": "object"
+        },
+        "foreach": {
+          "type": "object"
+        },
+        "until": {
+          "type": "object"
+        },
+        "switch": {
+          "description": "Subject expression of a switch; sugar over when, expanded at load (spec section 3.10).",
+          "type": "string"
+        },
+        "cases": {
+          "description": "One step per value of the switch subject.",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "default": {
+          "description": "Step taken when no case matches.",
+          "$ref": "#/$defs/step"
+        },
+        "notify": {
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "required": [
+            "http"
+          ]
+        },
+        {
+          "required": [
+            "assert"
+          ]
+        },
+        {
+          "required": [
+            "llm"
+          ]
+        },
+        {
+          "required": [
+            "agent"
+          ]
+        },
+        {
+          "required": [
+            "foreach"
+          ]
+        },
+        {
+          "required": [
+            "until"
+          ]
+        },
+        {
+          "required": [
+            "switch"
+          ]
+        },
+        {
+          "required": [
+            "notify"
+          ]
+        }
+      ],
+      "if": {
+        "required": [
+          "switch"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "id"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "transient",
+              "schema",
+              "command",
+              "timeout",
+              "budget",
+              "policy",
+              "config",
+              "assert"
+            ]
+          }
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "backoff": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "run": {
+      "description": "A command executed without a shell (spec section 3.3). The bare string form is split by baton and reported as a warning.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": [
+            "argv"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "argv": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/template"
+              }
+            },
+            "cwd": {
+              "$ref": "#/$defs/template"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/template"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "secret"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "secret": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "stdin": {
+              "$ref": "#/$defs/template"
+            },
+            "parse": {
+              "enum": [
+                "text",
+                "json",
+                "lines"
+              ]
+            },
+            "allow_exit_codes": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "max_output_bytes": {
+              "$ref": "#/$defs/size"
+            },
+            "readonly": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "http": {
+      "description": "An operation of a pack, or a raw request (spec section 3.4).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$"
+        },
+        "args": {
+          "type": "object"
+        },
+        "api": {
+          "type": "string"
+        },
+        "auth": {
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "url": {
+          "$ref": "#/$defs/template"
+        },
+        "path": {
+          "$ref": "#/$defs/template"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/template"
+        },
+        "expect_status": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          }
+        },
+        "parse": {
+          "enum": [
+            "text",
+            "json",
+            "lines"
+          ]
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/size"
+        }
+      },
+      "oneOf": [
+        {
+          "title": "operation form",
+          "required": [
+            "op"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "method"
+                ]
+              },
+              {
+                "required": [
+                  "url"
+                ]
+              },
+              {
+                "required": [
+                  "path"
+                ]
+              },
+              {
+                "required": [
+                  "headers"
+                ]
+              },
+              {
+                "required": [
+                  "query"
+                ]
+              },
+              {
+                "required": [
+                  "body"
+                ]
+              },
+              {
+                "required": [
+                  "api"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "raw form",
+          "anyOf": [
+            {
+              "required": [
+                "api"
+              ]
+            },
+            {
+              "required": [
+                "url"
+              ]
+            }
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "op"
+                ]
+              },
+              {
+                "required": [
+                  "args"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "assert": {
+      "type": "object",
+      "required": [
+        "condition"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "type": "string"
+        },
+        "message": {
+          "$ref": "#/$defs/template"
+        }
+      }
+    }
+  }
+}

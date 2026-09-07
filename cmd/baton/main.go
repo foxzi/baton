@@ -22,6 +22,7 @@ Usage:
 Commands:
   run        Execute a scenario
   validate   Check a scenario file and report every problem
+  schema     Print the JSON Schema of the scenario format
   version    Print the build identity
   help       Print this message
 `
@@ -59,6 +60,8 @@ func run(args []string) int {
 		return runCmd(args[1:])
 	case "validate":
 		return validateCmd(args[1:])
+	case "schema":
+		return schemaCmd(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 		return exitcode.OK
