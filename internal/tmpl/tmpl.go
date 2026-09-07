@@ -188,11 +188,23 @@ func walk(node parse.Node, add func([]string)) {
 	}
 }
 
+// textTemplateBuiltins are the functions text/template defines itself. The
+// parser adds them when it is driven through template.Parse, but parse.Parse
+// only sees the maps it is given, so they are spelled out here.
+var textTemplateBuiltins = []string{
+	"and", "call", "html", "index", "slice", "js", "len", "not", "or",
+	"print", "printf", "println", "urlquery",
+	"eq", "ge", "gt", "le", "lt", "ne",
+}
+
 // builtinNames are the function names parse.Parse must accept while parsing a
 // template outside of an executing template.
 func builtinNames() map[string]any {
 	names := map[string]any{}
 	for name := range (&Renderer{}).funcs(0) {
+		names[name] = struct{}{}
+	}
+	for _, name := range textTemplateBuiltins {
 		names[name] = struct{}{}
 	}
 	return names

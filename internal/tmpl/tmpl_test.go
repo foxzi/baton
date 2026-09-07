@@ -415,3 +415,24 @@ func TestRenderFileChecksIncludedFiles(t *testing.T) {
 		t.Fatalf("RenderFile succeeded, want error")
 	}
 }
+
+func TestCheckAcceptsTemplateBuiltins(t *testing.T) {
+	texts := []string{
+		"{{ len .steps.count.result }}",
+		"{{ printf \"%d\" .inputs.n }}",
+		"{{ if not .inputs.flag }}off{{ end }}",
+		"{{ index .inputs.list 0 }}",
+		"{{ if eq .inputs.a .inputs.b }}same{{ end }}",
+	}
+	for _, text := range texts {
+		if err := Check("t", text); err != nil {
+			t.Errorf("Check(%q) = %v, want nil", text, err)
+		}
+	}
+}
+
+func TestCheckStillRejectsUnknownFunction(t *testing.T) {
+	if err := Check("t", "{{ nosuchfunc .inputs.n }}"); err == nil {
+		t.Fatal("Check accepted an unknown function")
+	}
+}
