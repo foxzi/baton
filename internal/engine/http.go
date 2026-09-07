@@ -226,6 +226,9 @@ func (e *Engine) renderArg(name string, value any) (any, *Error) {
 // on first use. The authorisation secret comes from the entry unless the step
 // overrides it (section 3.4).
 func (e *Engine) api(name, authOverride string) (*httpx.API, *Error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	entry, ok := e.opts.Scenario.APIs[name]
 	if !ok {
 		return nil, errorf(ClassConfig, "unknown api %q", name)

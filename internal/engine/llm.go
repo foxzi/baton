@@ -341,6 +341,9 @@ func (e *Engine) resolvePath(path string) string {
 // api key is resolved by the caller of the engine, so that it is part of the
 // redactor before any provider can echo it back (section 13).
 func (e *Engine) provider(name string) (provider.Provider, *Error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	if p, ok := e.providers[name]; ok {
 		return p, nil
 	}

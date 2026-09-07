@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/foxzi/baton/internal/config"
@@ -89,10 +90,16 @@ type Engine struct {
 	apis     map[string]*httpx.API
 	// dir is the directory of the scenario file; pack sources and template
 	// paths resolve against it.
-	dir       string
+	dir string
+	// mu guards the lazily built caches below, which foreach bodies may
+	// reach concurrently.
+	mu        *sync.Mutex
 	providers map[string]provider.Provider
-	cost      costLedger
+	cost      *costLedger
 	steps     map[string]expr.Step
+	// vars are extra template variables of the enclosing construct: the
+	// foreach item under its as name. They are per body, never shared.
+	vars      map[string]any
 	state     *runstore.RunState
 	startedAt time.Time
 	// failure is the error that stopped the run, if any.
@@ -126,6 +133,8 @@ func New(opts Options) (*Engine, error) {
 		opts:      opts,
 		dir:       baseDir,
 		renderer:  tmpl.NewRenderer(baseDir),
+		mu:        &sync.Mutex{},
+		cost:      &costLedger{},
 		steps:     map[string]expr.Step{},
 		apis:      map[string]*httpx.API{},
 		providers: map[string]provider.Provider{},
@@ -237,17 +246,7 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 	state := &runstore.StepState{Status: runstore.StatusRunning, StartedAt: e.opts.Now()}
 	e.emit(Event{Type: "step_started", Step: step.ID})
 
-	out, stepErr := e.attempt(ctx, step, path, state)
-	if stepErr != nil && step.OnError == scenario.OnErrorFallback && step.Fallback != nil {
-		e.emit(Event{Type: "step_fallback", Step: step.ID, Message: stepErr.Msg})
-		fallback := *step.Fallback
-		fallback.ID = step.ID
-		fallback.Retry = nil
-		fallback.OnError = scenario.OnErrorFail
-		fallback.Fallback = nil
-		out, stepErr = e.attempt(ctx, &fallback, path, state)
-		state.FallbackUsed = stepErr == nil
-	}
+	out, stepErr := e.executeBody(ctx, step, path, state)
 
 	finishedAt := e.opts.Now()
 	state.FinishedAt = &finishedAt
@@ -374,11 +373,42 @@ func (e *Engine) execute(ctx context.Context, step *scenario.Step, path string) 
 		return e.execLLM(stepCtx, step, path)
 	case scenario.KindAssert:
 		return e.execAssert(step)
+	case scenario.KindForeach:
+		return e.execForeach(stepCtx, step, path)
 	case scenario.KindNone:
 		return expr.Step{}, errorf(ClassConfig, "step %s: exactly one body field must be set", step.ID)
 	default:
 		return expr.Step{}, errorf(ClassConfig, "step %s: %s steps are not implemented yet", step.ID, kind)
 	}
+}
+
+// executeBody runs one step body with its retry policy and, when that fails,
+// its fallback (sections 9.1 and 9.2). The state is updated in place. It is
+// also the entry point for a foreach item, which has a body and a policy but
+// no id of its own.
+func (e *Engine) executeBody(ctx context.Context, step *scenario.Step, path string, state *runstore.StepState) (expr.Step, *Error) {
+	out, stepErr := e.attempt(ctx, step, path, state)
+	if stepErr == nil || step.OnError != scenario.OnErrorFallback || step.Fallback == nil {
+		return out, stepErr
+	}
+	e.emit(Event{Type: "step_fallback", Step: step.ID, Message: stepErr.Msg})
+	fallback := *step.Fallback
+	fallback.ID = step.ID
+	fallback.Retry = nil
+	fallback.OnError = scenario.OnErrorFail
+	fallback.Fallback = nil
+	out, stepErr = e.attempt(ctx, &fallback, path, state)
+	state.FallbackUsed = stepErr == nil
+	return out, stepErr
+}
+
+// withVars returns an engine that renders templates with extra variables in
+// scope. Everything else -- the run store, the step results, the cost ledger
+// -- is shared with the parent.
+func (e *Engine) withVars(vars map[string]any) *Engine {
+	child := *e
+	child.vars = vars
+	return &child
 }
 
 // stepContext applies the step timeout, falling back to defaults.timeout.
@@ -521,7 +551,7 @@ func (e *Engine) templateData() map[string]any {
 		}
 	}
 	run := e.runContext()
-	return map[string]any{
+	data := map[string]any{
 		"inputs": e.opts.Inputs,
 		"steps":  steps,
 		"run": map[string]any{
@@ -539,6 +569,12 @@ func (e *Engine) templateData() map[string]any {
 			},
 		},
 	}
+	for name, value := range e.vars {
+		if _, taken := data[name]; !taken {
+			data[name] = value
+		}
+	}
+	return data
 }
 
 // render renders one scenario string.

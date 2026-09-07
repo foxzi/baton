@@ -469,6 +469,12 @@ func validateForeach(scn *Scenario, step *Step, path string, res *Result) {
 	}
 	validateTemplate(path+".items", each.Items, step.Line, res)
 
+	// as names the item in the body's templates; without it the body has no
+	// way to reach the item.
+	if strings.TrimSpace(each.As) == "" {
+		res.errorf(path+".as", step.Line, "must not be empty")
+	}
+
 	if each.MaxParallel < 0 {
 		res.errorf(path+".max_parallel", step.Line, "must not be negative")
 	}
