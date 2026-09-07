@@ -172,6 +172,11 @@ Go, a single static binary. Dependencies: a YAML parser, expr-lang for expressio
 
 ## Documentation
 
-- [Project overview](docs/ru/overview.md) (Russian) — the source this README is based on
-- [Specification for v1](docs/ru/spec.md) (Russian) — the authoritative technical document
-- [Specification review](docs/ru/spec-review.md) (Russian) — inconsistencies and gaps found while reading the spec
+- [Project overview](docs/en/overview.md) — the source this README is based on
+- [Specification for v1](docs/en/spec.md) — the authoritative technical document
+- [Specification review](docs/en/spec-review.md) — inconsistencies and gaps found while reading the spec
+- Russian originals: [обзор](docs/ru/overview.md), [ТЗ](docs/ru/spec.md), [вычитка](docs/ru/spec-review.md), [README](docs/ru/README.md)
+
+## License
+
+[MIT](LICENSE)

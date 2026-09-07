@@ -177,3 +177,7 @@ Go, один статический бинарник. Зависимости: п
 - [Вычитка ТЗ](spec-review.md) — расхождения и пробелы, найденные при чтении ТЗ
 - English versions: [project overview](../en/overview.md), [specification](../en/spec.md), [spec review](../en/spec-review.md)
 - [Корневой README на английском](../../README.md)
+
+## Лицензия
+
+[MIT](../../LICENSE)
