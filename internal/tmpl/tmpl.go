@@ -86,13 +86,17 @@ func (r *Renderer) renderFile(path string, data any, depth int) (string, error) 
 		return "", fmt.Errorf("read template %s: %w", path, err)
 	}
 	if err := Check(path, string(text)); err != nil {
-		return "", err
+		return "", fmt.Errorf("%s: %w", path, err)
 	}
 	return r.render(path, string(text), data, depth+1)
 }
 
 // Check parses text and rejects references to secrets. Validation runs it over
 // every template of a scenario before the run starts (section 4, item 4).
+//
+// The name is only used inside parse errors, which text/template formats with
+// it; the secret error carries no name, so a caller that already reports a
+// field path does not print it twice.
 func Check(name, text string) error {
 	renderer := &Renderer{}
 	if _, err := template.New(name).Option(missingKey).Funcs(renderer.funcs(0)).Parse(text); err != nil {
@@ -104,7 +108,7 @@ func Check(name, text string) error {
 	}
 	for _, field := range fields {
 		if field == "secrets" {
-			return fmt.Errorf("%s: templates cannot reference secrets", name)
+			return errors.New("templates cannot reference secrets")
 		}
 	}
 	return nil
