@@ -107,16 +107,18 @@ type Step struct {
 	HTTP   *HTTPStep   `yaml:"http"`
 	Assert *AssertStep `yaml:"assert"`
 
-	// Bodies of step kinds the runner does not execute yet.
-	LLM     *yaml.Node `yaml:"llm"`
-	Agent   *yaml.Node `yaml:"agent"`
-	Foreach *yaml.Node `yaml:"foreach"`
-	Until   *yaml.Node `yaml:"until"`
-	Switch  *yaml.Node `yaml:"switch"`
-	Cases   *yaml.Node `yaml:"cases"`
-	Default *yaml.Node `yaml:"default"`
-	Notify  *yaml.Node `yaml:"notify"`
-	Message string     `yaml:"message"`
+	// Bodies of step kinds the runner does not execute yet. These are kept
+	// as raw nodes; yaml.v3 only decodes into a yaml.Node value, never into
+	// a *yaml.Node, so presence is reported by IsZero rather than by nil.
+	LLM     yaml.Node `yaml:"llm"`
+	Agent   yaml.Node `yaml:"agent"`
+	Foreach yaml.Node `yaml:"foreach"`
+	Until   yaml.Node `yaml:"until"`
+	Switch  string    `yaml:"switch"`
+	Cases   yaml.Node `yaml:"cases"`
+	Default yaml.Node `yaml:"default"`
+	Notify  yaml.Node `yaml:"notify"`
+	Message string    `yaml:"message"`
 
 	// Line is the line the step starts on, for diagnostics.
 	Line int `yaml:"-"`
@@ -151,22 +153,22 @@ func (s *Step) Kinds() []Kind {
 	if s.HTTP != nil {
 		kinds = append(kinds, KindHTTP)
 	}
-	if s.LLM != nil {
+	if !s.LLM.IsZero() {
 		kinds = append(kinds, KindLLM)
 	}
-	if s.Agent != nil {
+	if !s.Agent.IsZero() {
 		kinds = append(kinds, KindAgent)
 	}
-	if s.Foreach != nil {
+	if !s.Foreach.IsZero() {
 		kinds = append(kinds, KindForeach)
 	}
-	if s.Until != nil {
+	if !s.Until.IsZero() {
 		kinds = append(kinds, KindUntil)
 	}
-	if s.Switch != nil {
+	if s.Switch != "" {
 		kinds = append(kinds, KindSwitch)
 	}
-	if s.Notify != nil {
+	if !s.Notify.IsZero() {
 		kinds = append(kinds, KindNotify)
 	}
 	return kinds

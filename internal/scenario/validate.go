@@ -204,7 +204,7 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		validateTemplate(path+".assert.message", step.Assert.Message, step.Line, res)
 	case KindUntil:
 		// Specification section 4, check 9.
-		if !hasKey(step.Until, "max_iterations") {
+		if !hasKey(&step.Until, "max_iterations") {
 			res.errorf(path+".until", step.Line, "max_iterations is required")
 		}
 	case KindSwitch:
@@ -385,15 +385,13 @@ func validateArg(path string, value any, line int, res *Result) {
 }
 
 func validateSwitch(step *Step, path string, res *Result) {
-	if step.Switch.Kind != yaml.ScalarNode || strings.TrimSpace(step.Switch.Value) == "" {
-		res.errorf(path+".switch", step.Line, "must be an expression")
-	}
-	if step.Cases == nil || step.Cases.Kind != yaml.MappingNode || len(step.Cases.Content) == 0 {
+	validateExpr(path+".switch", step.Switch, step.Line, res)
+	if step.Cases.Kind != yaml.MappingNode || len(step.Cases.Content) == 0 {
 		res.errorf(path+".cases", step.Line, "must declare at least one case")
 	}
 	// Enum coverage (specification section 4, check 10) needs the schema of
 	// the referenced step and is checked once schemas are loaded.
-	if step.Default == nil {
+	if step.Default.IsZero() {
 		res.warnf(path, step.Line, "no default case; every value of the subject must be covered")
 	}
 }

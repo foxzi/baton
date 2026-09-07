@@ -436,6 +436,23 @@ steps:
 			wantErr: "must declare from: env or from: file",
 		},
 		{
+			// Raw bodies are kept as yaml.Node values so that checks such
+			// as this one can look inside them.
+			name: "until with max_iterations",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: fix
+    until:
+      condition: "iter.test.exit_code == 0"
+      max_iterations: 3
+      step: { run: { argv: ["echo", "retry"] } }
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
+		{
 			name: "until without max_iterations",
 			yaml: `
 version: 1
@@ -686,5 +703,75 @@ steps:
 		if !diagnosticsContain(res.Errors, want) {
 			t.Errorf("Errors = %v, want a diagnostic for %q", res.Errors, want)
 		}
+	}
+}
+
+// TestParseValidateSwitchStep checks that a switch step written the way
+// specification section 3.10 spells it out survives Parse and Validate: no id
+// of its own, a scalar subject expression, one step per case and a default.
+func TestParseValidateSwitchStep(t *testing.T) {
+	yaml := `
+version: 1
+name: valid
+steps:
+  - id: classify
+    run:
+      argv: ["echo", "high"]
+  - switch: steps.classify.result.risk
+    cases:
+      high: { id: deep, run: { argv: ["echo", "deep"] } }
+      low:  { id: light, run: { argv: ["echo", "light"] } }
+    default: { id: skip_note, run: { argv: ["echo", "skipped"] } }
+`
+	scn, err := Parse([]byte(yaml), "test.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	step := scn.Steps[1]
+	if step.Kind() != KindSwitch {
+		t.Fatalf("Kind() = %q, want %q", step.Kind(), KindSwitch)
+	}
+	if step.Switch != "steps.classify.result.risk" {
+		t.Errorf("Switch = %q, want the subject expression", step.Switch)
+	}
+	if len(step.Cases.Content) != 4 {
+		t.Errorf("Cases = %v, want two entries", step.Cases)
+	}
+	if step.Default.IsZero() {
+		t.Errorf("Default is empty, want the default step")
+	}
+
+	res := Validate(scn)
+	if !res.OK() {
+		t.Fatalf("OK() = false, Errors = %v", res.Errors)
+	}
+	if len(res.Warnings) != 0 {
+		t.Errorf("Warnings = %v, want none", res.Warnings)
+	}
+}
+
+// TestValidateSwitchWithoutDefaultWarns checks the section 4 check 10
+// fallback: without a default the validator cannot prove every value of the
+// subject is covered, so it warns.
+func TestValidateSwitchWithoutDefaultWarns(t *testing.T) {
+	yaml := `
+version: 1
+name: valid
+steps:
+  - switch: inputs.mode
+    cases:
+      a: { id: a1, run: { argv: ["echo", "a"] } }
+`
+	scn, err := Parse([]byte(yaml), "test.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	res := Validate(scn)
+	if !res.OK() {
+		t.Fatalf("OK() = false, Errors = %v", res.Errors)
+	}
+	if !diagnosticsContain(res.Warnings, "no default case") {
+		t.Errorf("Warnings = %v, want a missing-default warning", res.Warnings)
 	}
 }
