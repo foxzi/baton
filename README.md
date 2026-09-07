@@ -157,7 +157,7 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
 ## Building
 
-Requires Go 1.24 or newer.
+Requires Go 1.25 or newer.
 
 ```sh
 make build      # builds ./baton with version metadata
