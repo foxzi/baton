@@ -41,12 +41,12 @@ func Resolve(declared map[string]scenario.Secret, baseDir string) (*Store, error
 	byName := make(map[string]values.Secret, len(declared))
 	var problems []error
 	for _, name := range names {
-		value, err := read(declared[name], baseDir)
+		secret, err := ResolveOne(name, declared[name], baseDir)
 		if err != nil {
 			problems = append(problems, fmt.Errorf("secrets.%s: %w", name, err))
 			continue
 		}
-		byName[name] = values.NewSecret(name, value)
+		byName[name] = secret
 	}
 	if len(problems) > 0 {
 		return nil, errors.Join(problems...)
@@ -57,6 +57,36 @@ func Resolve(declared map[string]scenario.Secret, baseDir string) (*Store, error
 		all = append(all, secret)
 	}
 	return &Store{byName: byName, redactor: NewRedactor(all...)}, nil
+}
+
+// ResolveOne reads a single declared secret and labels it with name. It is
+// what Resolve does per entry, exported for the secrets that live outside the
+// scenario's own secrets: block, such as provider api keys (section 8.3).
+func ResolveOne(name string, declared scenario.Secret, baseDir string) (values.Secret, error) {
+	value, err := read(declared, baseDir)
+	if err != nil {
+		return values.Secret{}, err
+	}
+	return values.NewSecret(name, value), nil
+}
+
+// WithHidden returns a store whose redactor also covers extra, while none of
+// extra is reachable by Lookup. A provider api key must never be readable
+// from a scenario, but it must still be masked everywhere (section 13).
+func (s *Store) WithHidden(extra ...values.Secret) *Store {
+	if len(extra) == 0 {
+		return s
+	}
+	byName := map[string]values.Secret{}
+	if s != nil {
+		byName = s.byName
+	}
+	all := make([]values.Secret, 0, len(byName)+len(extra))
+	for _, secret := range byName {
+		all = append(all, secret)
+	}
+	all = append(all, extra...)
+	return &Store{byName: byName, redactor: NewRedactor(all...)}
 }
 
 // read returns the plaintext of one declared secret.

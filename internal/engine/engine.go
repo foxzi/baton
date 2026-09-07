@@ -14,12 +14,15 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/httpx"
+	"github.com/foxzi/baton/internal/provider"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
 	"github.com/foxzi/baton/internal/secrets"
 	"github.com/foxzi/baton/internal/tmpl"
+	"github.com/foxzi/baton/internal/values"
 )
 
 // onFailureTimeout is the per-step timeout of on_failure steps (section 9.3).
@@ -34,6 +37,14 @@ type Options struct {
 	// Secrets holds the resolved secrets; it may be nil when the scenario
 	// declares none.
 	Secrets *secrets.Store
+	// Config is the global configuration (section 12). It may be nil, in
+	// which case a scenario that needs a provider or a channel fails with
+	// the config class.
+	Config *config.Config
+	// ProviderKeys are the resolved api keys of the providers, by provider
+	// name. The caller resolves them so that a key is part of the redactor
+	// before any provider can echo it back (section 13).
+	ProviderKeys map[string]values.Secret
 	// Store is the run directory to record the run in.
 	Store *runstore.Store
 	// Workspace is the default working directory of run steps. It defaults
@@ -79,6 +90,8 @@ type Engine struct {
 	// dir is the directory of the scenario file; pack sources and template
 	// paths resolve against it.
 	dir       string
+	providers map[string]provider.Provider
+	cost      costLedger
 	steps     map[string]expr.Step
 	state     *runstore.RunState
 	startedAt time.Time
@@ -110,11 +123,12 @@ func New(opts Options) (*Engine, error) {
 		opts.Inputs = map[string]any{}
 	}
 	return &Engine{
-		opts:     opts,
-		dir:      baseDir,
-		renderer: tmpl.NewRenderer(baseDir),
-		steps:    map[string]expr.Step{},
-		apis:     map[string]*httpx.API{},
+		opts:      opts,
+		dir:       baseDir,
+		renderer:  tmpl.NewRenderer(baseDir),
+		steps:     map[string]expr.Step{},
+		apis:      map[string]*httpx.API{},
+		providers: map[string]provider.Provider{},
 	}, nil
 }
 
@@ -178,6 +192,7 @@ func (e *Engine) budgetContext(ctx context.Context) (context.Context, context.Ca
 func (e *Engine) finish(ctx context.Context) {
 	finishedAt := e.opts.Now()
 	e.state.FinishedAt = &finishedAt
+	defer e.writeCost()
 
 	if e.failure == nil {
 		e.state.Status = runstore.StatusSuccess
@@ -300,6 +315,11 @@ func (e *Engine) attempt(ctx context.Context, step *scenario.Step, path string, 
 // retryFor decides whether a class is retried for this step. retry.attempts
 // counts retries after the first try, matching the defaults of section 9.1.
 func (e *Engine) retryFor(step *scenario.Step, class string) (retryPolicy, bool) {
+	// An llm step owns its schema retry: retrying it here would start from
+	// a fresh conversation and lose the validation message (section 3.5).
+	if step.LLM != nil && class == ClassSchema {
+		return retryPolicy{}, false
+	}
 	if step.Retry != nil {
 		if len(step.Retry.On) > 0 && !containsClass(step.Retry.On, class) {
 			return retryPolicy{}, false
@@ -350,6 +370,8 @@ func (e *Engine) execute(ctx context.Context, step *scenario.Step, path string) 
 		return e.execRun(stepCtx, step, path)
 	case scenario.KindHTTP:
 		return e.execHTTP(stepCtx, step, path)
+	case scenario.KindLLM:
+		return e.execLLM(stepCtx, step, path)
 	case scenario.KindAssert:
 		return e.execAssert(step)
 	case scenario.KindNone:
@@ -470,6 +492,9 @@ func (e *Engine) runContext() expr.Run {
 		Dir:       e.opts.Store.Dir(),
 		Duration:  e.opts.Now().Sub(e.startedAt),
 	}
+	if total := e.cost.report().TotalUSD; total != nil {
+		run.CostUSD = *total
+	}
 	if e.failure != nil {
 		run.FailedStep = e.failedStep
 		run.Error = expr.RunError{
@@ -558,5 +583,16 @@ func sleep(ctx context.Context, d time.Duration) error {
 		return ctx.Err()
 	case <-timer.C:
 		return nil
+	}
+}
+
+// writeCost stores cost.json and the run total in run.json (section 10.1). A
+// run directory that cannot take the report is not worth failing the run
+// over: the cost is also in each step's output.json.
+func (e *Engine) writeCost() {
+	report := e.cost.report()
+	e.state.CostUSD = report.TotalUSD
+	if err := e.opts.Store.WriteCost(report); err != nil {
+		e.emit(Event{Type: "warning", Message: err.Error()})
 	}
 }

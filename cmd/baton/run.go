@@ -13,11 +13,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/engine"
 	"github.com/foxzi/baton/internal/exitcode"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
 	"github.com/foxzi/baton/internal/secrets"
+	"github.com/foxzi/baton/internal/values"
 )
 
 const runUsage = `Usage: baton run <scenario.yaml> [options]
@@ -28,6 +30,7 @@ Options:
   --run-id ID        Use this run id instead of a generated one
   --runs-dir DIR     Write the run directory here (default: runs/ next to the scenario)
   --workspace DIR    Working directory of run steps (default: the scenario directory)
+  --config FILE      Global configuration file; repeatable, later files win
   --dry-run          Validate, resolve secrets and print the plan without executing
   --json             Print events as JSONL on stdout; the human log stays on stderr
   -v                 Print every event, not just step boundaries
@@ -58,6 +61,7 @@ func runCmd(args []string) int {
 		runID     string
 		runsDir   string
 		workspace string
+		configs   stringList
 		dryRun    bool
 		asJSON    bool
 		verbose   bool
@@ -71,6 +75,7 @@ func runCmd(args []string) int {
 	flags.StringVar(&runID, "run-id", "", "run id")
 	flags.StringVar(&runsDir, "runs-dir", "", "run directory root")
 	flags.StringVar(&workspace, "workspace", "", "working directory of run steps")
+	flags.Var(&configs, "config", "global configuration file")
 	flags.BoolVar(&dryRun, "dry-run", false, "print the plan without executing")
 	flags.BoolVar(&asJSON, "json", false, "print events as JSONL on stdout")
 	flags.BoolVar(&verbose, "v", false, "print every event")
@@ -113,12 +118,31 @@ func runCmd(args []string) int {
 		return exitcode.Config
 	}
 
+	cfg, err := config.Load(configs...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+
 	baseDir := filepath.Dir(path)
 	secretStore, err := secrets.Resolve(scn.Secrets, baseDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config
 	}
+
+	// Provider keys join the redactor but not the scenario namespace: a
+	// template must not be able to print one (section 13).
+	providerKeys, err := cfg.ResolveProviderKeys(baseDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	secretStore = secretStore.WithHidden(secretValues(providerKeys)...)
 
 	if dryRun {
 		printPlan(scn, bound, secretStore)
@@ -142,12 +166,14 @@ func runCmd(args []string) int {
 	defer store.Close()
 
 	eng, err := engine.New(engine.Options{
-		Scenario:  scn,
-		Inputs:    bound,
-		Secrets:   secretStore,
-		Store:     store,
-		Workspace: workspace,
-		Observer:  observer(asJSON, verbose),
+		Scenario:     scn,
+		Inputs:       bound,
+		Secrets:      secretStore,
+		Store:        store,
+		Workspace:    workspace,
+		Config:       cfg,
+		ProviderKeys: providerKeys,
+		Observer:     observer(asJSON, verbose),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
@@ -274,4 +300,13 @@ func sortedInputNames(declared map[string]scenario.Input) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// secretValues is the values of a provider key map, for the redactor.
+func secretValues(keys map[string]values.Secret) []values.Secret {
+	out := make([]values.Secret, 0, len(keys))
+	for _, secret := range keys {
+		out = append(out, secret)
+	}
+	return out
 }

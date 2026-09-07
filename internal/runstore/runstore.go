@@ -60,6 +60,7 @@ type RunState struct {
 	FinishedAt    *time.Time            `json:"finished_at,omitempty"`
 	Inputs        map[string]any        `json:"inputs,omitempty"`
 	Steps         map[string]*StepState `json:"steps,omitempty"`
+	CostUSD       *float64              `json:"cost_usd"`
 	FailedStep    string                `json:"failed_step,omitempty"`
 	Error         *RunError             `json:"error,omitempty"`
 	ResumeOf      string                `json:"resume_of,omitempty"`
