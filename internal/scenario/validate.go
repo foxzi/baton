@@ -83,6 +83,7 @@ func Validate(scn *Scenario) Result {
 
 	validateInputs(scn, &res)
 	validateSecrets(scn, &res)
+	validateAPIs(scn, &res)
 
 	if len(scn.Steps) == 0 {
 		res.errorf("steps", 0, "must declare at least one step")
@@ -193,6 +194,8 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 	switch kinds[0] {
 	case KindRun:
 		validateRun(scn, step, path+".run", res)
+	case KindHTTP:
+		validateHTTP(scn, step, path+".http", res)
 	case KindAssert:
 		if strings.TrimSpace(step.Assert.Condition) == "" {
 			res.errorf(path+".assert.condition", step.Line, "must not be empty")
@@ -247,6 +250,137 @@ func validateRun(scn *Scenario, step *Step, path string, res *Result) {
 	// retried automatically unless the run is idempotent.
 	if !run.Readonly && step.DedupeKey == "" && step.Retry != nil {
 		res.warnf(path, step.Line, "retry on a step without readonly: true or dedupe_key may repeat side effects")
+	}
+}
+
+// httpMethods are the methods a raw request may use.
+var httpMethods = map[string]bool{
+	"GET": true, "HEAD": true, "POST": true, "PUT": true,
+	"PATCH": true, "DELETE": true,
+}
+
+// effectfulMethods have side effects, so section 9.4 wants a dedupe key.
+var effectfulMethods = map[string]bool{
+	"POST": true, "PUT": true, "PATCH": true, "DELETE": true,
+}
+
+// opPattern is the required shape of an op reference: <api>.<op>.
+var opPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`)
+
+func validateAPIs(scn *Scenario, res *Result) {
+	for _, name := range sortedKeys(scn.APIs) {
+		api := scn.APIs[name]
+		path := "apis." + name
+		if !idPattern.MatchString(name) {
+			res.errorf(path, api.Line, "%q must match %s", name, idPattern)
+		}
+		if strings.TrimSpace(api.Pack) == "" {
+			res.errorf(path+".pack", api.Line, "must name a pack")
+		}
+		validateTemplate(path+".pack", api.Pack, api.Line, res)
+		if strings.TrimSpace(api.From) == "" {
+			res.errorf(path+".from", api.Line, "must name a pack source")
+		}
+		if api.Auth.Secret != "" && scn.Secrets[api.Auth.Secret].From == "" {
+			res.errorf(path+".auth.secret", api.Line, "undeclared secret %q", api.Auth.Secret)
+		}
+		if api.Timeout < 0 {
+			res.errorf(path+".timeout", api.Line, "must not be negative")
+		}
+		for _, field := range sortedKeys(api.Config) {
+			validateTemplate(path+".config."+field, api.Config[field], api.Line, res)
+		}
+	}
+}
+
+// validateHTTP checks an http body: exactly one of the two forms of section
+// 3.4, a resolvable apis reference, and the side-effect rule of section 9.4.
+// Whether the operation exists and its arguments fit its params is checked
+// against the loaded pack at run time.
+func validateHTTP(scn *Scenario, step *Step, path string, res *Result) {
+	body := step.HTTP
+	apiName, _ := body.APIName()
+
+	switch {
+	case body.Op != "" && (body.API != "" || body.URL != ""):
+		res.errorf(path, step.Line, "op cannot be combined with api or url; use one form")
+	case body.Op == "" && body.API == "" && body.URL == "":
+		res.errorf(path, step.Line, "must set op, api or url")
+	case body.Op != "" && !opPattern.MatchString(body.Op):
+		res.errorf(path+".op", step.Line, "%q must be <api>.<op>", body.Op)
+	}
+	if !body.Raw() {
+		for _, field := range [][2]string{{"path", body.Path}, {"body", body.Body}} {
+			if field[1] != "" {
+				res.errorf(path+"."+field[0], step.Line, "belongs to the raw form, not to op")
+			}
+		}
+	}
+	if apiName != "" {
+		if _, ok := scn.APIs[apiName]; !ok {
+			res.errorf(path, step.Line, "unknown api %q", apiName)
+		}
+	}
+	if body.Auth != "" && scn.Secrets[body.Auth].From == "" {
+		res.errorf(path+".auth", step.Line, "undeclared secret %q", body.Auth)
+	}
+
+	method := strings.ToUpper(body.Method)
+	switch {
+	case method == "":
+	case !body.Raw():
+		res.errorf(path+".method", step.Line, "the operation of the pack decides the method")
+	case !httpMethods[method]:
+		res.errorf(path+".method", step.Line, "unknown method %q", body.Method)
+	}
+	if !parseModes[body.Parse] {
+		res.errorf(path+".parse", step.Line, "unknown mode %q, want text, json or lines", body.Parse)
+	}
+	if body.MaxBytes < 0 {
+		res.errorf(path+".max_bytes", step.Line, "must not be negative")
+	}
+	for _, status := range body.ExpectStatus {
+		if status < 100 || status > 599 {
+			res.errorf(path+".expect_status", step.Line, "%d is not an HTTP status", status)
+		}
+	}
+
+	validateTemplate(path+".url", body.URL, step.Line, res)
+	validateTemplate(path+".path", body.Path, step.Line, res)
+	validateTemplate(path+".body", body.Body, step.Line, res)
+	for _, name := range sortedKeys(body.Headers) {
+		validateTemplate(path+".headers."+name, body.Headers[name], step.Line, res)
+	}
+	for _, name := range sortedKeys(body.Query) {
+		validateTemplate(path+".query."+name, body.Query[name], step.Line, res)
+	}
+	for _, name := range sortedKeys(body.Args) {
+		validateArg(fmt.Sprintf("%s.args.%s", path, name), body.Args[name], step.Line, res)
+	}
+
+	// Section 9.4: a request that may change something needs a dedupe key
+	// before it can be repeated. An op without readonly: true is checked at
+	// run time, where the pack is known.
+	if effectfulMethods[method] && step.DedupeKey == "" {
+		res.warnf(path, step.Line, "%s without dedupe_key cannot be retried safely", method)
+	}
+	validateTemplate(path+".dedupe_key", step.DedupeKey, step.Line, res)
+}
+
+// validateArg checks the templates inside one operation argument, which may
+// be a scalar, a list or a mapping.
+func validateArg(path string, value any, line int, res *Result) {
+	switch typed := value.(type) {
+	case string:
+		validateTemplate(path, typed, line, res)
+	case []any:
+		for i, item := range typed {
+			validateArg(fmt.Sprintf("%s[%d]", path, i), item, line, res)
+		}
+	case map[string]any:
+		for _, name := range sortedKeys(typed) {
+			validateArg(path+"."+name, typed[name], line, res)
+		}
 	}
 }
 

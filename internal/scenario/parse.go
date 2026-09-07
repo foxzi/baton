@@ -59,6 +59,63 @@ func (s *Step) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+// apiKeys are the field names accepted on an apis entry.
+var apiKeys = map[string]bool{
+	"interface": true, "pack": true, "from": true, "sha256": true,
+	"config": true, "auth": true, "timeout": true,
+}
+
+// UnmarshalYAML decodes an apis entry and remembers where it was declared.
+func (a *API) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkKeys(node, apiKeys, "apis entry"); err != nil {
+		return err
+	}
+	type plain API
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*a = API(decoded)
+	a.Line = node.Line
+	return nil
+}
+
+// UnmarshalYAML decodes the auth block of an apis entry.
+func (a *APIAuth) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkKeys(node, map[string]bool{"secret": true}, "apis auth"); err != nil {
+		return err
+	}
+	type plain APIAuth
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*a = APIAuth(decoded)
+	return nil
+}
+
+// httpKeys are the field names accepted on an http body.
+var httpKeys = map[string]bool{
+	"op": true, "args": true, "api": true, "auth": true, "method": true,
+	"url": true, "path": true, "headers": true, "query": true, "body": true,
+	"expect_status": true, "parse": true, "max_bytes": true,
+}
+
+// UnmarshalYAML decodes an http body. The strict-field check of the decoder
+// does not reach inside a step, so it is done here.
+func (h *HTTPStep) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkKeys(node, httpKeys, "http"); err != nil {
+		return err
+	}
+	type plain HTTPStep
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*h = HTTPStep(decoded)
+	return nil
+}
+
 // runKeys are the field names accepted on a run body.
 var runKeys = map[string]bool{
 	"argv": true, "cwd": true, "env": true, "stdin": true, "parse": true,

@@ -1,13 +1,17 @@
 // Package scenario parses and validates baton scenario files.
 //
 // The format is specified in docs/ru/spec.md, section 3, and the validation
-// rules in section 4. Step kinds that the runner does not execute yet (http,
-// llm, agent, foreach, until, switch) are parsed into a raw node so that a
+// rules in section 4. Step kinds that the runner does not execute yet (llm,
+// agent, foreach, until, switch) are parsed into a raw node so that a
 // scenario using them still loads and reports structural problems; their
 // bodies gain typed models together with the code that runs them.
 package scenario
 
-import "gopkg.in/yaml.v3"
+import (
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
 
 // Scenario is a parsed scenario file.
 type Scenario struct {
@@ -21,9 +25,12 @@ type Scenario struct {
 	Steps       []Step            `yaml:"steps"`
 	OnFailure   []Step            `yaml:"on_failure"`
 
-	// APIs and Commands are accepted but not interpreted yet; they belong to
-	// the pack loader (spec sections 7.4 and 7.5).
-	APIs     *yaml.Node `yaml:"apis"`
+	// APIs binds API packs to the names their operations are called under
+	// (spec section 7.4.1).
+	APIs map[string]API `yaml:"apis"`
+
+	// Commands is accepted but not interpreted yet; it belongs to the agent
+	// gateway (spec section 7.5).
 	Commands *yaml.Node `yaml:"commands"`
 
 	// Path is the file the scenario was read from. Prompt, schema and
@@ -97,10 +104,10 @@ type Step struct {
 	DedupeKey string   `yaml:"dedupe_key"`
 
 	Run    *RunStep    `yaml:"run"`
+	HTTP   *HTTPStep   `yaml:"http"`
 	Assert *AssertStep `yaml:"assert"`
 
 	// Bodies of step kinds the runner does not execute yet.
-	HTTP    *yaml.Node `yaml:"http"`
 	LLM     *yaml.Node `yaml:"llm"`
 	Agent   *yaml.Node `yaml:"agent"`
 	Foreach *yaml.Node `yaml:"foreach"`
@@ -228,6 +235,78 @@ type EnvValue struct {
 	Value  string
 	Secret string
 }
+
+// API is an apis entry: a pack, where to load it from, and the configuration
+// and authorisation it is bound to (spec section 7.4.1).
+type API struct {
+	// Interface names the interface the pack must implement, such as
+	// forge/v1. Checking it is part of the pack milestone.
+	Interface string `yaml:"interface"`
+
+	// Pack is the pack name and may be a template, so that a scenario can
+	// pick gitlab or github from an input.
+	Pack string `yaml:"pack"`
+
+	// From is the pack source: a local directory in v1.
+	From string `yaml:"from"`
+
+	// SHA256 pins remote sources and is unused for local directories.
+	SHA256 string `yaml:"sha256"`
+
+	Config  map[string]string `yaml:"config"`
+	Auth    APIAuth           `yaml:"auth"`
+	Timeout Duration          `yaml:"timeout"`
+
+	// Line is the line the entry starts on, for diagnostics.
+	Line int `yaml:"-"`
+}
+
+// APIAuth names the secret that feeds the authorisation scheme of the pack.
+type APIAuth struct {
+	Secret string `yaml:"secret"`
+}
+
+// HTTPStep calls an API (spec section 3.4). It has two forms: an operation of
+// a pack, or a raw request. Op belongs to the first form, Method and the
+// fields after it to the second, and API to both.
+type HTTPStep struct {
+	Op   string         `yaml:"op"`
+	Args map[string]any `yaml:"args"`
+
+	// API names the apis entry to call. The operation form takes it from the
+	// <api>.<op> prefix of Op instead.
+	API string `yaml:"api"`
+
+	// Auth overrides the secret declared in the apis entry, which lets one
+	// step write with a token that the read-only steps do not carry.
+	Auth string `yaml:"auth"`
+
+	Method       string            `yaml:"method"`
+	URL          string            `yaml:"url"`
+	Path         string            `yaml:"path"`
+	Headers      map[string]string `yaml:"headers"`
+	Query        map[string]string `yaml:"query"`
+	Body         string            `yaml:"body"`
+	ExpectStatus []int             `yaml:"expect_status"`
+	Parse        ParseMode         `yaml:"parse"`
+	MaxBytes     ByteSize          `yaml:"max_bytes"`
+}
+
+// APIName returns the apis entry the step calls and, for the operation form,
+// the operation name.
+func (h *HTTPStep) APIName() (api, op string) {
+	if h.Op == "" {
+		return h.API, ""
+	}
+	name, operation, found := strings.Cut(h.Op, ".")
+	if !found {
+		return "", h.Op
+	}
+	return name, operation
+}
+
+// Raw reports whether the step is the raw-request form.
+func (h *HTTPStep) Raw() bool { return h.Op == "" }
 
 // AssertStep stops the run when its condition is false (spec section 3.9).
 type AssertStep struct {
