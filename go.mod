@@ -8,6 +8,7 @@ require (
 	github.com/itchyny/gojq v0.12.19
 	github.com/openai/openai-go/v3 v3.56.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -24,5 +25,4 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
 )
