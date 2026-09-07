@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/foxzi/baton/internal/expr"
+	"github.com/foxzi/baton/internal/tmpl"
 	"gopkg.in/yaml.v3"
 )
 
@@ -65,9 +67,10 @@ var parseModes = map[ParseMode]bool{
 	ParseUnset: true, ParseText: true, ParseJSON: true, ParseLines: true,
 }
 
-// Validate performs the structural checks of specification section 4. The
-// checks that need a compiled expression or template context - items 3 to 8,
-// 10, 12 and 13 - land together with internal/expr and internal/tmpl.
+// Validate performs the structural checks of specification section 4.
+// Checks 3, 4 and 7 compile expressions and templates through internal/expr
+// and internal/tmpl. Checks 5, 6, 10, 12 and 13 need reference analysis or
+// loaded API packs and are not implemented yet.
 func Validate(scn *Scenario) Result {
 	var res Result
 
@@ -153,6 +156,7 @@ func validateSteps(scn *Scenario, steps []Step, prefix string, declared map[stri
 		validateStepID(step, path, declared, res)
 		validateStepBody(scn, step, path, res)
 		validateStepControl(step, path, declared, res)
+		validateExpr(path+".when", step.When, step.Line, res)
 	}
 }
 
@@ -193,6 +197,8 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		if strings.TrimSpace(step.Assert.Condition) == "" {
 			res.errorf(path+".assert.condition", step.Line, "must not be empty")
 		}
+		validateExpr(path+".assert.condition", step.Assert.Condition, step.Line, res)
+		validateTemplate(path+".assert.message", step.Assert.Message, step.Line, res)
 	case KindUntil:
 		// Specification section 4, check 9.
 		if !hasKey(step.Until, "max_iterations") {
@@ -220,11 +226,22 @@ func validateRun(scn *Scenario, step *Step, path string, res *Result) {
 	if run.MaxOutputBytes < 0 {
 		res.errorf(path+".max_output_bytes", step.Line, "must not be negative")
 	}
+	for i, arg := range run.Argv {
+		validateTemplate(fmt.Sprintf("%s.argv[%d]", path, i), arg, step.Line, res)
+	}
+	validateTemplate(path+".stdin", run.Stdin, step.Line, res)
+	validateTemplate(path+".cwd", run.Cwd, step.Line, res)
 	for _, name := range sortedKeys(run.Env) {
 		entry := run.Env[name]
-		if entry.Secret != "" && scn.Secrets[entry.Secret].From == "" {
-			res.errorf(path+".env."+name, step.Line, "undeclared secret %q", entry.Secret)
+		if entry.Secret != "" {
+			if scn.Secrets[entry.Secret].From == "" {
+				res.errorf(path+".env."+name, step.Line, "undeclared secret %q", entry.Secret)
+			}
+			continue
 		}
+		// Only the literal form is a template; a secret reference never
+		// reaches one (spec section 4, check 7).
+		validateTemplate(path+".env."+name, entry.Value, step.Line, res)
 	}
 	// Specification section 9.4: a command that may have side effects is not
 	// retried automatically unless the run is idempotent.
@@ -319,6 +336,29 @@ func joinKinds(kinds []Kind) string {
 		names[i] = string(kind)
 	}
 	return strings.Join(names, ", ")
+}
+
+// validateExpr checks specification section 4, check 3: source must compile
+// against the expression context and produce a boolean, which is what every
+// caller of validateExpr needs (when: and condition: fields).
+func validateExpr(path, source string, line int, res *Result) {
+	if strings.TrimSpace(source) == "" {
+		return
+	}
+	if _, err := expr.CompileBool(source); err != nil {
+		res.errorf(path, line, "%s", err)
+	}
+}
+
+// validateTemplate checks specification section 4, checks 4 and 7: text must
+// parse as a template and must not reference secrets.
+func validateTemplate(path, text string, line int, res *Result) {
+	if text == "" {
+		return
+	}
+	if err := tmpl.Check(path, text); err != nil {
+		res.errorf(path, line, "%s", err)
+	}
 }
 
 // sortedKeys returns map keys in a stable order so that diagnostics do not

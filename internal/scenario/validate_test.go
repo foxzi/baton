@@ -470,6 +470,145 @@ steps:
 `,
 			wantWarn: "command string was split on spaces",
 		},
+		{
+			name: "when valid expression",
+			yaml: `
+version: 1
+name: valid
+inputs:
+  n:
+    type: int
+steps:
+  - id: a
+    when: "inputs.n > 0"
+    run:
+      argv: ["echo", "hi"]
+      readonly: true
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
+		{
+			name: "when fails to compile",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    when: "inputs.n >"
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: "when",
+		},
+		{
+			name: "when is not boolean",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    when: "run.name"
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: "when",
+		},
+		{
+			name: "when references secrets",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    when: "secrets.token == \"x\""
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: "secrets",
+		},
+		{
+			name: "assert condition fails to compile",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    assert:
+      condition: "true &&"
+`,
+			wantErr: "assert.condition",
+		},
+		{
+			name: "run argv references secrets in a template",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    run:
+      argv: ["echo", "{{ .secrets.gitlab }}"]
+`,
+			wantErr: "secrets",
+		},
+		{
+			name: "run stdin references secrets in a template",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    run:
+      argv: ["cat"]
+      stdin: "{{ .secrets.x }}"
+`,
+			wantErr: "secrets",
+		},
+		{
+			name: "assert message references secrets in a template",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    assert:
+      condition: "true"
+      message: "{{ .secrets.x }}"
+`,
+			wantErr: "secrets",
+		},
+		{
+			name: "run env literal references secrets, secret form of a declared secret is fine",
+			yaml: `
+version: 1
+name: valid
+secrets:
+  tok:
+    from: env
+    key: TOK
+steps:
+  - id: a
+    run:
+      argv: ["echo", "hi"]
+      env:
+        BAD: "{{ .secrets.tok }}"
+        SAFE:
+          secret: tok
+`,
+			wantErr: "secrets",
+		},
+		{
+			name: "run argv has a broken template",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    run:
+      argv: ["echo", "{{ .x "]
+`,
+			wantErr: "unclosed action",
+		},
 	}
 
 	for _, tc := range cases {
@@ -509,5 +648,43 @@ func TestValidateExampleHello(t *testing.T) {
 	}
 	if len(res.Warnings) != 0 {
 		t.Errorf("Warnings = %v, want none", res.Warnings)
+	}
+}
+
+// TestValidateCollectsMultipleExpressionAndTemplateErrors checks that several
+// broken when:, argv, stdin and condition fields each report their own
+// diagnostic instead of validation stopping at the first one.
+func TestValidateCollectsMultipleExpressionAndTemplateErrors(t *testing.T) {
+	yaml := `
+version: 1
+name: valid
+steps:
+  - id: a
+    when: "inputs.n >"
+    run:
+      argv: ["echo", "{{ .secrets.gitlab }}"]
+      stdin: "{{ .secrets.x }}"
+  - id: b
+    assert:
+      condition: "true &&"
+`
+	scn, err := Parse([]byte(yaml), "test.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	res := Validate(scn)
+
+	if len(res.Errors) < 4 {
+		t.Fatalf("Errors = %v, want at least 4", res.Errors)
+	}
+	for _, want := range []string{
+		"steps[0].when",
+		"steps[0].run.argv[1]",
+		"steps[0].run.stdin",
+		"steps[1].assert.condition",
+	} {
+		if !diagnosticsContain(res.Errors, want) {
+			t.Errorf("Errors = %v, want a diagnostic for %q", res.Errors, want)
+		}
 	}
 }
