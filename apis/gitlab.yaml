@@ -1,0 +1,57 @@
+# GitLab pack (spec section 7.4.2). The first pack of the project: it teaches
+# baton the GitLab REST API without putting the name GitLab into the binary.
+#
+# Packs move to their own repository in milestone M3.5, together with the
+# forge/v1 interface this pack already declares.
+pack: gitlab
+version: 1
+description: GitLab REST API v4
+
+config:
+  base_url: { default: https://gitlab.com/api/v4 }
+
+# A personal, project or group access token, sent as PRIVATE-TOKEN. The pack
+# names the header, the scenario names the secret.
+auth:
+  kind: header
+  name: PRIVATE-TOKEN
+
+rate_limit:
+  remaining_header: RateLimit-Remaining
+  retry_after_header: Retry-After
+
+# GitLab reports errors with a status code and a message field; the message is
+# what a scenario wants to see in the error.
+envelope:
+  error_when: '.message != null'
+  error_message: .message
+
+pagination:
+  style: link_header
+  max_pages: 20
+
+ops:
+  get_change:
+    get: /projects/{project}/merge_requests/{iid}/changes
+    description: Changes of a merge request
+    readonly: true
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      iid: { pattern: '^\d+$' }
+    transform: |
+      { id: .iid, title, description, author: .author.username,
+        base: .diff_refs.base_sha, head: .diff_refs.head_sha,
+        files: [ .changes[] | { path: .new_path, diff, deleted: .deleted_file } ] }
+    implements: forge/v1.get_change
+    max_bytes: 500k
+
+  post_comment:
+    post: /projects/{project}/merge_requests/{iid}/notes
+    description: Comment on a merge request
+    encode: json
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      iid: { pattern: '^\d+$' }
+      body: { max_len: 65000, in: body }
+    transform: '{ id, url: .web_url }'
+    implements: forge/v1.post_comment

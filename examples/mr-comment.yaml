@@ -1,0 +1,67 @@
+version: 1
+name: mr-comment
+description: >
+  Reads the changes of a merge request and posts a comment with their size.
+  Runs from GitLab CI, where the project and the merge request come from the
+  predefined variables and the token from a masked project variable.
+
+inputs:
+  project:
+    type: string
+    # Both the numeric id and the namespace/path form are accepted; the pack
+    # percent-encodes the value as a single path segment.
+    pattern: '^[\w./-]+$'
+    required: true
+  mr:
+    type: string
+    pattern: '^\d+$'
+    required: true
+  api_url:
+    type: string
+    # GitLab CI exports CI_API_V4_URL; pass it for a self-managed instance.
+    default: https://gitlab.com/api/v4
+    pattern: '^https?://[\w.:/-]+$'
+
+secrets:
+  gitlab_rw: { from: env, key: GITLAB_TOKEN }
+
+apis:
+  forge:
+    pack: gitlab
+    from: ../apis/
+    config: { base_url: "{{ .inputs.api_url }}" }
+    auth: { secret: gitlab_rw }
+    timeout: 20s
+
+steps:
+  - id: changes
+    http:
+      op: forge.get_change
+      args:
+        project: "{{ .inputs.project }}"
+        iid: "{{ .inputs.mr }}"
+
+  - id: count
+    needs: [changes]
+    run:
+      argv: ["sh", "-c", "printf %s \"$FILES\" | wc -l | tr -d ' '"]
+      env:
+        FILES: "{{ range .steps.changes.result.files }}{{ .path }}\n{{ end }}"
+      readonly: true
+      parse: lines
+
+  - id: publish
+    needs: [count]
+    http:
+      op: forge.post_comment
+      args:
+        project: "{{ .inputs.project }}"
+        iid: "{{ .inputs.mr }}"
+        body: "baton saw {{ index .steps.count.result 0 }} changed files in `{{ .steps.changes.result.head }}`."
+    dedupe_key: "mr-comment-{{ .inputs.project }}-{{ .inputs.mr }}-{{ .run.id }}"
+
+  - id: posted
+    needs: [publish]
+    assert:
+      condition: 'steps.publish.result.url != ""'
+      message: "the comment was created but carries no url"
