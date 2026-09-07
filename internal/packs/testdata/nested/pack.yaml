@@ -1,0 +1,7 @@
+pack: nested
+version: 1
+description: Fixture pack laid out as <name>/pack.yaml
+ops:
+  ping:
+    get: /ping
+    readonly: true

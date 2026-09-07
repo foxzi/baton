@@ -1,0 +1,7 @@
+pack: demo
+version: 1
+description: Fixture pack for Load tests
+ops:
+  ping:
+    get: /ping
+    readonly: true

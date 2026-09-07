@@ -1,0 +1,5 @@
+pack: other
+version: 1
+ops:
+  ping:
+    get: /ping
