@@ -6,6 +6,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -19,10 +20,29 @@ Usage:
   baton <command> [arguments]
 
 Commands:
+  run        Execute a scenario
   validate   Check a scenario file and report every problem
   version    Print the build identity
   help       Print this message
 `
+
+// parseFlags parses args allowing flags on either side of the positional
+// arguments, which the command lines of section 11 use.
+func parseFlags(flags *flag.FlagSet, args []string) ([]string, error) {
+	var positional []string
+	rest := args
+	for {
+		if err := flags.Parse(rest); err != nil {
+			return nil, err
+		}
+		rest = flags.Args()
+		if len(rest) == 0 {
+			return positional, nil
+		}
+		positional = append(positional, rest[0])
+		rest = rest[1:]
+	}
+}
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -35,6 +55,8 @@ func run(args []string) int {
 	}
 
 	switch args[0] {
+	case "run":
+		return runCmd(args[1:])
 	case "validate":
 		return validateCmd(args[1:])
 	case "version", "--version", "-v":
