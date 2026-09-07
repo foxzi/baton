@@ -737,10 +737,9 @@ func TestRun_UnimplementedKindFailsConfig(t *testing.T) {
 version: 1
 name: unimplemented
 steps:
-  - id: call
-    http:
-      method: GET
-      url: "http://example.com"
+  - id: think
+    llm:
+      prompt: "hello"
 `
 	eng, _, _ := newTestEngine(t, yamlText, nil)
 	result, err := eng.Run(context.Background())

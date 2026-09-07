@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/foxzi/baton/internal/expr"
+	"github.com/foxzi/baton/internal/httpx"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
 	"github.com/foxzi/baton/internal/secrets"
@@ -71,8 +72,13 @@ func (r *Result) ExitCode() int {
 
 // Engine runs one scenario once.
 type Engine struct {
-	opts      Options
-	renderer  *tmpl.Renderer
+	opts     Options
+	renderer *tmpl.Renderer
+	http     *httpx.Client
+	apis     map[string]*httpx.API
+	// dir is the directory of the scenario file; pack sources and template
+	// paths resolve against it.
+	dir       string
 	steps     map[string]expr.Step
 	state     *runstore.RunState
 	startedAt time.Time
@@ -105,8 +111,10 @@ func New(opts Options) (*Engine, error) {
 	}
 	return &Engine{
 		opts:     opts,
+		dir:      baseDir,
 		renderer: tmpl.NewRenderer(baseDir),
 		steps:    map[string]expr.Step{},
+		apis:     map[string]*httpx.API{},
 	}, nil
 }
 
@@ -325,6 +333,9 @@ func (e *Engine) retryable(step *scenario.Step) bool {
 	if step.Run != nil {
 		return step.Run.Readonly
 	}
+	if step.HTTP != nil {
+		return e.httpReadonly(step.HTTP)
+	}
 	return true
 }
 
@@ -337,6 +348,8 @@ func (e *Engine) execute(ctx context.Context, step *scenario.Step, path string) 
 	switch kind {
 	case scenario.KindRun:
 		return e.execRun(stepCtx, step, path)
+	case scenario.KindHTTP:
+		return e.execHTTP(stepCtx, step, path)
 	case scenario.KindAssert:
 		return e.execAssert(step)
 	case scenario.KindNone:

@@ -349,7 +349,7 @@ func tail(text string, n int) string {
 	return text[len(text)-n:]
 }
 
-func sortedKeys(m map[string]scenario.EnvValue) []string {
+func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)

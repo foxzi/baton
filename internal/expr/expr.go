@@ -43,6 +43,13 @@ type Step struct {
 	Stderr   string `expr:"stderr"`
 	ExitCode int    `expr:"exit_code"`
 	Items    []any  `expr:"items"`
+
+	// The fields below belong to http steps (section 3.4). The status of the
+	// response is http_status, because status already names the status of the
+	// step; see docs/ru/spec-review.md, finding 14.
+	HTTPStatus int               `expr:"http_status"`
+	Headers    map[string]string `expr:"headers"`
+	Body       any               `expr:"body"`
 }
 
 // Run describes the current run. The fields after StartedAt are the failure

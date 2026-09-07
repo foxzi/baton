@@ -58,6 +58,8 @@ But §3.3 (description of the `run` step) has no `readonly` field. It appears on
 
 One needs to be chosen as canonical and the other allowed as sugar, with this fixed in the JSON Schema.
 
+Decision at the time `http` was implemented: a string in the step (`auth: forge_rw`) and an object in `apis` (`auth: { secret: forge_ro }`), exactly as the spec writes them. No sugar was added: an object in the step would carry nothing but the secret name anyway.
+
 ### 9. The `until` example does not match the format
 
 §3.8: `condition: "iter.test.exit_code == 0"`, where `iter` is "the result of the previous iteration." The reference `iter.test` implies that `iter` holds named sub-steps, but the body of `until` is a single `step:` **without** an `id` (same as in `foreach`). Either the example should read `iter.exit_code`, or the body of `until` should allow a list of steps with identifiers. The latter changes the format, the former only the example.
@@ -85,6 +87,12 @@ If the format is validated by a regex (and it should be, since `run-id` can be o
 ### 13. `render` is not covered by path checks
 
 §5.2 gives templates the function `render(path, data)`. The path is taken relative to the scenario file, but the restriction against escaping it is nowhere stated, and the checklist in §13 has no item about path traversal in `render` — only about command arguments and `fs`. An item should be added: `render "../../etc/passwd"` must be rejected.
+
+### 14. An `http` step returns a `status` that is already taken
+
+§3.4 promises a result made of `status`, `headers`, `body` and `result`, while §5.1 declares `steps.<id>.status` to be the status of the step (`success | failed | skipped`). Two different values under one name.
+
+Decision at the time of implementation: the response status is available as `steps.<id>.http_status`, and `steps.<id>.status` stays the status of the step. `headers` (the first value of each header) and `body` were added as declared.
 
 ## Technical risks
 
