@@ -45,11 +45,25 @@ type Step struct {
 	Items    []any  `expr:"items"`
 }
 
-// Run describes the current run.
+// Run describes the current run. The fields after StartedAt are the failure
+// context of section 9.3 and are only populated inside on_failure steps.
 type Run struct {
 	ID        string    `expr:"id"`
 	Name      string    `expr:"name"`
 	StartedAt time.Time `expr:"started_at"`
+
+	Dir        string        `expr:"dir"`
+	FailedStep string        `expr:"failed_step"`
+	Error      RunError      `expr:"error"`
+	Duration   time.Duration `expr:"duration"`
+	CostUSD    float64       `expr:"cost_usd"`
+}
+
+// RunError describes why a run failed, for on_failure steps.
+type RunError struct {
+	Class      string `expr:"class"`
+	Message    string `expr:"message"`
+	StderrTail string `expr:"stderr_tail"`
 }
 
 // Program is a compiled expression.
