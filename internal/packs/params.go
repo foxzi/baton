@@ -97,6 +97,11 @@ func (o *Op) BindArgs(args map[string]any) (*BoundArgs, error) {
 	return bound, nil
 }
 
+// ErrConstraint marks an argument that broke a params constraint. Section
+// 9.1 classifies an argument outside its pattern as a policy failure, unlike
+// a missing or unknown argument, which is a configuration error.
+var ErrConstraint = errors.New("argument constraint")
+
 // check applies the pattern, length and enum constraints of an argument.
 // They describe text, so they only apply to values that are text.
 func (p *Param) check(name string, value any) error {
@@ -108,18 +113,18 @@ func (p *Param) check(name string, value any) error {
 	}
 	if !ok {
 		if p.pattern != nil || p.MaxLen > 0 || len(p.Enum) > 0 {
-			return fmt.Errorf("args.%s: params constrain text, but the value is %T", name, value)
+			return fmt.Errorf("args.%s: params constrain text, but the value is %T: %w", name, value, ErrConstraint)
 		}
 		return nil
 	}
 	if p.pattern != nil && !p.pattern.MatchString(text) {
-		return fmt.Errorf("args.%s: does not match %s", name, p.Pattern)
+		return fmt.Errorf("args.%s: does not match %s: %w", name, p.Pattern, ErrConstraint)
 	}
 	if p.MaxLen > 0 && len(text) > p.MaxLen {
-		return fmt.Errorf("args.%s: %d bytes exceeds max_len %d", name, len(text), p.MaxLen)
+		return fmt.Errorf("args.%s: %d bytes exceeds max_len %d: %w", name, len(text), p.MaxLen, ErrConstraint)
 	}
 	if len(p.Enum) > 0 && !slices.Contains(p.Enum, text) {
-		return fmt.Errorf("args.%s: must be one of %s", name, strings.Join(p.Enum, ", "))
+		return fmt.Errorf("args.%s: must be one of %s: %w", name, strings.Join(p.Enum, ", "), ErrConstraint)
 	}
 	return nil
 }
@@ -166,5 +171,5 @@ func scalar(name string, value any) (string, error) {
 // escapeSegment percent-encodes a value that stands for a whole path
 // segment, slashes included, the way GitLab wants project paths.
 func escapeSegment(value string) string {
-	return strings.ReplaceAll(url.PathEscape(value), "/", "%2F")
+	return url.PathEscape(value)
 }
