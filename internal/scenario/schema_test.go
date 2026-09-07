@@ -252,23 +252,65 @@ steps:
 `,
 	},
 	{
-		name: "not-yet-executed kind: llm as an object",
+		name: "llm step as an object",
 		yaml: `
 version: 1
 steps:
   - id: s
     llm:
+      model: anthropic/claude-haiku-4-5
       prompt: "hi"
+      schema: schemas/x.json
 `,
 	},
 	{
-		name: "not-yet-executed kind: foreach as an object",
+		name: "llm step with every field set",
+		yaml: `
+version: 1
+steps:
+  - id: classify
+    llm:
+      model: anthropic/claude-haiku-4-5
+      fallback_models:
+        - openrouter/google/gemini-2.5-flash
+        - openai/gpt-4.1-mini
+      system: prompts/classify.system.md
+      prompt: prompts/classify.md
+      with: { diff: "{{ .steps.diff.stdout }}" }
+      schema: schemas/classify.json
+      tools: [apis.jira.get_issue]
+      max_tokens: 2000
+      temperature: 0
+      structured_mode: native
+`,
+	},
+	{
+		name: "foreach step as an object",
 		yaml: `
 version: 1
 steps:
   - id: s
     foreach:
       items: "{{ .inputs.list }}"
+      step: { run: echo hi }
+`,
+	},
+	{
+		name: "foreach step with every field set",
+		yaml: `
+version: 1
+inputs:
+  repos:
+    type: list
+steps:
+  - id: per_repo
+    foreach:
+      items: "{{ .inputs.repos }}"
+      as: repo
+      max_parallel: 3
+      on_item_error: fail
+      min_success: 1.0
+      step: { llm: { model: anthropic/claude-haiku-4-5, prompt: "hi", schema: schemas/x.json } }
 `,
 	},
 	{
@@ -550,6 +592,66 @@ steps:
       parse: xml
 `,
 		skipReason: `ParseMode is a plain string field; Validate reports the unknown value, not Parse`,
+	},
+	{
+		name: "llm missing schema",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    llm:
+      model: anthropic/claude-haiku-4-5
+      prompt: "hi"
+`,
+		skipReason: `schema requires the schema field; LLMStep.UnmarshalYAML has no requiredness check, Validate reports "must not be empty"`,
+	},
+	{
+		name: "llm with an unknown field",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    llm:
+      schema: schemas/x.json
+      bogus: 1
+`,
+		matchParser: true,
+	},
+	{
+		name: "llm structured_mode outside the enum",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    llm:
+      schema: schemas/x.json
+      structured_mode: bogus
+`,
+		skipReason: `StructuredMode is a plain string field; Validate reports the unknown value, not Parse`,
+	},
+	{
+		name: "foreach missing step",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    foreach:
+      items: "{{ .inputs.list }}"
+`,
+		skipReason: `schema requires the step field; ForeachStep.UnmarshalYAML has no requiredness check, Validate reports "must declare a body"`,
+	},
+	{
+		name: "foreach with on_item_error outside the enum",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    foreach:
+      items: "{{ .inputs.list }}"
+      step: { run: echo hi }
+      on_item_error: bogus
+`,
+		skipReason: `ItemErrorMode is a plain string field; Validate reports the unknown value, not Parse`,
 	},
 }
 

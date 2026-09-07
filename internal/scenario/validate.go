@@ -202,6 +202,10 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		}
 		validateExpr(path+".assert.condition", step.Assert.Condition, step.Line, res)
 		validateTemplate(path+".assert.message", step.Assert.Message, step.Line, res)
+	case KindLLM:
+		validateLLM(scn, step, path+".llm", res)
+	case KindForeach:
+		validateForeach(scn, step, path+".foreach", res)
 	case KindUntil:
 		// Specification section 4, check 9.
 		if !hasKey(&step.Until, "max_iterations") {
@@ -394,6 +398,107 @@ func validateSwitch(step *Step, path string, res *Result) {
 	if step.Default.IsZero() {
 		res.warnf(path, step.Line, "no default case; every value of the subject must be covered")
 	}
+}
+
+// modelPattern is the required shape of a model reference: <provider>/<model>
+// (spec section 3.5 and 8.3).
+var modelPattern = regexp.MustCompile(`^[^/]+/.+$`)
+
+// structuredModes are the accepted structured_mode values (spec section 8.3).
+var structuredModes = map[StructuredMode]bool{
+	StructuredModeUnset: true, StructuredNative: true,
+	StructuredTool: true, StructuredPrompt: true,
+}
+
+// validateLLM checks an llm body (spec section 3.5). Whether tools reference
+// readonly operations of a loaded pack is checked once packs load (section
+// 4, check 13).
+func validateLLM(scn *Scenario, step *Step, path string, res *Result) {
+	llm := step.LLM
+
+	if llm.Model != "" && !modelPattern.MatchString(llm.Model) {
+		res.errorf(path+".model", step.Line, "%q must be <provider>/<model>", llm.Model)
+	}
+	for i, model := range llm.FallbackModels {
+		if !modelPattern.MatchString(model) {
+			res.errorf(fmt.Sprintf("%s.fallback_models[%d]", path, i), step.Line, "%q must be <provider>/<model>", model)
+		}
+	}
+
+	// schema is required (spec section 3.5).
+	if strings.TrimSpace(llm.Schema) == "" {
+		res.errorf(path+".schema", step.Line, "must not be empty")
+	}
+
+	validateTemplate(path+".system", llm.System, step.Line, res)
+	validateTemplate(path+".prompt", llm.Prompt, step.Line, res)
+	for _, name := range sortedKeys(llm.With) {
+		validateTemplate(path+".with."+name, llm.With[name], step.Line, res)
+	}
+
+	for i, tool := range llm.Tools {
+		if strings.TrimSpace(tool) == "" {
+			res.errorf(fmt.Sprintf("%s.tools[%d]", path, i), step.Line, "must not be empty")
+		}
+	}
+
+	if llm.MaxTokens < 0 {
+		res.errorf(path+".max_tokens", step.Line, "must not be negative")
+	}
+	if llm.Temperature != nil && *llm.Temperature < 0 {
+		res.errorf(path+".temperature", step.Line, "must not be negative")
+	}
+	if !structuredModes[llm.StructuredMode] {
+		res.errorf(path+".structured_mode", step.Line, "unknown value %q, want native, tool or prompt", llm.StructuredMode)
+	}
+}
+
+// itemErrorModes are the accepted on_item_error values (spec section 3.7).
+var itemErrorModes = map[ItemErrorMode]bool{
+	ItemErrorUnset: true, ItemErrorFail: true, ItemErrorContinue: true,
+}
+
+// validateForeach checks a foreach body (spec section 3.7). Its step is a
+// body without an id of its own; validateStepBody recurses into it for the
+// checks that do not need a place in the DAG.
+func validateForeach(scn *Scenario, step *Step, path string, res *Result) {
+	each := step.Foreach
+
+	if strings.TrimSpace(each.Items) == "" {
+		res.errorf(path+".items", step.Line, "must not be empty")
+	}
+	validateTemplate(path+".items", each.Items, step.Line, res)
+
+	if each.MaxParallel < 0 {
+		res.errorf(path+".max_parallel", step.Line, "must not be negative")
+	}
+	// Specification section 4, check 14.
+	if each.MaxParallel > 5 {
+		res.warnf(path+".max_parallel", step.Line, "more than 5 parallel items")
+	}
+
+	if !itemErrorModes[each.OnItemError] {
+		res.errorf(path+".on_item_error", step.Line, "unknown value %q, want fail or continue", each.OnItemError)
+	}
+
+	if each.MinSuccess != nil {
+		if *each.MinSuccess < 0 || *each.MinSuccess > 1 {
+			res.errorf(path+".min_success", step.Line, "must be between 0 and 1")
+		}
+		if each.OnItemError != ItemErrorContinue {
+			res.warnf(path+".min_success", step.Line, "ignored unless on_item_error is continue")
+		}
+	}
+
+	if each.Step == nil {
+		res.errorf(path+".step", step.Line, "must declare a body")
+		return
+	}
+	if each.Step.ID != "" {
+		res.errorf(path+".step.id", each.Step.Line, "the body of a foreach has no id of its own")
+	}
+	validateStepBody(scn, each.Step, path+".step", res)
+	validateExpr(path+".step.when", each.Step.When, each.Step.Line, res)
 }
 
 func validateStepControl(step *Step, path string, declared map[string]bool, res *Result) {

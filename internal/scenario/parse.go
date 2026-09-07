@@ -184,6 +184,49 @@ func (e *EnvValue) UnmarshalYAML(node *yaml.Node) error {
 	}
 }
 
+// llmKeys are the field names accepted on an llm body.
+var llmKeys = map[string]bool{
+	"model": true, "fallback_models": true, "system": true, "prompt": true,
+	"with": true, "schema": true, "tools": true, "max_tokens": true,
+	"temperature": true, "structured_mode": true,
+}
+
+// UnmarshalYAML decodes an llm body. The strict-field check of the decoder
+// does not reach inside a step, so it is done here.
+func (l *LLMStep) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkKeys(node, llmKeys, "llm"); err != nil {
+		return err
+	}
+	type plain LLMStep
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*l = LLMStep(decoded)
+	return nil
+}
+
+// foreachKeys are the field names accepted on a foreach body.
+var foreachKeys = map[string]bool{
+	"items": true, "as": true, "max_parallel": true, "on_item_error": true,
+	"min_success": true, "step": true,
+}
+
+// UnmarshalYAML decodes a foreach body. The strict-field check of the
+// decoder does not reach inside a step, so it is done here.
+func (f *ForeachStep) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkKeys(node, foreachKeys, "foreach"); err != nil {
+		return err
+	}
+	type plain ForeachStep
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*f = ForeachStep(decoded)
+	return nil
+}
+
 // checkKeys rejects mapping keys outside allowed, reporting every offender.
 func checkKeys(node *yaml.Node, allowed map[string]bool, what string) error {
 	if node.Kind != yaml.MappingNode {

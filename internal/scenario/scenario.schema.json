@@ -249,6 +249,34 @@
       }
     },
     "step": {
+      "description": "A step-body with the id rule of section 3.2: every step needs one, except a switch, which carries none of its own.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/step-body"
+        },
+        {
+          "if": {
+            "required": [
+              "switch"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "id"
+            ]
+          }
+        }
+      ]
+    },
+    "step-body": {
+      "description": "The fields of a step without the id rule, so that a foreach body (spec section 3.7), which has no id of its own, can reuse it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -300,13 +328,13 @@
           "$ref": "#/$defs/assert"
         },
         "llm": {
-          "type": "object"
+          "$ref": "#/$defs/llm"
         },
         "agent": {
           "type": "object"
         },
         "foreach": {
-          "type": "object"
+          "$ref": "#/$defs/foreach"
         },
         "until": {
           "type": "object"
@@ -377,23 +405,99 @@
             "notify"
           ]
         }
+      ]
+    },
+    "llm": {
+      "description": "Calls a language model provider (spec section 3.5).",
+      "type": "object",
+      "required": [
+        "schema"
       ],
-      "if": {
-        "required": [
-          "switch"
-        ]
-      },
-      "then": {
-        "not": {
-          "required": [
-            "id"
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "pattern": "^[^/]+/.+$"
+        },
+        "fallback_models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^/]+/.+$"
+          }
+        },
+        "system": {
+          "$ref": "#/$defs/template"
+        },
+        "prompt": {
+          "$ref": "#/$defs/template"
+        },
+        "with": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "schema": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0
+        },
+        "structured_mode": {
+          "enum": [
+            "native",
+            "tool",
+            "prompt"
           ]
         }
-      },
-      "else": {
-        "required": [
-          "id"
-        ]
+      }
+    },
+    "foreach": {
+      "description": "Runs its body once per item of a list (spec section 3.7).",
+      "type": "object",
+      "required": [
+        "items",
+        "step"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "$ref": "#/$defs/template"
+        },
+        "as": {
+          "type": "string"
+        },
+        "max_parallel": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "on_item_error": {
+          "enum": [
+            "fail",
+            "continue"
+          ]
+        },
+        "min_success": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "step": {
+          "description": "The per-item body; it has no id of its own.",
+          "$ref": "#/$defs/step-body"
+        }
       }
     },
     "retry": {

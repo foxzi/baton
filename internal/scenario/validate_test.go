@@ -626,6 +626,295 @@ steps:
 `,
 			wantErr: "unclosed action",
 		},
+		{
+			name: "llm without schema",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      model: anthropic/claude-haiku-4-5
+`,
+			wantErr: "llm.schema: must not be empty",
+		},
+		{
+			name: "llm model without slash",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      model: haiku
+      schema: schemas/classify.json
+`,
+			wantErr: `"haiku" must be <provider>/<model>`,
+		},
+		{
+			name: "llm bad fallback model",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      model: anthropic/claude-haiku-4-5
+      schema: schemas/classify.json
+      fallback_models: ["bogus"]
+`,
+			wantErr: `"bogus" must be <provider>/<model>`,
+		},
+		{
+			name: "llm tools entry empty",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      schema: schemas/classify.json
+      tools: [""]
+`,
+			wantErr: "llm.tools[0]: must not be empty",
+		},
+		{
+			name: "llm max_tokens negative",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      schema: schemas/classify.json
+      max_tokens: -1
+`,
+			wantErr: "llm.max_tokens: must not be negative",
+		},
+		{
+			name: "llm temperature negative",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      schema: schemas/classify.json
+      temperature: -0.5
+`,
+			wantErr: "llm.temperature: must not be negative",
+		},
+		{
+			name: "llm structured_mode garbage",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      schema: schemas/classify.json
+      structured_mode: weird
+`,
+			wantErr: `unknown value "weird"`,
+		},
+		{
+			name: "llm prompt references secrets",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      schema: schemas/classify.json
+      prompt: "{{ .secrets.token }}"
+`,
+			wantErr: "secrets",
+		},
+		{
+			name: "llm with references secrets",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    llm:
+      schema: schemas/classify.json
+      with:
+        token: "{{ .secrets.token }}"
+`,
+			wantErr: "secrets",
+		},
+		{
+			// Mirrors the example of specification section 3.5: every
+			// field set and shaped correctly, so no error or warning.
+			name: "llm valid step",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: classify
+    llm:
+      model: anthropic/claude-haiku-4-5
+      fallback_models: [openrouter/google/gemini-2.5-flash]
+      system: prompts/classify.system.md
+      prompt: prompts/classify.md
+      with:
+        diff: "{{ .steps.diff.stdout }}"
+      schema: schemas/classify.json
+      tools: [apis.jira.get_issue]
+      max_tokens: 2000
+      temperature: 0
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
+		{
+			name: "foreach without items",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      step:
+        run:
+          argv: ["echo", "hi"]
+`,
+			wantErr: "foreach.items: must not be empty",
+		},
+		{
+			name: "foreach negative max_parallel",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: "{{ .inputs.repos }}"
+      max_parallel: -1
+      step:
+        run:
+          argv: ["echo", "hi"]
+`,
+			wantErr: "foreach.max_parallel: must not be negative",
+		},
+		{
+			// Specification section 4, check 14.
+			name: "foreach max_parallel over five warns",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: "{{ .inputs.repos }}"
+      max_parallel: 6
+      step:
+        run:
+          argv: ["echo", "hi"]
+`,
+			wantWarn: "more than 5 parallel items",
+		},
+		{
+			name: "foreach on_item_error garbage",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: "{{ .inputs.repos }}"
+      on_item_error: bogus
+      step:
+        run:
+          argv: ["echo", "hi"]
+`,
+			wantErr: `unknown value "bogus"`,
+		},
+		{
+			name: "foreach min_success out of range",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: "{{ .inputs.repos }}"
+      on_item_error: continue
+      min_success: 1.5
+      step:
+        run:
+          argv: ["echo", "hi"]
+`,
+			wantErr: "foreach.min_success: must be between 0 and 1",
+		},
+		{
+			name: "foreach min_success ignored unless on_item_error is continue",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: "{{ .inputs.repos }}"
+      on_item_error: fail
+      min_success: 1.0
+      step:
+        run:
+          argv: ["echo", "hi"]
+`,
+			wantWarn: "ignored unless on_item_error is continue",
+		},
+		{
+			name: "foreach missing step body",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: "{{ .inputs.repos }}"
+`,
+			wantErr: "foreach.step: must declare a body",
+		},
+		{
+			name: "foreach step body carries an id",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: "{{ .inputs.repos }}"
+      step:
+        id: nope
+        run:
+          argv: ["echo", "hi"]
+`,
+			wantErr: "the body of a foreach has no id of its own",
+		},
+		{
+			// Mirrors the example of specification section 3.7: every
+			// field set and shaped correctly, so no error or warning.
+			name: "foreach valid step",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: per_repo
+    foreach:
+      items: "{{ .inputs.repos }}"
+      as: repo
+      max_parallel: 3
+      on_item_error: continue
+      min_success: 1.0
+      step:
+        run:
+          argv: ["echo", "{{ .iter }}"]
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
 	}
 
 	for _, tc := range cases {

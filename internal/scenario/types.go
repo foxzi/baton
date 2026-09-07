@@ -1,10 +1,11 @@
 // Package scenario parses and validates baton scenario files.
 //
 // The format is specified in docs/ru/spec.md, section 3, and the validation
-// rules in section 4. Step kinds that the runner does not execute yet (llm,
-// agent, foreach, until, switch) are parsed into a raw node so that a
-// scenario using them still loads and reports structural problems; their
-// bodies gain typed models together with the code that runs them.
+// rules in section 4. The llm and foreach step bodies have typed models with
+// full validation. Step kinds the runner does not execute yet (agent, until,
+// switch, notify) are still parsed into a raw node so that a scenario using
+// them loads and reports structural problems; their bodies gain typed models
+// together with the code that runs them.
 package scenario
 
 import (
@@ -103,16 +104,16 @@ type Step struct {
 	Cache     *bool    `yaml:"cache"`
 	DedupeKey string   `yaml:"dedupe_key"`
 
-	Run    *RunStep    `yaml:"run"`
-	HTTP   *HTTPStep   `yaml:"http"`
-	Assert *AssertStep `yaml:"assert"`
+	Run     *RunStep     `yaml:"run"`
+	HTTP    *HTTPStep    `yaml:"http"`
+	Assert  *AssertStep  `yaml:"assert"`
+	LLM     *LLMStep     `yaml:"llm"`
+	Foreach *ForeachStep `yaml:"foreach"`
 
 	// Bodies of step kinds the runner does not execute yet. These are kept
 	// as raw nodes; yaml.v3 only decodes into a yaml.Node value, never into
 	// a *yaml.Node, so presence is reported by IsZero rather than by nil.
-	LLM     yaml.Node `yaml:"llm"`
 	Agent   yaml.Node `yaml:"agent"`
-	Foreach yaml.Node `yaml:"foreach"`
 	Until   yaml.Node `yaml:"until"`
 	Switch  string    `yaml:"switch"`
 	Cases   yaml.Node `yaml:"cases"`
@@ -153,13 +154,13 @@ func (s *Step) Kinds() []Kind {
 	if s.HTTP != nil {
 		kinds = append(kinds, KindHTTP)
 	}
-	if !s.LLM.IsZero() {
+	if s.LLM != nil {
 		kinds = append(kinds, KindLLM)
 	}
 	if !s.Agent.IsZero() {
 		kinds = append(kinds, KindAgent)
 	}
-	if !s.Foreach.IsZero() {
+	if s.Foreach != nil {
 		kinds = append(kinds, KindForeach)
 	}
 	if !s.Until.IsZero() {
@@ -315,3 +316,74 @@ type AssertStep struct {
 	Condition string `yaml:"condition"`
 	Message   string `yaml:"message"`
 }
+
+// LLMStep calls a language model provider (spec section 3.5).
+type LLMStep struct {
+	// Model is <provider>/<model>; provider names a providers entry (spec
+	// section 8.3). The first slash is the separator, so an OpenRouter model
+	// that itself contains a slash still works.
+	Model string `yaml:"model"`
+
+	// FallbackModels are tried in order on a transient provider error. A
+	// schema error retries the same model instead (spec section 3.5).
+	FallbackModels []string `yaml:"fallback_models"`
+
+	// System and Prompt are a file path or an inline template.
+	System string            `yaml:"system"`
+	Prompt string            `yaml:"prompt"`
+	With   map[string]string `yaml:"with"`
+
+	// Schema is the path to the JSON Schema the result must validate
+	// against. It is required (spec section 3.5).
+	Schema string `yaml:"schema"`
+
+	// Tools are operation references the runner exposes to the model in its
+	// tool loop.
+	Tools []string `yaml:"tools"`
+
+	MaxTokens   int      `yaml:"max_tokens"`
+	Temperature *float64 `yaml:"temperature"`
+
+	// StructuredMode overrides the automatic structured-output level chosen
+	// from the provider's Capabilities() (spec section 8.3).
+	StructuredMode StructuredMode `yaml:"structured_mode"`
+}
+
+// StructuredMode is a structured-output strategy for an llm step.
+type StructuredMode string
+
+// Structured-output modes, in descending order of provider support (spec
+// section 8.3).
+const (
+	StructuredModeUnset StructuredMode = ""
+	StructuredNative    StructuredMode = "native"
+	StructuredTool      StructuredMode = "tool"
+	StructuredPrompt    StructuredMode = "prompt"
+)
+
+// ForeachStep runs its body once per item of a list (spec section 3.7).
+type ForeachStep struct {
+	// Items is a template that evaluates to the list to iterate.
+	Items string `yaml:"items"`
+
+	// As names the current item in the body's templates.
+	As string `yaml:"as"`
+
+	MaxParallel int           `yaml:"max_parallel"`
+	OnItemError ItemErrorMode `yaml:"on_item_error"`
+	MinSuccess  *float64      `yaml:"min_success"`
+
+	// Step is the per-item body. It has no id of its own; it is not a step
+	// in the scenario's own DAG.
+	Step *Step `yaml:"step"`
+}
+
+// ItemErrorMode selects what happens when one foreach item fails.
+type ItemErrorMode string
+
+// on_item_error values (spec section 3.7).
+const (
+	ItemErrorUnset    ItemErrorMode = ""
+	ItemErrorFail     ItemErrorMode = "fail"
+	ItemErrorContinue ItemErrorMode = "continue"
+)
