@@ -1,8 +1,8 @@
 // Command baton runs YAML scenarios that interleave deterministic steps with
 // agentic ones.
 //
-// The command surface is specified in docs/ru/spec.md, section 11. Only
-// `version` and `help` are wired up so far; the rest arrives with M1.
+// The command surface is specified in docs/ru/spec.md, section 11. Commands
+// arrive with the milestones of that document; the rest of M1 follows.
 package main
 
 import (
@@ -19,6 +19,7 @@ Usage:
   baton <command> [arguments]
 
 Commands:
+  validate   Check a scenario file and report every problem
   version    Print the build identity
   help       Print this message
 `
@@ -34,6 +35,8 @@ func run(args []string) int {
 	}
 
 	switch args[0] {
+	case "validate":
+		return validateCmd(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 		return exitcode.OK
