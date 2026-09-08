@@ -1,9 +1,8 @@
 // Package tmpl renders the scenario templates (docs/ru/spec.md, section 5.2).
 //
 // Templates are text/template with the function set of the specification.
-// md2html and md2text are not implemented yet: their only consumers are the
-// API packs of a later milestone, and adding a Markdown engine before then
-// would ship an unused dependency.
+// md2html and md2text (implemented in markdown.go) convert Markdown to the
+// HTML or plain text some API packs, such as Confluence, require instead.
 //
 // Secrets never reach a template. Section 5.2 requires a render error rather
 // than a redacted string, so Render refuses data containing a values.Secret,
@@ -226,6 +225,8 @@ func (r *Renderer) funcs(depth int) template.FuncMap {
 		"join":     join,
 		"dict":     dict,
 		"quote":    quote,
+		"md2html":  md2html,
+		"md2text":  md2text,
 	}
 }
 
