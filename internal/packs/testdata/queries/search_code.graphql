@@ -1,0 +1,5 @@
+query($q: String!) {
+  search(query: $q, type: CODE) {
+    nodes { path }
+  }
+}

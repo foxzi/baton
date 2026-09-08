@@ -1,0 +1,11 @@
+pack: graph
+version: 1
+description: Fixture pack whose graphql operation keeps its query in a file
+ops:
+  search_code:
+    kind: graphql
+    query: queries/search_code.graphql
+    readonly: true
+    params:
+      q: { max_len: 500 }
+    transform: .data.search.nodes

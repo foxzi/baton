@@ -161,6 +161,10 @@ const (
 	EncodePath Encoding = "path"
 )
 
+// KindGraphQL is the only non-REST operation kind: the operation POSTs a
+// GraphQL document and sends its arguments as variables.
+const KindGraphQL = "graphql"
+
 // Op is one operation of a pack.
 type Op struct {
 	Get    string `yaml:"get"`
@@ -169,9 +173,11 @@ type Op struct {
 	Patch  string `yaml:"patch"`
 	Delete string `yaml:"delete"`
 
-	// Kind marks a non-REST operation; only graphql is defined, and it is
-	// not implemented in v1.
-	Kind  string `yaml:"kind"`
+	// Kind marks a non-REST operation; only graphql is defined.
+	Kind string `yaml:"kind"`
+
+	// Query is the GraphQL document of a graphql operation, either inline
+	// or a *.graphql file beside the pack.
 	Query string `yaml:"query"`
 
 	Description string            `yaml:"description"`
@@ -188,6 +194,7 @@ type Op struct {
 	name      string
 	method    string
 	path      string
+	query     string
 	transform *gojq.Code
 }
 
@@ -199,6 +206,13 @@ func (o *Op) Method() string { return o.method }
 
 // Path returns the operation path, with {param} placeholders unresolved.
 func (o *Op) Path() string { return o.path }
+
+// IsGraphQL reports whether the operation sends a GraphQL document.
+func (o *Op) IsGraphQL() bool { return o.Kind == KindGraphQL }
+
+// Document returns the GraphQL document of the operation, read from the file
+// named by query when the pack points at one.
+func (o *Op) Document() string { return o.query }
 
 // Param declares one argument of an operation.
 type Param struct {

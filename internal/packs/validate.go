@@ -3,6 +3,10 @@ package packs
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -100,12 +104,8 @@ func (p *Pack) validateOp(op *Op) error {
 		problems = append(problems, fmt.Errorf("ops.%s.%s", op.name, fmt.Sprintf(format, args...)))
 	}
 
-	if op.Kind != "" {
-		if op.Kind != "graphql" {
-			add("kind: %q is not an operation kind", op.Kind)
-		} else {
-			add("kind: graphql operations are not supported yet")
-		}
+	if op.Kind != "" && !op.IsGraphQL() {
+		add("kind: %q is not an operation kind", op.Kind)
 	}
 	methods := []struct {
 		name string
@@ -125,6 +125,17 @@ func (p *Pack) validateOp(op *Op) error {
 		op.method, op.path = method.name, method.path
 	}
 	switch {
+	case op.IsGraphQL():
+		if op.method != "" && op.method != "POST" {
+			add("%s: a graphql operation is a POST, declare its endpoint with post or leave it to base_url", strings.ToLower(op.method))
+		}
+		op.method = "POST"
+		if op.path != "" && !strings.HasPrefix(op.path, "/") {
+			add("post: %q must start with /", op.path)
+		}
+		if err := p.resolveQuery(op); err != nil {
+			problems = append(problems, fmt.Errorf("ops.%s.%w", op.name, err))
+		}
 	case op.method == "" && op.Kind == "":
 		add("get: declare one of get, post, put, patch or delete")
 	case op.method != "" && !strings.HasPrefix(op.path, "/"):
@@ -132,7 +143,11 @@ func (p *Pack) validateOp(op *Op) error {
 	}
 
 	switch op.Encode {
-	case EncodeUnset, EncodeJSON, EncodeForm:
+	case EncodeUnset, EncodeJSON:
+	case EncodeForm:
+		if op.IsGraphQL() {
+			add("encode: a graphql operation sends JSON")
+		}
 	default:
 		add("encode: %q is not a body encoding, use json or form", op.Encode)
 	}
@@ -184,6 +199,43 @@ func (p *Pack) compileTransform(op *Op) error {
 	}
 	op.transform = code
 	return nil
+}
+
+// resolveQuery reads the GraphQL document of an operation. The query field
+// is either the document itself or the name of a *.graphql file next to the
+// pack.
+func (p *Pack) resolveQuery(op *Op) error {
+	source := strings.TrimSpace(op.Query)
+	if source == "" {
+		return errors.New("query: required for a graphql operation")
+	}
+	if isQueryFile(source) {
+		if p.Path == "" {
+			return fmt.Errorf("query: %s can only be read from a pack loaded from disk", source)
+		}
+		clean := filepath.ToSlash(source)
+		if !fs.ValidPath(path.Clean(clean)) || strings.HasPrefix(clean, "/") {
+			return fmt.Errorf("query: %s must be a path inside the pack directory", source)
+		}
+		data, err := os.ReadFile(filepath.Join(filepath.Dir(p.Path), filepath.FromSlash(clean)))
+		if err != nil {
+			return fmt.Errorf("query: %s", err)
+		}
+		source = strings.TrimSpace(string(data))
+		if source == "" {
+			return fmt.Errorf("query: %s is empty", op.Query)
+		}
+	}
+	op.query = source
+	return nil
+}
+
+// isQueryFile tells a file name from an inline GraphQL document.
+func isQueryFile(source string) bool {
+	if strings.ContainsAny(source, " \t\n{") {
+		return false
+	}
+	return strings.HasSuffix(source, ".graphql") || strings.HasSuffix(source, ".gql")
 }
 
 // resolveParams fills in the placement of every argument and compiles the

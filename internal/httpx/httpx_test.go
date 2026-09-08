@@ -1561,6 +1561,166 @@ ops:
 }
 
 // ---------------------------------------------------------------------------
+// Op: graphql operations
+// ---------------------------------------------------------------------------
+
+const graphQLPackYAML = `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  search_code:
+    kind: graphql
+    post: /graphql
+    readonly: true
+    query: 'query($q: String!) { search(query: $q) { nodes { path } } }'
+    params:
+      q: { max_len: 500 }
+    transform: '.data.search.nodes'
+`
+
+func TestGraphQLOpSendsQueryAndVariables(t *testing.T) {
+	var body map[string]any
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode the request body: %v", err)
+		}
+		w.Write([]byte(`{"data":{"search":{"nodes":[{"path":"a.go"}]}}}`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, graphQLPackYAML)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "search_code", map[string]any{"q": "cat"})
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if method != "POST" || path != "/graphql" {
+		t.Errorf("request = %s %s, want POST /graphql", method, path)
+	}
+	if _, ok := body["query"].(string); !ok {
+		t.Errorf("body = %v, want the document in query", body)
+	}
+	variables, ok := body["variables"].(map[string]any)
+	if !ok || variables["q"] != "cat" {
+		t.Errorf("body = %v, want the argument in variables", body)
+	}
+	nodes, ok := result.Result.([]any)
+	if !ok || len(nodes) != 1 {
+		t.Fatalf("Result = %#v, want one transformed node", result.Result)
+	}
+}
+
+func TestGraphQLOpErrorsFailTheCall(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":null,"errors":[{"message":"field q is required"}]}`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, graphQLPackYAML)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	_, err := New(0).Op(context.Background(), api, "search_code", map[string]any{"q": "cat"})
+	if err == nil {
+		t.Fatalf("Op() error = nil, want the graphql errors reported")
+	}
+	if Class(err) != ClassCommand {
+		t.Errorf("Class(err) = %q, want %q", Class(err), ClassCommand)
+	}
+	if !strings.Contains(err.Error(), "field q is required") {
+		t.Errorf("error = %q, want the graphql message", err)
+	}
+}
+
+func TestGraphQLOpEnvelopeKeepsControlOfErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":{"search":{"nodes":[]}},"errors":[{"message":"deprecated field"}]}`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+envelope:
+  error_when: '.errors != null and (.data == null)'
+  error_message: '.errors[0].message'
+ops:
+  search_code:
+    kind: graphql
+    query: '{ search { nodes { path } } }'
+    readonly: true
+    transform: '.data.search.nodes'
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "search_code", nil)
+	if err != nil {
+		t.Fatalf("Op() error = %v, want the pack envelope to allow a partial response", err)
+	}
+	if nodes, ok := result.Result.([]any); !ok || len(nodes) != 0 {
+		t.Errorf("Result = %#v, want an empty node list", result.Result)
+	}
+}
+
+func TestGraphQLOpPaginatesInVariables(t *testing.T) {
+	var bodies []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode the request body: %v", err)
+		}
+		bodies = append(bodies, body)
+		if len(bodies) == 1 {
+			w.Write([]byte(`{"data":{"nodes":["a","b"],"page":{"end":"c2"}}}`))
+			return
+		}
+		w.Write([]byte(`{"data":{"nodes":["c"],"page":{"end":null}}}`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  list_nodes:
+    kind: graphql
+    query: 'query($after: String) { nodes }'
+    readonly: true
+    paginate: true
+    pagination:
+      style: cursor
+      param: after
+      in: body
+      items: .data.nodes
+      next: .data.page.end
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "list_nodes", nil)
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("server saw %d requests, want 2", len(bodies))
+	}
+	if _, ok := bodies[0]["variables"]; ok {
+		t.Errorf("first body = %v, want no cursor before the service names one", bodies[0])
+	}
+	variables, ok := bodies[1]["variables"].(map[string]any)
+	if !ok || variables["after"] != "c2" {
+		t.Errorf("second body = %v, want the cursor in variables", bodies[1])
+	}
+	if items, ok := result.Result.([]any); !ok || len(items) != 3 {
+		t.Errorf("Result = %#v, want the three nodes of both pages", result.Result)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 

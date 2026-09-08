@@ -74,6 +74,9 @@ func (c *Client) Op(ctx context.Context, api *API, opName string, args map[strin
 		if err != nil {
 			return nil, err
 		}
+		if err := graphQLError(api.Pack, op, body, what); err != nil {
+			return nil, err
+		}
 		unwrapped, err := api.Pack.Envelope.Unwrapped(body)
 		if err != nil {
 			return nil, errorf(ClassCommand, "%s: %s", what, err.Error())
@@ -98,6 +101,19 @@ func buildOpRequest(op *packs.Op, path string, bound *packs.BoundArgs) (*Request
 		Path:    path,
 		Query:   bound.Query,
 		Headers: map[string]string{},
+	}
+	if op.IsGraphQL() {
+		payload := map[string]any{graphQLQueryField: op.Document()}
+		if len(bound.Body) > 0 {
+			payload[graphQLVariablesField] = bound.Body
+		}
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return nil, wrapf(ClassConfig, err, "%s: the arguments are not JSON", op.Name())
+		}
+		request.Body = encoded
+		request.Headers["Content-Type"] = "application/json"
+		return request, nil
 	}
 	switch {
 	case len(bound.Form) > 0:
@@ -146,7 +162,7 @@ func (c *Client) paginate(ctx context.Context, api *API, op *packs.Op, request *
 		attempt := *request
 		if walk.url != "" {
 			attempt.URL, attempt.Path, attempt.Query = walk.url, "", nil
-		} else if err := applyPageParams(&attempt, strategy, walk); err != nil {
+		} else if err := applyPageParams(&attempt, strategy, walk, op.IsGraphQL()); err != nil {
 			return errorf(ClassConfig, "%s: %s", what, err.Error())
 		}
 		response, err := c.Do(ctx, api, &attempt)
@@ -155,6 +171,9 @@ func (c *Client) paginate(ctx context.Context, api *API, op *packs.Op, request *
 		}
 		body, err := decodeJSON(response.Body, what)
 		if err != nil {
+			return err
+		}
+		if err := graphQLError(api.Pack, op, body, what); err != nil {
 			return err
 		}
 		unwrapped, err := api.Pack.Envelope.Unwrapped(body)
@@ -187,27 +206,27 @@ func (c *Client) paginate(ctx context.Context, api *API, op *packs.Op, request *
 
 // applyPageParams sets the page parameters of the request for one page. The
 // link_header style needs none: the next URL carries them.
-func applyPageParams(request *Request, strategy *packs.Pagination, walk pageWalk) error {
+func applyPageParams(request *Request, strategy *packs.Pagination, walk pageWalk, graphql bool) error {
 	switch strategy.Style {
 	case packs.PagePage:
-		if err := setPageParam(request, strategy.In, strategy.Param, walk.number); err != nil {
+		if err := setPageParam(request, strategy.In, graphql, strategy.Param, walk.number); err != nil {
 			return err
 		}
 		if strategy.SizeParam != "" && strategy.Size > 0 {
-			return setPageParam(request, strategy.In, strategy.SizeParam, strategy.Size)
+			return setPageParam(request, strategy.In, graphql, strategy.SizeParam, strategy.Size)
 		}
 	case packs.PageOffset:
-		if err := setPageParam(request, strategy.In, strategy.Param, walk.offset); err != nil {
+		if err := setPageParam(request, strategy.In, graphql, strategy.Param, walk.offset); err != nil {
 			return err
 		}
 		if strategy.LimitParam != "" && strategy.Size > 0 {
-			return setPageParam(request, strategy.In, strategy.LimitParam, strategy.Size)
+			return setPageParam(request, strategy.In, graphql, strategy.LimitParam, strategy.Size)
 		}
 	case packs.PageCursor:
 		// The first page is the operation's own request: there is no cursor
 		// to send until a page has named one.
 		if walk.cursor != "" {
-			return setPageParam(request, strategy.In, strategy.Param, walk.cursor)
+			return setPageParam(request, strategy.In, graphql, strategy.Param, walk.cursor)
 		}
 	}
 	return nil
@@ -215,7 +234,7 @@ func applyPageParams(request *Request, strategy *packs.Pagination, walk pageWalk
 
 // setPageParam puts one pagination parameter where the pack asks for it: in
 // the query string, or in the request body beside the arguments.
-func setPageParam(request *Request, in packs.ParamIn, name string, value any) error {
+func setPageParam(request *Request, in packs.ParamIn, graphql bool, name string, value any) error {
 	if in != packs.InBody {
 		query := make(map[string]string, len(request.Query)+1)
 		for key, existing := range request.Query {
@@ -246,7 +265,13 @@ func setPageParam(request *Request, in packs.ParamIn, name string, value any) er
 			return fmt.Errorf("pagination.in: body needs a JSON object body: %s", err)
 		}
 	}
-	body[name] = value
+	// A GraphQL request carries its arguments in variables, and so do its
+	// page parameters.
+	if graphql {
+		graphQLVariables(body)[name] = value
+	} else {
+		body[name] = value
+	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("pagination.in: the page parameters are not JSON: %s", err)

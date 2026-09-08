@@ -317,13 +317,58 @@ func TestParseValidate(t *testing.T) {
 			wantErr: "must start with /",
 		},
 		{
-			name: "op kind graphql rejected",
+			name: "graphql op without a query",
+			yaml: packOpsYAML(`ops:
+  x:
+    kind: graphql
+`),
+			wantErr: "query: required for a graphql operation",
+		},
+		{
+			name: "graphql op with a missing query file",
 			yaml: packOpsYAML(`ops:
   x:
     kind: graphql
     query: q.graphql
 `),
-			wantErr: "graphql operations are not supported yet",
+			wantErr: "query: open",
+		},
+		{
+			name: "graphql op with a query file outside the pack",
+			yaml: packOpsYAML(`ops:
+  x:
+    kind: graphql
+    query: ../q.graphql
+`),
+			wantErr: "must be a path inside the pack directory",
+		},
+		{
+			name: "graphql op on another method",
+			yaml: packOpsYAML(`ops:
+  x:
+    kind: graphql
+    get: /graphql
+    query: '{ me { id } }'
+`),
+			wantErr: "a graphql operation is a POST",
+		},
+		{
+			name: "graphql op with an inline query",
+			yaml: packOpsYAML(`ops:
+  x:
+    kind: graphql
+    query: '{ me { id } }'
+`),
+			checkOK: true,
+		},
+		{
+			name: "op kind unknown",
+			yaml: packOpsYAML(`ops:
+  x:
+    kind: soap
+    get: /a
+`),
+			wantErr: "is not an operation kind",
 		},
 		{
 			name: "op encode invalid",
@@ -659,6 +704,28 @@ func TestLoadFindsPack(t *testing.T) {
 	}
 	if nested.Pack != "nested" {
 		t.Errorf("Load(nested).Pack = %q, want nested", nested.Pack)
+	}
+}
+
+// TestLoadReadsGraphQLQueryFile checks that a graphql operation may keep its
+// document in a file beside the pack.
+func TestLoadReadsGraphQLQueryFile(t *testing.T) {
+	pack, err := Load(Source{From: "testdata", Pack: "graph"})
+	if err != nil {
+		t.Fatalf("Load(graph) error = %v", err)
+	}
+	op, err := pack.Op("search_code")
+	if err != nil {
+		t.Fatalf("Op(search_code) error = %v", err)
+	}
+	if !op.IsGraphQL() {
+		t.Errorf("IsGraphQL() = false, want true")
+	}
+	if op.Method() != "POST" {
+		t.Errorf("Method() = %q, want POST", op.Method())
+	}
+	if !strings.Contains(op.Document(), "search(query: $q, type: CODE)") {
+		t.Errorf("Document() = %q, want the contents of the query file", op.Document())
 	}
 }
 
