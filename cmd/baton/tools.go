@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -128,7 +129,7 @@ func toolsCmd(args []string) int {
 		return exitcode.Config
 	}
 
-	list, err := eng.StepTools(stepID)
+	list, err := eng.StepTools(context.Background(), stepID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -167,10 +168,11 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 		return expr.Step{}, stepErr
 	}
 
-	toolSet, stepErr := e.agentToolSet(step, call, root)
+	toolSet, closeTools, stepErr := e.agentToolSet(ctx, step, call, root)
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
+	defer closeTools()
 
 	audit, closeAudit := e.auditWriter(path, dir)
 	defer closeAudit()
@@ -224,9 +226,12 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 // agentToolSet builds every tool the step's agent is given: its commands
 // (section 7.5), the file tools of section 7.3, the readonly pack operations
 // of its policy (section 7.4.8), the git tools of section 7.4.7 and the
-// fetch and state tools of section 7.6. The gateway adds submit_result
-// itself.
-func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string) ([]gateway.Tool, *Error) {
+// fetch, state and proxied MCP tools of section 7.6. The gateway adds
+// submit_result itself.
+//
+// The returned function stops what the set started: a proxied MCP server is
+// a process of the runner's, and it lives no longer than the step.
+func (e *Engine) agentToolSet(ctx context.Context, step *scenario.Step, call *agentCall, root string) ([]gateway.Tool, func(), *Error) {
 	commands, err := tools.NewCommands(tools.CommandOptions{
 		Workspace: root,
 		Declared:  e.opts.Scenario.Commands,
@@ -237,28 +242,40 @@ func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string)
 		MaxOutputBytes: call.policy.MaxResultBytes,
 	})
 	if err != nil {
-		return nil, wrapf(ClassConfig, err, "step %s: agent.tools", step.ID)
+		return nil, nil, wrapf(ClassConfig, err, "step %s: agent.tools", step.ID)
 	}
 
 	fs, stepErr := e.agentFS(call, root)
 	if stepErr != nil {
-		return nil, stepErr
+		return nil, nil, stepErr
 	}
 	git, stepErr := e.agentGit(call, root)
 	if stepErr != nil {
-		return nil, stepErr
+		return nil, nil, stepErr
 	}
 	apis, stepErr := e.agentAPIs(call)
 	if stepErr != nil {
-		return nil, stepErr
+		return nil, nil, stepErr
 	}
 	state, stepErr := e.agentState(call)
 	if stepErr != nil {
-		return nil, stepErr
+		return nil, nil, stepErr
 	}
 	fetch, stepErr := e.agentFetch(call)
 	if stepErr != nil {
-		return nil, stepErr
+		return nil, nil, stepErr
+	}
+
+	proxied, stepErr := e.agentMCP(ctx, call, root)
+	if stepErr != nil {
+		return nil, nil, stepErr
+	}
+	// A tool the gateway marks unsafe and the step did not ask for is left
+	// out silently otherwise, and an agent cannot tell a missing tool from a
+	// tool it may not have.
+	if skipped := proxied.Unsafe(); len(skipped) > 0 {
+		e.emit(Event{Type: "warning", Step: step.ID, Message: fmt.Sprintf(
+			"mcp tools left out as unsafe, allow_unsafe is not set: %s", strings.Join(skipped, ", "))})
 	}
 
 	set := append(commands.Tools(), fs.Tools()...)
@@ -266,7 +283,37 @@ func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string)
 	set = append(set, apis.Tools()...)
 	set = append(set, state.Tools()...)
 	set = append(set, fetch.Tools()...)
+	set = append(set, proxied.Tools()...)
+	return set, proxied.Close, nil
+}
+
+// agentMCP starts the third-party MCP servers the step's policy names and
+// proxies their tools through the gateway (section 7.6). The servers come
+// from the configuration, so a step naming one the configuration does not
+// declare is a configuration error before the agent starts.
+func (e *Engine) agentMCP(ctx context.Context, call *agentCall, root string) (*tools.MCP, *Error) {
+	set, err := tools.NewMCP(ctx, tools.MCPOptions{
+		Policy:    call.policy,
+		Servers:   e.mcpServers(),
+		Workspace: root,
+		Secrets:   e.secretSource(),
+	})
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "agent.tools.mcp")
+	}
 	return set, nil
+}
+
+// mcpServers are the servers the configuration declares (section 12).
+func (e *Engine) mcpServers() map[string]tools.MCPServer {
+	if e.opts.Config == nil {
+		return nil
+	}
+	out := make(map[string]tools.MCPServer, len(e.opts.Config.MCPServers))
+	for name, server := range e.opts.Config.MCPServers {
+		out[name] = tools.MCPServer{Command: server.Command, Env: server.Env}
+	}
+	return out
 }
 
 // agentFS builds the file tools of the step, but only for an engine that

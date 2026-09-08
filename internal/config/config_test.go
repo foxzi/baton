@@ -427,6 +427,30 @@ func TestValidateSecretUnsupportedSource(t *testing.T) {
 	}
 }
 
+// TestParseMCPServerEnv checks that an mcp_servers env takes both forms of an
+// environment entry: a literal and a secret reference.
+func TestParseMCPServerEnv(t *testing.T) {
+	data := `
+mcp_servers:
+  ctx:
+    command: ["npx", "-y", "@upstash/context7-mcp"]
+    env:
+      LOG_LEVEL: debug
+      API_KEY: { secret: ctx_key }
+`
+	cfg, err := Parse([]byte(data), "config.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	env := cfg.MCPServers["ctx"].Env
+	if env["LOG_LEVEL"].Value != "debug" || env["LOG_LEVEL"].Secret != "" {
+		t.Errorf("env[LOG_LEVEL] = %+v, want the literal debug", env["LOG_LEVEL"])
+	}
+	if env["API_KEY"].Secret != "ctx_key" || env["API_KEY"].Value != "" {
+		t.Errorf("env[API_KEY] = %+v, want the secret ctx_key", env["API_KEY"])
+	}
+}
+
 // TestValidateMCPServerEmptyCommand checks that an mcp_servers entry needs a
 // non-empty command.
 func TestValidateMCPServerEmptyCommand(t *testing.T) {

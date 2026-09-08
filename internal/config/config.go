@@ -138,10 +138,13 @@ type Price struct {
 	OutputPerMTok float64 `yaml:"output_per_mtok"`
 }
 
-// MCPServer is one MCP server made available to the agent gateway.
+// MCPServer is one MCP server made available to the agent gateway (spec
+// section 7.6). The runner starts the process itself, so the command is an
+// argument vector, never a shell line, and an env entry may name a secret
+// the same way a command's env does.
 type MCPServer struct {
-	Command []string          `yaml:"command"`
-	Env     map[string]string `yaml:"env"`
+	Command []string                     `yaml:"command"`
+	Env     map[string]scenario.EnvValue `yaml:"env"`
 }
 
 // Parse parses config bytes. Path is only used for diagnostics. Unknown

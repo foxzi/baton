@@ -24,12 +24,13 @@ type ToolInfo struct {
 
 // StepTools answers what the agent of one step would see: the same tool set
 // a run builds, plus the submit_result the gateway adds, and without opening
-// the gateway or starting the agent.
+// the gateway or starting the agent. A step with proxied MCP servers starts
+// them to ask what they offer, and stops them again before returning.
 //
 // Everything the step leaves to the runner is resolved on the way, so a step
 // naming a command it cannot run or an operation no pack has is reported here
 // rather than at the first tool call.
-func (e *Engine) StepTools(stepID string) ([]ToolInfo, error) {
+func (e *Engine) StepTools(ctx context.Context, stepID string) ([]ToolInfo, error) {
 	step := findStep(e.opts.Scenario.Steps, stepID)
 	if step == nil {
 		return nil, fmt.Errorf("no step %q in %s", stepID, e.opts.Scenario.Name)
@@ -44,10 +45,11 @@ func (e *Engine) StepTools(stepID string) ([]ToolInfo, error) {
 	}
 	// The workspace is taken as configured rather than prepared: listing
 	// tools must not rewrite a repository's git configuration (section 7.1).
-	set, stepErr := e.agentToolSet(step, call, e.opts.Workspace)
+	set, closeTools, stepErr := e.agentToolSet(ctx, step, call, e.opts.Workspace)
 	if stepErr != nil {
 		return nil, stepErr
 	}
+	defer closeTools()
 
 	infos := make([]ToolInfo, 0, len(set)+1)
 	for _, tool := range set {

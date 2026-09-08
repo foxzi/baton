@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,7 @@ import (
 // toolNames lists the tools by name, in the order StepTools reports them.
 func toolNames(t *testing.T, eng *Engine, stepID string) []string {
 	t.Helper()
-	list, err := eng.StepTools(stepID)
+	list, err := eng.StepTools(context.Background(), stepID)
 	if err != nil {
 		t.Fatalf("StepTools(%q): %v", stepID, err)
 	}
@@ -49,7 +50,7 @@ steps:
 	eng, _, dir := newTestEngine(t, yamlText, nil)
 	writeAgentFiles(t, dir, agentSchema, "calls: []")
 
-	list, err := eng.StepTools("review")
+	list, err := eng.StepTools(context.Background(), "review")
 	if err != nil {
 		t.Fatalf("StepTools: %v", err)
 	}
@@ -134,7 +135,7 @@ steps:
 		t.Errorf("review tools = %s, want %s: the profile runs no commands and cannot commit", got, wantReview)
 	}
 
-	list, err := eng.StepTools("research")
+	list, err := eng.StepTools(context.Background(), "research")
 	if err != nil {
 		t.Fatalf("StepTools(research): %v", err)
 	}
@@ -184,7 +185,7 @@ steps:
 	writeAgentFiles(t, dir, agentSchema, "calls: []")
 	writePack(t, dir, "gitlab", gitlabLikePack)
 
-	list, err := eng.StepTools("review")
+	list, err := eng.StepTools(context.Background(), "review")
 	if err != nil {
 		t.Fatalf("StepTools: %v", err)
 	}
@@ -242,7 +243,7 @@ steps:
 `
 	eng, _, _ := newTestEngine(t, yamlText, nil)
 
-	_, err := eng.StepTools("nope")
+	_, err := eng.StepTools(context.Background(), "nope")
 	if err == nil {
 		t.Fatalf("StepTools(nope) succeeded, want an error")
 	}
@@ -250,7 +251,7 @@ steps:
 		t.Errorf("error = %v, want the step id named", err)
 	}
 
-	_, err = eng.StepTools("build")
+	_, err = eng.StepTools(context.Background(), "build")
 	if err == nil {
 		t.Fatalf("StepTools(build) succeeded, want an error: a run step has no tools")
 	}
@@ -275,7 +276,7 @@ steps:
 `
 	eng, _, _ := newTestEngine(t, yamlText, nil)
 
-	_, err := eng.StepTools("review")
+	_, err := eng.StepTools(context.Background(), "review")
 	if err == nil {
 		t.Fatalf("StepTools succeeded, want an error about the result schema")
 	}
@@ -305,7 +306,7 @@ steps:
 	eng, store, dir := newTestEngine(t, yamlText, nil)
 	writeAgentFiles(t, dir, agentSchema, "calls: []")
 
-	if _, err := eng.StepTools("review"); err != nil {
+	if _, err := eng.StepTools(context.Background(), "review"); err != nil {
 		t.Fatalf("StepTools: %v", err)
 	}
 
