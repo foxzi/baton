@@ -162,6 +162,9 @@ func TestFetchRejectsHostOutsideAllowList(t *testing.T) {
 	if !strings.Contains(err.Error(), "allow list") {
 		t.Errorf("error = %v, want it to mention the allow list", err)
 	}
+	if !isPolicyRefusal(err) {
+		t.Errorf("error = %v, want a policy refusal", err)
+	}
 	if calls != 0 {
 		t.Errorf("calls = %d, want the server never reached", calls)
 	}
@@ -193,6 +196,9 @@ func TestFetchRedirectOutsideAllowListIsRejected(t *testing.T) {
 	_, err = callFetch(t, f, `{"url":"`+origin.URL+`"}`)
 	if err == nil {
 		t.Fatal("call error = nil, want a redirect off the allow list to be rejected")
+	}
+	if !isPolicyRefusal(err) {
+		t.Errorf("error = %v, want a policy refusal", err)
 	}
 	if targetCalls != 0 {
 		t.Errorf("target calls = %d, want the redirect target never reached", targetCalls)

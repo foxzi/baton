@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/foxzi/baton/internal/gateway"
 	"github.com/foxzi/baton/internal/scenario"
 )
 
@@ -69,9 +70,9 @@ func checkValue(name, value, pattern string) error {
 	case value == "":
 		return fmt.Errorf("argument %q is empty", name)
 	case strings.HasPrefix(value, "/"):
-		return fmt.Errorf("argument %q must not be an absolute path", name)
+		return gateway.Refusef("argument %q must not be an absolute path", name)
 	case strings.Contains(value, ".."):
-		return fmt.Errorf("argument %q must not contain ..", name)
+		return gateway.Refusef("argument %q must not contain ..", name)
 	case strings.ContainsAny(value, "\x00\n\r"):
 		return fmt.Errorf("argument %q must be a single line", name)
 	}

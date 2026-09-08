@@ -362,13 +362,13 @@ func TestFSRefusesSymlinkEscape(t *testing.T) {
 	}
 
 	read := readOnlyFS(t, dir)
-	if _, err := callFS(t, read, "fs.read", `{"path":"link.txt"}`); err == nil {
-		t.Error("fs.read through a symlink leaving the workspace: error = nil, want it refused")
+	if _, err := callFS(t, read, "fs.read", `{"path":"link.txt"}`); !isPolicyRefusal(err) {
+		t.Errorf("fs.read through a symlink leaving the workspace: error = %v, want a policy refusal", err)
 	}
 
 	write := writableFS(t, dir)
-	if _, err := callFS(t, write, "fs.write", `{"path":"link.txt","content":"x"}`); err == nil {
-		t.Error("fs.write through a symlink leaving the workspace: error = nil, want it refused")
+	if _, err := callFS(t, write, "fs.write", `{"path":"link.txt","content":"x"}`); !isPolicyRefusal(err) {
+		t.Errorf("fs.write through a symlink leaving the workspace: error = %v, want a policy refusal", err)
 	}
 	if data, rerr := os.ReadFile(filepath.Join(outside, "secret.txt")); rerr != nil || string(data) != "nope" {
 		t.Errorf("outside file changed: data=%q err=%v, want it untouched", data, rerr)
