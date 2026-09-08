@@ -19,6 +19,9 @@ var revealWhitelist = []string{
 	"internal/notify",
 	"internal/engine",
 	"internal/provider",
+	// internal/tools puts a command's declared secrets into the child
+	// process environment (spec section 7.5).
+	"internal/tools",
 }
 
 // TestRevealCallersAreWhitelisted is the import restriction that section 5.3
