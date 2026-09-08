@@ -1,0 +1,145 @@
+version: 1
+name: triage
+description: >
+  Triages one incoming issue: reads it from the forge, asks a model to
+  classify it against the project's label set, labels the issue and comments
+  on it, and pages the on-call channel only when the report is critical.
+  Made for a webhook or a cron sweep, one issue per run.
+
+inputs:
+  # The numeric project id, not the namespace/path form: the requests below
+  # are raw ones, and only a pack's `encode: path` percent-encodes a slash.
+  project:
+    type: string
+    pattern: '^\d+$'
+    required: true
+  issue:
+    type: string
+    pattern: '^\d+$'
+    required: true
+  # The labels the model may choose from. Keeping them an input rather than
+  # a line of the prompt means the same scenario serves projects with
+  # different conventions.
+  labels:
+    type: list
+    default: [bug, feature, docs, performance, security, question]
+  api_url:
+    type: string
+    default: https://gitlab.com/api/v4
+    pattern: '^https?://[\w.:/-]+$'
+
+defaults:
+  model: openrouter/anthropic/claude-3.5-sonnet
+  timeout: 60s
+
+budget:
+  usd: 0.3
+  time: 10m
+
+secrets:
+  gitlab_rw: { from: env, key: GITLAB_TOKEN }
+
+apis:
+  # The pack carries the base url and the auth scheme; the steps below reach
+  # endpoints the pack has no operation for, so they send raw requests
+  # through it rather than calling an op.
+  forge:
+    pack: gitlab
+    from: ../apis/
+    config: { base_url: "{{ .inputs.api_url }}" }
+    auth: { secret: gitlab_rw }
+    timeout: 30s
+
+steps:
+  - id: issue
+    # Reading the same issue twice in one triage sweep should cost one
+    # request, not two.
+    cache: true
+    http:
+      api: forge
+      method: GET
+      path: "/projects/{{ .inputs.project }}/issues/{{ .inputs.issue }}"
+      parse: json
+      max_bytes: 200k
+
+  - id: classify
+    needs: [issue]
+    cache: true
+    llm:
+      system: >
+        You triage issue reports for a software project. You are terse, you
+        never invent facts the report does not carry, and you choose labels
+        only from the list you are given.
+      prompt: |
+        Issue #{{ .inputs.issue }} of project {{ .inputs.project }}.
+
+        Title: {{ .steps.issue.result.title }}
+        Author: {{ .steps.issue.result.author.username }}
+        Labels already on it: {{ join ", " .steps.issue.result.labels }}
+
+        Body:
+        {{ md2text .steps.issue.result.description }}
+
+        Allowed labels: {{ join ", " .inputs.labels }}
+
+        Classify the report. Ask for more information only when the report
+        gives no way to reproduce or observe the problem.
+      schema: schemas/triage.json
+      max_tokens: 800
+
+  - id: label
+    needs: [classify]
+    http:
+      api: forge
+      method: PUT
+      path: "/projects/{{ .inputs.project }}/issues/{{ .inputs.issue }}"
+      query:
+        add_labels: '{{ join "," .steps.classify.result.labels }}'
+      parse: json
+    # Adding the same labels twice is harmless, but a retried PUT still needs
+    # a key before baton will repeat it.
+    dedupe_key: "triage-label-{{ .inputs.project }}-{{ .inputs.issue }}"
+
+  - id: comment
+    needs: [classify, label]
+    http:
+      api: forge
+      method: POST
+      path: "/projects/{{ .inputs.project }}/issues/{{ .inputs.issue }}/notes"
+      headers:
+        Content-Type: application/json
+      body: |-
+        {{- $body := printf "**baton triage** — %s / %s\n\n%s"
+             .steps.classify.result.severity
+             .steps.classify.result.area
+             .steps.classify.result.summary -}}
+        {{- if .steps.classify.result.needs_info -}}
+        {{- $body = printf "%s\n\nTo move this forward: %s" $body .steps.classify.result.question -}}
+        {{- end -}}
+        {{ toJSON (dict "body" $body) }}
+      parse: json
+    # One triage comment per issue, however often the sweep runs.
+    dedupe_key: "triage-{{ .inputs.project }}-{{ .inputs.issue }}"
+
+  - needs: [comment]
+    # Only a critical report is worth waking someone for; everything else
+    # has already been labelled and answered on the issue itself.
+    switch: "steps.classify.result.severity"
+    cases:
+      critical:
+        id: page
+        notify: alerts
+        message: |
+          *Critical issue #{{ .inputs.issue }}* in project {{ .inputs.project }}
+          {{ .steps.classify.result.area }}: {{ .steps.classify.result.summary }}
+          {{ .steps.issue.result.web_url }}
+    default:
+      id: noted
+      assert:
+        condition: 'steps.comment.result.id != nil'
+        message: "the triage comment was posted but carries no id"
+
+on_failure:
+  - id: alert
+    notify: alerts
+    message: "triage of issue #{{ .inputs.issue }} failed at {{ .run.failed_step }}: {{ .run.error.message }}"

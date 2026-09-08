@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["severity", "area", "summary", "labels"],
+  "properties": {
+    "severity": {
+      "type": "string",
+      "description": "How much the report hurts: critical stops work, major breaks a feature, minor is an annoyance, question is not a defect",
+      "enum": ["critical", "major", "minor", "question"]
+    },
+    "area": {
+      "type": "string",
+      "description": "The part of the product the report belongs to, in one or two words",
+      "maxLength": 40
+    },
+    "summary": {
+      "type": "string",
+      "description": "The report in one sentence, as a maintainer would restate it",
+      "maxLength": 300
+    },
+    "labels": {
+      "type": "array",
+      "description": "Labels to put on the issue, taken from the allowed list only",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9:-]*$" },
+      "maxItems": 4
+    },
+    "needs_info": {
+      "type": "boolean",
+      "description": "True when the report cannot be acted on before the reporter answers a question"
+    },
+    "question": {
+      "type": "string",
+      "description": "The one question to ask the reporter; present only when needs_info is true",
+      "maxLength": 300
+    }
+  }
+}
