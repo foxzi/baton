@@ -21,9 +21,10 @@ rate_limit:
   retry_after_header: Retry-After
 
 # GitLab reports errors with a status code and a message field; the message is
-# what a scenario wants to see in the error.
+# what a scenario wants to see in the error. The type check comes first: a
+# list endpoint answers with an array, which has no fields at all.
 envelope:
-  error_when: '.message != null'
+  error_when: 'type == "object" and .message != null'
   error_message: .message
 
 pagination:
@@ -43,6 +44,21 @@ ops:
         base: .diff_refs.base_sha, head: .diff_refs.head_sha,
         files: [ .changes[] | { path: .new_path, diff, deleted: .deleted_file } ] }
     implements: forge/v1.get_change
+    max_bytes: 500k
+
+  list_merge_requests:
+    get: /projects/{project}/merge_requests
+    description: Merge requests of a project, newest update first
+    readonly: true
+    paginate: true
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      state: { pattern: '^[a-z]+$', enum: [opened, closed, merged, locked, all], default: merged, in: query }
+      # An ISO 8601 date or timestamp, as GitLab expects it.
+      updated_after: { pattern: '^[\d:.TZ+-]+$', required: false, in: query }
+    transform: |
+      [ .[] | { id: .iid, title, author: .author.username, url: .web_url,
+                merged_at, updated_at } ]
     max_bytes: 500k
 
   post_comment:
