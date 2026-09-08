@@ -118,8 +118,10 @@ type Step struct {
 	Switch  string    `yaml:"switch"`
 	Cases   yaml.Node `yaml:"cases"`
 	Default yaml.Node `yaml:"default"`
-	Notify  yaml.Node `yaml:"notify"`
-	Message string    `yaml:"message"`
+	// Notify names a channel of the global configuration; Message is the
+	// text to send (sections 9.3 and 12).
+	Notify  string `yaml:"notify"`
+	Message string `yaml:"message"`
 
 	// Line is the line the step starts on, for diagnostics.
 	Line int `yaml:"-"`
@@ -169,7 +171,7 @@ func (s *Step) Kinds() []Kind {
 	if s.Switch != "" {
 		kinds = append(kinds, KindSwitch)
 	}
-	if !s.Notify.IsZero() {
+	if s.Notify != "" {
 		kinds = append(kinds, KindNotify)
 	}
 	return kinds

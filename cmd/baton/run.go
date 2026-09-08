@@ -18,6 +18,7 @@ import (
 	"github.com/foxzi/baton/internal/engine"
 	"github.com/foxzi/baton/internal/exitcode"
 	"github.com/foxzi/baton/internal/expr"
+	"github.com/foxzi/baton/internal/notify"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
 	"github.com/foxzi/baton/internal/secrets"
@@ -194,6 +195,11 @@ func execute(req runRequest) int {
 	}
 	secretStore = secretStore.WithHidden(secretValues(providerKeys)...)
 
+	// A webhook url is a secret too: it goes to the redactor, and the
+	// engine only sees the channel it actually sends to.
+	channels, channelErrors := notify.ResolveAll(cfg.Notify, baseDir)
+	secretStore = secretStore.WithHidden(channelURLs(channels)...)
+
 	if req.dryRun {
 		printPlan(scn, bound, secretStore)
 		return exitcode.OK
@@ -224,18 +230,21 @@ func execute(req runRequest) int {
 	defer store.Close()
 
 	eng, err := engine.New(engine.Options{
-		Scenario:     scn,
-		Inputs:       bound,
-		Secrets:      secretStore,
-		Store:        store,
-		Cache:        cache.Open(cacheDir),
-		NoCache:      req.noCache,
-		Resume:       req.resume,
-		ResumeOf:     req.resumeOf,
-		Workspace:    req.workspace,
-		Config:       cfg,
-		ProviderKeys: providerKeys,
-		Observer:     observer(req.asJSON, req.verbose),
+		Scenario:      scn,
+		Inputs:        bound,
+		Secrets:       secretStore,
+		Store:         store,
+		Cache:         cache.Open(cacheDir),
+		NoCache:       req.noCache,
+		Resume:        req.resume,
+		ResumeOf:      req.resumeOf,
+		Workspace:     req.workspace,
+		Config:        cfg,
+		Channels:      channels,
+		ChannelErrors: channelErrors,
+		Stdout:        os.Stdout,
+		ProviderKeys:  providerKeys,
+		Observer:      observer(req.asJSON, req.verbose),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
@@ -362,6 +371,18 @@ func sortedInputNames(declared map[string]scenario.Input) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// channelURLs is the webhook url of every resolved channel, for the
+// redactor.
+func channelURLs(channels map[string]notify.Channel) []values.Secret {
+	out := make([]values.Secret, 0, len(channels))
+	for _, channel := range channels {
+		if !channel.URL.IsZero() {
+			out = append(out, channel.URL)
+		}
+	}
+	return out
 }
 
 // secretValues is the values of a provider key map, for the redactor.

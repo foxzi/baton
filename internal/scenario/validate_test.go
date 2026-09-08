@@ -915,6 +915,45 @@ steps:
 			checkOK:     true,
 			checkNoWarn: true,
 		},
+		{
+			// Section 9.3: the sugar form needs a message; the channel
+			// itself is resolved against the global configuration at run
+			// time, so it cannot be checked here.
+			name: "notify valid step",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: tell
+    notify: ops
+    message: "run {{ .run.id }} finished"
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
+		{
+			name: "notify without message",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: tell
+    notify: ops
+`,
+			wantErr: "notify requires a message",
+		},
+		{
+			name: "notify with a broken message template",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: tell
+    notify: ops
+    message: "{{ .run.id"
+`,
+			wantErr: "steps[0].message",
+		},
 	}
 
 	for _, tc := range cases {

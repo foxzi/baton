@@ -95,9 +95,12 @@ type Channel struct {
 	Secret string     `yaml:"secret"`
 }
 
-// ChannelKindWebhook is the only built-in Channel.Kind; any other non-empty
-// value is rejected by Validate.
-const ChannelKindWebhook = "webhook"
+// Built-in Channel.Kind values (spec section 2, "плюс встроенные webhook и
+// stdout"); any other non-empty value is rejected by Validate.
+const (
+	ChannelKindWebhook = "webhook"
+	ChannelKindStdout  = "stdout"
+)
 
 // Provider configures one llm backend (spec section 8.3).
 type Provider struct {
@@ -350,17 +353,21 @@ func validateProvider(path string, p Provider) []error {
 func validateChannel(path string, ch Channel) []error {
 	var errs []error
 
-	webhookForm := ch.Kind == ChannelKindWebhook
+	builtinForm := ch.Kind != ""
 	packForm := ch.API != "" || ch.Target != ""
 
 	switch {
-	case ch.Kind != "" && ch.Kind != ChannelKindWebhook:
-		errs = append(errs, fmt.Errorf("%s: unknown kind %q, want %q or empty", path, ch.Kind, ChannelKindWebhook))
-	case webhookForm && packForm:
-		errs = append(errs, fmt.Errorf("%s: must not combine kind: webhook with api/target", path))
-	case webhookForm:
+	case builtinForm && ch.Kind != ChannelKindWebhook && ch.Kind != ChannelKindStdout:
+		errs = append(errs, fmt.Errorf("%s: unknown kind %q, want %q, %q or empty", path, ch.Kind, ChannelKindWebhook, ChannelKindStdout))
+	case builtinForm && packForm:
+		errs = append(errs, fmt.Errorf("%s: must not combine kind: %s with api/target", path, ch.Kind))
+	case ch.Kind == ChannelKindWebhook:
 		if ch.URL == nil {
 			errs = append(errs, fmt.Errorf("%s: kind webhook requires url", path))
+		}
+	case ch.Kind == ChannelKindStdout:
+		if ch.URL != nil {
+			errs = append(errs, fmt.Errorf("%s: kind stdout takes no url", path))
 		}
 	case packForm:
 		if ch.API == "" {
@@ -370,7 +377,7 @@ func validateChannel(path string, ch Channel) []error {
 			errs = append(errs, fmt.Errorf("%s: requires target", path))
 		}
 	default:
-		errs = append(errs, fmt.Errorf("%s: must declare kind: webhook with url, or api and target", path))
+		errs = append(errs, fmt.Errorf("%s: must declare kind: webhook with url, kind: stdout, or api and target", path))
 	}
 
 	return errs

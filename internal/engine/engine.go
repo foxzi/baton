@@ -11,6 +11,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/httpx"
+	"github.com/foxzi/baton/internal/notify"
 	"github.com/foxzi/baton/internal/provider"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
@@ -43,6 +45,12 @@ type Options struct {
 	// which case a scenario that needs a provider or a channel fails with
 	// the config class.
 	Config *config.Config
+	// Channels are the notify channels of the configuration with their
+	// secrets already read, by channel name (section 12). ChannelErrors
+	// holds the channels that could not be resolved, so that a run only
+	// fails when it sends to one of them.
+	Channels      map[string]notify.Channel
+	ChannelErrors map[string]error
 	// ProviderKeys are the resolved api keys of the providers, by provider
 	// name. The caller resolves them so that a key is part of the redactor
 	// before any provider can echo it back (section 13).
@@ -65,6 +73,9 @@ type Options struct {
 	// Workspace is the default working directory of run steps. It defaults
 	// to the directory of the scenario file.
 	Workspace string
+	// Stdout is where the built-in stdout notify channel writes. It may be
+	// nil, in which case such a message is dropped.
+	Stdout io.Writer
 	// Observer receives events as they happen, for the human readable log.
 	// It may be nil.
 	Observer func(Event)
@@ -380,6 +391,10 @@ func (e *Engine) retryable(step *scenario.Step) bool {
 	if step.HTTP != nil {
 		return e.httpReadonly(step.HTTP)
 	}
+	if step.Notify != "" {
+		// Sending a message twice is a side effect like any other.
+		return false
+	}
 	return true
 }
 
@@ -400,6 +415,8 @@ func (e *Engine) execute(ctx context.Context, step *scenario.Step, path string) 
 		return e.execAssert(step)
 	case scenario.KindForeach:
 		return e.execForeach(stepCtx, step, path)
+	case scenario.KindNotify:
+		return e.execNotify(stepCtx, step, path)
 	case scenario.KindNone:
 		return expr.Step{}, errorf(ClassConfig, "step %s: exactly one body field must be set", step.ID)
 	default:

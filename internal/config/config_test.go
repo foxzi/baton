@@ -379,6 +379,23 @@ func TestValidateChannelWebhookMissingURL(t *testing.T) {
 	}
 }
 
+// TestValidateChannelStdout checks that kind: stdout needs nothing else and
+// takes no url.
+func TestValidateChannelStdout(t *testing.T) {
+	cfg := &Config{Notify: map[string]Channel{"x": {Kind: ChannelKindStdout}}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+
+	cfg = &Config{Notify: map[string]Channel{
+		"x": {Kind: ChannelKindStdout, URL: &SecretRef{From: scenario.SecretFromEnv, Key: "K"}},
+	}}
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "takes no url") {
+		t.Errorf("Validate() error = %v, want mention of takes no url", err)
+	}
+}
+
 // TestValidateChannelPackMissingTarget checks that the api/target form needs
 // both fields.
 func TestValidateChannelPackMissingTarget(t *testing.T) {

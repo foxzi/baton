@@ -213,7 +213,19 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		}
 	case KindSwitch:
 		validateSwitch(step, path, res)
+	case KindNotify:
+		validateNotify(step, path, res)
 	}
+}
+
+// validateNotify checks the sugar form of section 9.3: a channel name and
+// the message to send. The channel itself lives in the global configuration,
+// which the scenario cannot see, so it is only checked at run time.
+func validateNotify(step *Step, path string, res *Result) {
+	if strings.TrimSpace(step.Message) == "" {
+		res.errorf(path+".message", step.Line, "notify requires a message")
+	}
+	validateTemplate(path+".message", step.Message, step.Line, res)
 }
 
 func validateRun(scn *Scenario, step *Step, path string, res *Result) {
