@@ -1,0 +1,10 @@
+{
+  "id": 321,
+  "body": "Looks solid overall, a couple of inline notes.",
+  "html_url": "https://gitea.example.com/example/project/pulls/42#pullrequestreview-321",
+  "pull_request_url": "https://gitea.example.com/api/v1/repos/example/project/pulls/42",
+  "user": { "login": "asmirnova", "id": 7 },
+  "state": "COMMENT",
+  "submitted_at": "2024-05-14T09:20:11Z",
+  "commit_id": "9f8e7d6c5b4a9f8e7d6c5b4a9f8e7d6c5b4a9f8e"
+}

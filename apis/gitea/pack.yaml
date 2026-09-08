@@ -1,0 +1,91 @@
+# Gitea pack (spec section 7.4.2). Gitea answers the same four operations of
+# forge/v1 as the GitHub pack, through an API that mirrors GitHub's. A Gitea
+# instance is self-hosted, so the pack cannot guess a base URL for it.
+pack: gitea
+version: 1
+description: Gitea REST API v1
+
+config:
+  # A Gitea instance lives at https://<host>/api/v1; there is no such thing
+  # as a default host, so the scenario must supply one.
+  base_url: { required: true }
+
+# Gitea accepts a token in the Authorization header both as "token <t>" and
+# as "bearer <t>"; bearer is the scheme baton already speaks, so the pack
+# uses it rather than adding a token-specific auth kind for one service.
+auth:
+  kind: bearer
+
+pagination:
+  style: link_header
+  max_pages: 20
+
+ops:
+  get_change:
+    get: /repos/{project}/pulls/{id}
+    description: A pull request, without the files it touches
+    readonly: true
+    # Gitea splits a pull request the same way GitHub does: the pull
+    # request itself carries no file list, so a single call cannot satisfy
+    # forge/v1.get_change. A scenario pairs this operation with list_files.
+    params:
+      project: { pattern: '^[\w.-]+/[\w.-]+$' }
+      id: { pattern: '^\d+$' }
+    transform: |
+      { id: .number, title, description: .body, author: .user.login,
+        base: .base.sha, head: .head.sha, url: .html_url }
+
+  list_files:
+    get: /repos/{project}/pulls/{id}/files
+    description: Files a pull request touches
+    readonly: true
+    paginate: true
+    params:
+      project: { pattern: '^[\w.-]+/[\w.-]+$' }
+      id: { pattern: '^\d+$' }
+    # Gitea reports no diff text on this endpoint, only the file names and
+    # their change counts, so a scenario that needs the diff itself has to
+    # read the file through get_file.
+    transform: '[ .[] | { path: .filename, deleted: (.status == "deleted") } ]'
+    implements: forge/v1.list_files
+    max_bytes: 500k
+
+  get_file:
+    get: /repos/{project}/contents/{path}
+    description: Content of one file at a ref
+    readonly: true
+    params:
+      project: { pattern: '^[\w.-]+/[\w.-]+$' }
+      path: { pattern: '^[^\s?#]+$' }
+      ref: { pattern: '^[\w./-]+$', required: false, in: query }
+    # Unlike GitHub, Gitea does not wrap the base64 content across lines.
+    # The response does not echo the ref, only the blob sha.
+    transform: '{ content: (.content | @base64d), path, sha }'
+    implements: forge/v1.get_file
+    max_bytes: 500k
+
+  post_comment:
+    post: /repos/{project}/issues/{id}/comments
+    description: Comment on a pull request
+    encode: json
+    params:
+      project: { pattern: '^[\w.-]+/[\w.-]+$' }
+      id: { pattern: '^\d+$' }
+      body: { max_len: 65000, in: body }
+    transform: '{ id, url: .html_url }'
+    implements: forge/v1.post_comment
+
+  post_review:
+    post: /repos/{project}/pulls/{id}/reviews
+    description: Review a pull request with a summary and line comments in one batch
+    encode: json
+    params:
+      project: { pattern: '^[\w.-]+/[\w.-]+$' }
+      id: { pattern: '^\d+$' }
+      summary: { name: body, max_len: 65000, required: false, in: body }
+      # Each entry of comments is { path, body, new_position }, the shape
+      # Gitea's pull request review API wants for a single-line comment.
+      comments: { in: body }
+      event: { pattern: '^[A-Z_]+$', enum: [COMMENT, APPROVED, REQUEST_CHANGES], default: COMMENT, in: body }
+    transform: '{ id, url: .html_url }'
+    implements: forge/v1.post_review
