@@ -416,6 +416,11 @@ func (e *Engine) retryable(step *scenario.Step) bool {
 	if step.HTTP != nil {
 		return e.httpReadonly(step.HTTP)
 	}
+	if step.File != nil {
+		// Reading and listing may be repeated; writing may not.
+		op, _ := step.File.Op()
+		return op == scenario.FileOpRead || op == scenario.FileOpGlob
+	}
 	if step.Notify != "" {
 		// Sending a message twice is a side effect like any other.
 		return false
@@ -444,6 +449,8 @@ func (e *Engine) execute(ctx context.Context, step *scenario.Step, path string) 
 		return e.execForeach(stepCtx, step, path)
 	case scenario.KindUntil:
 		return e.execUntil(stepCtx, step, path)
+	case scenario.KindFile:
+		return e.execFile(stepCtx, step, path)
 	case scenario.KindNotify:
 		return e.execNotify(stepCtx, step, path)
 	case scenario.KindNone:

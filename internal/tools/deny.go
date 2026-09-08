@@ -28,6 +28,10 @@ func matchGlob(pattern, target string) bool {
 	return matchSegments(strings.Split(pattern, "/"), strings.Split(target, "/"))
 }
 
+// MatchGlob is matchGlob for callers outside this package: the file step of
+// a scenario matches its pattern the same way fs.glob does.
+func MatchGlob(pattern, target string) bool { return matchGlob(pattern, target) }
+
 // matchSegments matches a pattern's segments against a path's segments. A **
 // segment matches zero or more path segments, which is what lets .git/**
 // cover the directory itself (zero segments) as well as anything under it.
