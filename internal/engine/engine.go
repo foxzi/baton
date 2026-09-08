@@ -74,6 +74,10 @@ type Options struct {
 	// Workspace is the default working directory of run steps. It defaults
 	// to the directory of the scenario file.
 	Workspace string
+	// StateDir holds the state files an agent step reads and writes
+	// (section 7.6). It defaults to the state/ directory next to the run
+	// directory root.
+	StateDir string
 	// Stdout is where the built-in stdout notify channel writes. It may be
 	// nil, in which case such a message is dropped.
 	Stdout io.Writer

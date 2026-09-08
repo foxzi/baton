@@ -171,7 +171,12 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
+	state, stepErr := e.agentState(call)
+	if stepErr != nil {
+		return expr.Step{}, stepErr
+	}
 	toolSet := append(commands.Tools(), apis.Tools()...)
+	toolSet = append(toolSet, state.Tools()...)
 
 	audit, closeAudit := e.auditWriter(path, dir)
 	defer closeAudit()
@@ -241,6 +246,32 @@ func (e *Engine) agentAPIs(call *agentCall) (*tools.APIs, *Error) {
 		return nil, wrapf(ClassConfig, err, "agent.tools.apis")
 	}
 	return set, nil
+}
+
+// agentState builds the state tools of the step. The file is named after the
+// scenario and lives next to the run directories, so that two runs of the
+// same scenario share it and two scenarios do not (section 7.6).
+func (e *Engine) agentState(call *agentCall) (*tools.State, *Error) {
+	set, err := tools.NewState(tools.StateOptions{
+		Path:   e.stateFile(),
+		Policy: call.policy,
+	})
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "agent.tools.state")
+	}
+	return set, nil
+}
+
+// stateFile is <state dir>/<scenario name>.json. The default state directory
+// is a sibling of the run directory root, which keeps it out of the runs
+// themselves: the state outlives any single run.
+func (e *Engine) stateFile() string {
+	dir := e.opts.StateDir
+	if dir == "" {
+		runsDir := filepath.Dir(e.opts.Store.Dir())
+		dir = filepath.Join(filepath.Dir(runsDir), "state")
+	}
+	return filepath.Join(dir, e.opts.Scenario.Name+".json")
 }
 
 // agentResult validates the submitted result and records what the step

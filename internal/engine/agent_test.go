@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -245,9 +246,10 @@ calls:
 	if result.Status != runstore.StatusSuccess {
 		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
 	}
-	// One of the two declared commands is offered, the allowed one.
-	if tools != 1 {
-		t.Fatalf("agent_started tools = %#v, want 1", tools)
+	// One of the two declared commands is offered, the allowed one, next to
+	// the state.get the fix profile grants (section 7.2).
+	if tools != 2 {
+		t.Fatalf("agent_started tools = %#v, want 2", tools)
 	}
 	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
 	if !strings.Contains(audit, `"tool":"allowed"`) {
@@ -558,5 +560,64 @@ steps:
 	}
 	if !strings.Contains(result.Error.Message, "agent.tools") {
 		t.Errorf("message = %q, want it to point at agent.tools", result.Error.Message)
+	}
+}
+
+// 10. A step with read-write state access can store a value with state.set
+// and read it back with state.get; the value lands in the scenario's state
+// file and both calls are audited (section 7.6).
+func TestAgent_StateToolsReadWrite(t *testing.T) {
+	yamlText := `
+version: 1
+name: agent-state
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      tools:
+        state: read-write
+      result: result.json
+`
+	script := `
+calls:
+  - tool: state.set
+    args: { key: "last_run", value: "ok" }
+  - tool: state.get
+    args: { key: "last_run" }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`
+	stateDir := filepath.Join(t.TempDir(), "state")
+	eng, store, dir := newTestEngine(t, yamlText, func(o *Options) {
+		o.StateDir = stateDir
+	})
+	writeAgentFiles(t, dir, agentSchema, script)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
+	}
+
+	stateFile := filepath.Join(stateDir, "agent-state.json")
+	stateData := readFile(t, stateFile)
+	var stored map[string]any
+	if err := json.Unmarshal([]byte(stateData), &stored); err != nil {
+		t.Fatalf("state file is not valid JSON: %v\n%s", err, stateData)
+	}
+	if stored["last_run"] != "ok" {
+		t.Fatalf("state file last_run = %#v, want \"ok\":\n%s", stored["last_run"], stateData)
+	}
+
+	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	if !strings.Contains(audit, `"tool":"state.set"`) {
+		t.Errorf("state.set is not in the audit log:\n%s", audit)
+	}
+	if !strings.Contains(audit, `"tool":"state.get"`) {
+		t.Errorf("state.get is not in the audit log:\n%s", audit)
 	}
 }
