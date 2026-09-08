@@ -157,7 +157,7 @@ on_failure:
 
 ## Сборка
 
-Требуется Go 1.25 или новее.
+Требуется Go 1.25.7 или новее.
 
 ```sh
 make build      # собирает ./baton с метаданными версии
@@ -177,6 +177,8 @@ baton run examples/weekly-report.yaml \
 Провайдер, каналы уведомлений и таблица цен живут в глобальной конфигурации: `~/.config/baton/config.yaml` или `./baton.yaml`, либо там, куда указывает `--config`. Секреты читаются из окружения или из файлов в момент, когда они нужны шагу; они не попадают ни в каталог прогона, ни в кеш, ни в промпт модели.
 
 Каждый прогон пишет `runs/<id>/` с `run.json`, `events.jsonl` и выводом каждого шага. Прочитать это обратно можно через `baton runs list`, `baton runs show <id>` и `baton runs logs <id>`, а `baton resume <id>` продолжает упавший прогон с упавшего шага. `--dry-run` печатает план, `--json` печатает события в JSONL, `--no-cache` игнорирует кеш шагов. `baton tools <scenario.yaml> --step ID` печатает инструменты, которые получит агент шага, ничего не выполняя.
+
+`baton apis import` генерирует каркас API-пака из документа OpenAPI 3, например `baton apis import --openapi openapi.yaml --ops listMergeRequests > gitlab.yaml`.
 
 ## Технологии
 

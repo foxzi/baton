@@ -157,7 +157,7 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
 ## Building
 
-Requires Go 1.25 or newer.
+Requires Go 1.25.7 or newer.
 
 ```sh
 make build      # builds ./baton with version metadata
@@ -177,6 +177,8 @@ baton run examples/weekly-report.yaml \
 The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` or `./baton.yaml`, or wherever `--config` points. Secrets are read from the environment or from files at the moment a step needs them; they never reach the run directory, the cache or a model prompt.
 
 Every run writes `runs/<id>/` with `run.json`, `events.jsonl` and the outputs of each step. `baton runs list`, `baton runs show <id>` and `baton runs logs <id>` read it back, `baton resume <id>` continues a failed run from the step that failed. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached step results. `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given, without running anything.
+
+`baton apis import` generates the skeleton of an API pack from an OpenAPI 3 document, e.g. `baton apis import --openapi openapi.yaml --ops listMergeRequests > gitlab.yaml`.
 
 ## Technology
 
