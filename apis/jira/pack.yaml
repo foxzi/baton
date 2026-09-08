@@ -1,0 +1,90 @@
+# Jira Cloud REST API pack. It implements three operations of tracker/v1:
+# get_issue, search and comment.
+#
+# Jira Cloud offers two REST API generations at once: v3 speaks the Atlassian
+# Document Format for rich text, v2 still accepts and returns plain text for
+# the same resources. This pack sticks to v2 everywhere it sends or reads a
+# text field, so a transform never has to walk an ADF document tree, and only
+# reaches into v3 for search, which v2 no longer serves at all.
+pack: jira
+version: 1
+description: Jira Cloud REST API
+
+config:
+  # A Jira Cloud site lives at https://<site>.atlassian.net; the paths of
+  # this pack already carry their own /rest/api/... prefix, so base_url
+  # names the site alone.
+  base_url: { required: true }
+  # Basic authorisation takes its user half from here: the Atlassian account
+  # email the API token was issued for. The token itself is the secret a
+  # scenario supplies, never written into the pack.
+  user: { required: true }
+
+# Jira Cloud accepts only HTTP Basic for an API token: the account email as
+# the user, the token as the password. A Bearer token is an OAuth 2.0
+# concept and Jira Cloud rejects an API token sent that way.
+auth:
+  kind: basic
+  user: user
+
+ops:
+  get_issue:
+    get: /rest/api/2/issue/{key}
+    description: Fetch one issue by its key
+    readonly: true
+    params:
+      key: { pattern: '^[A-Z][A-Z0-9_]*-\d+$' }
+    # Jira hands out no browsable link, only self, the REST URL of the
+    # issue; a scenario that wants a link to click builds it from the site
+    # and the key.
+    transform: |
+      { key, title: .fields.summary, status: .fields.status.name,
+        body: .fields.description, author: .fields.reporter.displayName,
+        url: .self }
+    implements: tracker/v1.get_issue
+
+  search:
+    # The old /rest/api/2/search was retired and now answers 410 Gone; the
+    # only search Jira Cloud still serves is this v3 endpoint. It paginates
+    # through nextPageToken rather than an offset, which this revision of
+    # the pack does not yet walk: a scenario gets the first page only, sized
+    # by maxResults.
+    get: /rest/api/3/search/jql
+    description: Search issues with JQL
+    readonly: true
+    params:
+      # tracker/v1 calls it query; Jira calls it jql.
+      query:
+        name: jql
+        pattern: '^[\s\S]+$'
+        max_len: 4000
+      limit:
+        name: maxResults
+        pattern: '^\d+$'
+        required: false
+      # Requested explicitly so the response carries the fields the
+      # transform below reads; without it Jira answers with a much smaller
+      # default field set that omits status.
+      fields:
+        pattern: '^[\w,.-]+$'
+        default: 'summary,status'
+    transform: '[ .issues[] | { key, title: .fields.summary, status: .fields.status.name, url: .self } ]'
+    implements: tracker/v1.search
+
+  comment:
+    post: /rest/api/2/issue/{key}/comment
+    description: Post a plain-text comment on an issue
+    encode: json
+    params:
+      key: { pattern: '^[A-Z][A-Z0-9_]*-\d+$' }
+      body: { max_len: 32000, in: body }
+    transform: '{ id, url: .self }'
+    implements: tracker/v1.comment
+
+  # create_issue is deliberately left out of this pack. Jira nests the
+  # fields of a new issue under a single "fields" object in the request
+  # body, { "fields": { "project": { "key": ... }, "summary": ..., ... } },
+  # while a pack can only ever send its body arguments flat at the top
+  # level. tracker/v1.create_issue therefore cannot be expressed in the
+  # pack format as it stands; a scenario that needs to create a Jira issue
+  # posts it with a raw http step instead.

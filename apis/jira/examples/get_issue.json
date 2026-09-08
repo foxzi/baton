@@ -1,0 +1,11 @@
+{
+  "id": "10002",
+  "key": "PROJ-123",
+  "self": "https://example.atlassian.net/rest/api/2/issue/10002",
+  "fields": {
+    "summary": "Fix login button alignment on mobile",
+    "status": { "name": "In Progress" },
+    "description": "The login button overlaps the password field on screens narrower than 360px.",
+    "reporter": { "displayName": "Alice Johnson" }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "10001",
+  "self": "https://example.atlassian.net/rest/api/2/issue/10002/comment/10001",
+  "body": "Deployed to staging, please verify.",
+  "author": { "displayName": "Alice Johnson" },
+  "created": "2024-06-03T14:22:10.000+0000"
+}
