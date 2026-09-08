@@ -209,6 +209,31 @@ Anthropic and OpenAI providers are configured the same way with
 `kind: anthropic` / `kind: openai`; `kind: openai_compatible` with a `base_url`
 covers Ollama, vLLM and corporate proxies.
 
+A channel has a third form besides the two built-in kinds: it names an `apis`
+entry whose pack implements `notify/v1` and the address to send to. This
+repository ships the `telegram` pack in `apis/telegram/`, so notifying a chat
+takes a pack entry and a channel that points at it:
+
+```yaml
+apis:
+  telegram:
+    pack: telegram
+    from: ./apis/
+    auth: { secret: tg_bot }
+
+secrets:
+  tg_bot: { from: env, key: TELEGRAM_BOT_TOKEN }
+
+notify:
+  chat:
+    api: telegram
+    target: "-1001234567890"   # a chat id, or @channelname
+```
+
+The entry authorises with a secret of the configuration, which a scenario
+cannot name and never sees; `notify: chat` in a step calls the pack's `send`
+operation with the channel's target and the rendered message.
+
 `examples/llm-smoke.yaml` is the shortest scenario that exercises a provider
 end to end: a one-word answer, a JSON answer validated against a schema, and a
 notification. Note that `schema:` is **required** on an `llm` step — a model
