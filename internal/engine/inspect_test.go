@@ -22,7 +22,8 @@ func toolNames(t *testing.T, eng *Engine, stepID string) []string {
 }
 
 // 1. The listing of a step is the tool set of a run plus submit_result: the
-// step's commands, the state its profile opens, and nothing else.
+// step's commands, the git and state tools its profile opens, and nothing
+// else.
 func TestStepTools_CommandsStateAndSubmit(t *testing.T) {
 	yamlText := `
 version: 1
@@ -57,7 +58,7 @@ steps:
 	for i, tool := range list {
 		names[i] = tool.Name
 	}
-	want := []string{"bye", "hello", "state.get", "submit_result"}
+	want := []string{"bye", "hello", "git.status", "git.diff", "git.log", "git.show", "git.blame", "git.commit", "state.get", "submit_result"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}
@@ -122,9 +123,10 @@ steps:
 	eng, _, dir := newTestEngine(t, yamlText, nil)
 	writeAgentFiles(t, dir, agentSchema, "calls: []")
 
+	wantReview := "git.status,git.diff,git.log,git.show,git.blame,state.get,submit_result"
 	got := strings.Join(toolNames(t, eng, "review"), ",")
-	if got != "state.get,submit_result" {
-		t.Errorf("review tools = %s, want state.get,submit_result: the profile runs no commands", got)
+	if got != wantReview {
+		t.Errorf("review tools = %s, want %s: the profile runs no commands and cannot commit", got, wantReview)
 	}
 
 	list, err := eng.StepTools("research")
@@ -139,7 +141,7 @@ steps:
 			fetch = &list[i]
 		}
 	}
-	want := "state.get,state.set,fetch,submit_result"
+	want := "git.status,git.diff,git.log,git.show,git.blame,state.get,state.set,fetch,submit_result"
 	if strings.Join(names, ",") != want {
 		t.Fatalf("research tools = %v, want %s", names, want)
 	}
@@ -217,8 +219,9 @@ steps:
 	eng, _, dir := newTestEngine(t, yamlText, nil)
 	writeAgentFiles(t, dir, agentSchema, "calls: []")
 
-	if got := strings.Join(toolNames(t, eng, "body"), ","); got != "state.get,submit_result" {
-		t.Errorf("body tools = %s, want state.get,submit_result", got)
+	want := "git.status,git.diff,git.log,git.show,git.blame,state.get,submit_result"
+	if got := strings.Join(toolNames(t, eng, "body"), ","); got != want {
+		t.Errorf("body tools = %s, want %s", got, want)
 	}
 }
 

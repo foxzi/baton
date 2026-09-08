@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -247,9 +248,10 @@ calls:
 		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
 	}
 	// One of the two declared commands is offered, the allowed one, next to
-	// the state.get the fix profile grants (section 7.2).
-	if tools != 2 {
-		t.Fatalf("agent_started tools = %#v, want 2", tools)
+	// the six git tools and the state.get the fix profile grants (section
+	// 7.2).
+	if tools != 8 {
+		t.Fatalf("agent_started tools = %#v, want 8", tools)
 	}
 	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
 	if !strings.Contains(audit, `"tool":"allowed"`) {
@@ -742,5 +744,95 @@ calls:
 	}
 	if !strings.Contains(audit, "allow list") {
 		t.Fatalf("the audit entry does not mention the allow list refusal:\n%s", audit)
+	}
+}
+
+// 13. A step with the fix profile can read the repository and commit to it
+// with the git tools (section 7.2). The tools run in the prepared workspace,
+// so the commit lands in the repository the run was pointed at.
+func TestAgent_GitToolsReadAndCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+
+	yamlText := `
+version: 1
+name: agent-git
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      profile: fix
+      result: result.json
+`
+	script := `
+calls:
+  - tool: git.status
+  - tool: git.log
+    args: { max_count: "1" }
+  - tool: git.commit
+    args: { message: "chore: agent commit" }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`
+	repo := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "test"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatalf("write a.txt: %v", err)
+	}
+	for _, args := range [][]string{{"add", "a.txt"}, {"commit", "-q", "-m", "first"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("two\n"), 0o644); err != nil {
+		t.Fatalf("rewrite a.txt: %v", err)
+	}
+
+	eng, store, dir := newTestEngine(t, yamlText, func(o *Options) {
+		o.Workspace = repo
+	})
+	writeAgentFiles(t, dir, agentSchema, script)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
+	}
+
+	log := exec.Command("git", "log", "--pretty=format:%s")
+	log.Dir = repo
+	out, err := log.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git log: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "chore: agent commit") {
+		t.Fatalf("the agent's commit is not in the history:\n%s", out)
+	}
+
+	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	for _, tool := range []string{"git.status", "git.log", "git.commit"} {
+		if !strings.Contains(audit, `"tool":"`+tool+`"`) {
+			t.Errorf("%s is not in the audit log:\n%s", tool, audit)
+		}
+	}
+	if strings.Contains(audit, `"status":"error"`) {
+		t.Errorf("a git call was audited as an error:\n%s", audit)
 	}
 }

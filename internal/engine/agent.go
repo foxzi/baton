@@ -209,9 +209,9 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 }
 
 // agentToolSet builds every tool the step's agent is given: its commands
-// (section 7.5), the readonly pack operations of its policy (section 7.4.8)
-// and the fetch and state tools of section 7.6. The gateway adds
-// submit_result itself.
+// (section 7.5), the readonly pack operations of its policy (section 7.4.8),
+// the git tools of section 7.4.7 and the fetch and state tools of section
+// 7.6. The gateway adds submit_result itself.
 func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string) ([]gateway.Tool, *Error) {
 	commands, err := tools.NewCommands(tools.CommandOptions{
 		Workspace: root,
@@ -226,6 +226,10 @@ func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string)
 		return nil, wrapf(ClassConfig, err, "step %s: agent.tools", step.ID)
 	}
 
+	git, stepErr := e.agentGit(call, root)
+	if stepErr != nil {
+		return nil, stepErr
+	}
 	apis, stepErr := e.agentAPIs(call)
 	if stepErr != nil {
 		return nil, stepErr
@@ -239,9 +243,24 @@ func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string)
 		return nil, stepErr
 	}
 
-	set := append(commands.Tools(), apis.Tools()...)
+	set := append(commands.Tools(), git.Tools()...)
+	set = append(set, apis.Tools()...)
 	set = append(set, state.Tools()...)
 	set = append(set, fetch.Tools()...)
+	return set, nil
+}
+
+// agentGit builds the git tools of the step. They run in the prepared
+// workspace, whose configuration no longer carries a credential (section
+// 7.1), and they honour the same deny list as the file tools.
+func (e *Engine) agentGit(call *agentCall, root string) (*tools.Git, *Error) {
+	set, err := tools.NewGit(tools.GitOptions{
+		Workspace: root,
+		Policy:    call.policy,
+	})
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "agent.tools.git")
+	}
 	return set, nil
 }
 
