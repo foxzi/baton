@@ -31,6 +31,9 @@ func Parse(data []byte, path string) (*Scenario, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	scn.Path = path
+	if err := expandSwitches(&scn); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return &scn, nil
 }
 

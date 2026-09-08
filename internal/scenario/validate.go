@@ -9,7 +9,6 @@ import (
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/ifaces"
 	"github.com/foxzi/baton/internal/tmpl"
-	"gopkg.in/yaml.v3"
 )
 
 // Diagnostic is one validation finding.
@@ -95,6 +94,7 @@ func Validate(scn *Scenario) Result {
 	validateSteps(scn, scn.Steps, "steps", declared, &res)
 	// on_failure runs after the scenario failed and has its own id namespace.
 	validateSteps(scn, scn.OnFailure, "on_failure", map[string]bool{}, &res)
+	validateSwitches(scn, &res)
 
 	return res
 }
@@ -212,8 +212,6 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		validateForeach(scn, step, path+".foreach", res)
 	case KindUntil:
 		validateUntil(scn, step, path+".until", res)
-	case KindSwitch:
-		validateSwitch(step, path, res)
 	case KindNotify:
 		validateNotify(step, path, res)
 	}
@@ -398,15 +396,16 @@ func validateArg(path string, value any, line int, res *Result) {
 	}
 }
 
-func validateSwitch(step *Step, path string, res *Result) {
-	validateExpr(path+".switch", step.Switch, step.Line, res)
-	if step.Cases.Kind != yaml.MappingNode || len(step.Cases.Content) == 0 {
-		res.errorf(path+".cases", step.Line, "must declare at least one case")
-	}
-	// Enum coverage (specification section 4, check 10) needs the schema of
-	// the referenced step and is checked once schemas are loaded.
-	if step.Default.IsZero() {
-		res.warnf(path, step.Line, "no default case; every value of the subject must be covered")
+// validateSwitches reports on the switch steps Parse expanded away. The
+// expansion itself already rejected the malformed ones; what is left is the
+// subject expression and the coverage of the subject's values (section 4,
+// check 10), which without a default the validator cannot prove.
+func validateSwitches(scn *Scenario, res *Result) {
+	for _, info := range scn.switches {
+		validateExpr(info.path+".switch", info.subject, info.line, res)
+		if !info.hasDefault {
+			res.warnf(info.path, info.line, "no default case; every value of the subject must be covered")
+		}
 	}
 }
 

@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -1131,18 +1132,26 @@ steps:
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	step := scn.Steps[1]
-	if step.Kind() != KindSwitch {
-		t.Fatalf("Kind() = %q, want %q", step.Kind(), KindSwitch)
+	// Parse expands the switch into one guarded step per case, in the order
+	// the cases were written, with the default guarded by the negation.
+	var ids []string
+	for _, step := range scn.Steps {
+		ids = append(ids, step.ID)
 	}
-	if step.Switch != "steps.classify.result.risk" {
-		t.Errorf("Switch = %q, want the subject expression", step.Switch)
+	want := []string{"classify", "deep", "light", "skip_note"}
+	if !reflect.DeepEqual(ids, want) {
+		t.Fatalf("step ids = %v, want %v", ids, want)
 	}
-	if len(step.Cases.Content) != 4 {
-		t.Errorf("Cases = %v, want two entries", step.Cases)
-	}
-	if step.Default.IsZero() {
-		t.Errorf("Default is empty, want the default step")
+
+	subject := "steps.classify.result.risk"
+	for i, cond := range map[int]string{
+		1: `(` + subject + `) == "high"`,
+		2: `(` + subject + `) == "low"`,
+		3: `!((` + subject + `) == "high" || (` + subject + `) == "low")`,
+	} {
+		if scn.Steps[i].When != cond {
+			t.Errorf("Steps[%d].When = %q, want %q", i, scn.Steps[i].When, cond)
+		}
 	}
 
 	res := Validate(scn)

@@ -37,6 +37,10 @@ type Scenario struct {
 	// Path is the file the scenario was read from. Prompt, schema and
 	// template paths in the scenario resolve relative to its directory.
 	Path string `yaml:"-"`
+
+	// switches are the switch steps Parse expanded away, kept so that the
+	// validator can still report on them (section 3.10).
+	switches []switchInfo
 }
 
 // Input is a declared scenario input (spec section 3.1).
