@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "result": {
+    "message_id": 4821,
+    "from": {
+      "id": 7654321,
+      "is_bot": true,
+      "first_name": "Baton",
+      "username": "baton_ci_bot"
+    },
+    "chat": {
+      "id": -1001234567890,
+      "title": "Release notifications",
+      "type": "supergroup"
+    },
+    "date": 1715677953,
+    "text": "nightly-build failed: http on publish"
+  }
+}

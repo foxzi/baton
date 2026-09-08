@@ -676,3 +676,39 @@ func TestApisCallServerError(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d", code, exitcode.Failure)
 	}
 }
+
+// TestApisValidateShippedPacks runs `apis validate` over every pack this
+// repository ships, so that a pack breaks in the test suite rather than in a
+// scenario: the recorded examples are the only check a pack gets without a
+// live API to call.
+func TestApisValidateShippedPacks(t *testing.T) {
+	entries, err := os.ReadDir("../../apis")
+	if err != nil {
+		t.Fatalf("read apis/: %v", err)
+	}
+	var paths []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			if name == "examples" {
+				continue // the examples of the single-file packs beside it
+			}
+			paths = append(paths, filepath.Join("../../apis", name))
+			continue
+		}
+		if strings.HasSuffix(name, ".yaml") {
+			paths = append(paths, filepath.Join("../../apis", name))
+		}
+	}
+	if len(paths) == 0 {
+		t.Fatal("no packs found under apis/")
+	}
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd(append([]string{"validate"}, paths...))
+	})
+	if code != exitcode.OK {
+		t.Fatalf("apis validate %v = %d, want %d: %s", paths, code, exitcode.OK, stderr)
+	}
+}

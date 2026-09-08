@@ -1,0 +1,67 @@
+# Telegram Bot API pack (spec section 7.4.2), the reference implementation of
+# the notify/v1 interface: a channel of the global config sends through
+# send(target, text, format).
+#
+# The pack is laid out as a directory because it ships the recorded response
+# the interface check reads (examples/send.json).
+pack: telegram
+version: 1
+description: Telegram Bot API
+
+config:
+  # The bot token is part of the path, so the placeholder belongs to the base
+  # URL rather than to any single operation.
+  base_url: { default: "https://api.telegram.org/bot{auth}" }
+
+auth:
+  kind: path
+
+# Telegram answers 200 with {"ok": false, "description": "…"} as readily as it
+# answers 4xx, and wraps every success in {"ok": true, "result": …}.
+envelope:
+  unwrap: .result
+  error_when: '.ok == false'
+  error_message: .description
+
+ops:
+  send:
+    post: /sendMessage
+    description: Send a message to a chat, a channel or a user
+    encode: json
+    params:
+      # notify/v1 calls the destination target; Telegram calls it chat_id.
+      # It is either a numeric id (negative for a channel) or an @username.
+      target:
+        name: chat_id
+        pattern: '^(-?\d+|@[\w]{5,32})$'
+        in: body
+      text:
+        max_len: 4096
+        in: body
+      # Telegram's own parse mode names, since notify/v1 leaves the format
+      # vocabulary to the pack. Plain text is the default: an unescaped
+      # MarkdownV2 message is rejected by the API.
+      format:
+        name: parse_mode
+        pattern: '^(MarkdownV2|HTML|Markdown)$'
+        enum: [MarkdownV2, HTML, Markdown]
+        required: false
+        in: body
+    transform: '{ id: .message_id, target: (.chat.id | tostring) }'
+    implements: notify/v1.send
+
+  send_document:
+    post: /sendDocument
+    description: Send a file already reachable by URL or file_id
+    encode: json
+    params:
+      target: { name: chat_id, pattern: '^(-?\d+|@[\w]{5,32})$', in: body }
+      document: { pattern: '^\S+$', in: body }
+      caption: { max_len: 1024, required: false, in: body }
+    transform: '{ id: .message_id, target: (.chat.id | tostring) }'
+
+  get_me:
+    get: /getMe
+    description: The bot the token belongs to
+    readonly: true
+    transform: '{ id, username: .username, name: .first_name }'
