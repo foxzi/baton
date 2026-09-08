@@ -1,0 +1,7 @@
+{
+  "id": 987654,
+  "body": "Looks good, thanks for fixing the off-by-one.",
+  "web_url": "https://gitlab.com/example/project/-/merge_requests/42#note_987654",
+  "created_at": "2024-05-14T09:12:33.000Z",
+  "author": { "username": "asmirnova" }
+}

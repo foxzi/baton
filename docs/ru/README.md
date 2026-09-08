@@ -63,7 +63,7 @@ steps:
     when: 'steps.classify.result.risk != "low"'
     agent:
       prompt: prompts/review.md
-      with: { project: "{{ .inputs.project }}", iid: "{{ .inputs.mr }}" }
+      with: { project: "{{ .inputs.project }}", id: "{{ .inputs.mr }}" }
       profile: review
       max_turns: 25
       budget_usd: 2
@@ -75,7 +75,7 @@ steps:
       auth: forge_rw
       args:
         project: "{{ .inputs.project }}"
-        iid: "{{ .inputs.mr }}"
+        id: "{{ .inputs.mr }}"
         body: "{{ render \"templates/review.md.tmpl\" .steps.review }}"
     dedupe_key: "review-{{ .inputs.project }}-{{ .inputs.mr }}"
 

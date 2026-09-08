@@ -33,12 +33,12 @@ pagination:
 
 ops:
   get_change:
-    get: /projects/{project}/merge_requests/{iid}/changes
+    get: /projects/{project}/merge_requests/{id}/changes
     description: Changes of a merge request
     readonly: true
     params:
       project: { pattern: '^[\w./-]+$', encode: path }
-      iid: { pattern: '^\d+$' }
+      id: { pattern: '^\d+$' }
     transform: |
       { id: .iid, title, description, author: .author.username,
         base: .diff_refs.base_sha, head: .diff_refs.head_sha,
@@ -62,12 +62,12 @@ ops:
     max_bytes: 500k
 
   post_comment:
-    post: /projects/{project}/merge_requests/{iid}/notes
+    post: /projects/{project}/merge_requests/{id}/notes
     description: Comment on a merge request
     encode: json
     params:
       project: { pattern: '^[\w./-]+$', encode: path }
-      iid: { pattern: '^\d+$' }
+      id: { pattern: '^\d+$' }
       body: { max_len: 65000, in: body }
     transform: '{ id, url: .web_url }'
     implements: forge/v1.post_comment

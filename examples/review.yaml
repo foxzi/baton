@@ -48,7 +48,7 @@ steps:
       op: forge.get_change
       args:
         project: "{{ .inputs.project }}"
-        iid: "{{ .inputs.mr }}"
+        id: "{{ .inputs.mr }}"
 
   - id: review
     needs: [changes]
@@ -58,7 +58,7 @@ steps:
       prompt: prompts/review.md
       with:
         project: "{{ .inputs.project }}"
-        iid: "{{ .inputs.mr }}"
+        id: "{{ .inputs.mr }}"
         title: "{{ .steps.changes.result.title }}"
         base: "{{ .steps.changes.result.base }}"
         head: "{{ .steps.changes.result.head }}"
@@ -84,7 +84,7 @@ steps:
       op: forge.post_comment
       args:
         project: "{{ .inputs.project }}"
-        iid: "{{ .inputs.mr }}"
+        id: "{{ .inputs.mr }}"
         body: |
           **baton review of `{{ .steps.changes.result.head }}`** — {{ .steps.review.result.verdict }}
 
@@ -105,6 +105,6 @@ on_failure:
       op: forge.post_comment
       args:
         project: "{{ .inputs.project }}"
-        iid: "{{ .inputs.mr }}"
+        id: "{{ .inputs.mr }}"
         body: "baton could not finish the review: {{ .run.failed_step }} failed with {{ .run.error.class }}."
     dedupe_key: "review-failed-{{ .inputs.project }}-{{ .inputs.mr }}-{{ .run.id }}"

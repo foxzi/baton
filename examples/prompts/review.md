@@ -1,4 +1,4 @@
-You are reviewing merge request {{ .iid }} of the project {{ .project }},
+You are reviewing merge request {{ .id }} of the project {{ .project }},
 titled "{{ .title }}".
 
 The workspace is a checkout of the branch at commit {{ .head }}; the merge

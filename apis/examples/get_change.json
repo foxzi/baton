@@ -1,0 +1,31 @@
+{
+  "iid": 42,
+  "title": "Fix pagination off-by-one",
+  "description": "Corrects the page counter used by the link-header paginator.",
+  "author": { "username": "asmirnova", "name": "Anna Smirnova" },
+  "diff_refs": {
+    "base_sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    "head_sha": "9f8e7d6c5b4a9f8e7d6c5b4a9f8e7d6c5b4a9f8e",
+    "start_sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+  },
+  "web_url": "https://gitlab.com/example/project/-/merge_requests/42",
+  "state": "opened",
+  "changes": [
+    {
+      "old_path": "internal/paginate/link.go",
+      "new_path": "internal/paginate/link.go",
+      "diff": "@@ -12,7 +12,7 @@ func nextPage(cur int) int {\n-\treturn cur\n+\treturn cur + 1\n }\n",
+      "new_file": false,
+      "renamed_file": false,
+      "deleted_file": false
+    },
+    {
+      "old_path": "internal/paginate/link_old_test.go",
+      "new_path": "internal/paginate/link_test.go",
+      "diff": "@@ -1,3 +1,3 @@\n-package paginate_old\n+package paginate\n",
+      "new_file": false,
+      "renamed_file": true,
+      "deleted_file": false
+    }
+  ]
+}
