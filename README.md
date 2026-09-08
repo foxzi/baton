@@ -178,7 +178,7 @@ The provider, the notification channels and the pricing table live in the global
 
 Every run writes `runs/<id>/` with `run.json`, `events.jsonl` and the outputs of each step. `baton runs list`, `baton runs show <id>` and `baton runs logs <id>` read it back, `baton resume <id>` continues a failed run from the step that failed. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached step results. `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given, without running anything.
 
-`baton apis import` generates the skeleton of an API pack from an OpenAPI 3 document, e.g. `baton apis import --openapi openapi.yaml --ops listMergeRequests > gitlab.yaml`. `baton apis validate <pack.yaml|pack-dir>...` loads a pack and replays every `examples/<op>.json` through its envelope and transform, which is the part of a pack that breaks silently without a live API to call.
+`baton apis import` generates the skeleton of an API pack from an OpenAPI 3 document, e.g. `baton apis import --openapi openapi.yaml --ops listMergeRequests > gitlab.yaml`. `baton apis validate <pack.yaml|pack-dir>...` loads a pack and replays every `examples/<op>.json` through its envelope and transform, which is the part of a pack that breaks silently without a live API to call. `baton apis call <scenario.yaml> <api>.<op> -a k=v` calls a single operation through the scenario's `apis` entry, for trying a pack against the real service before a step depends on it.
 
 ## Technology
 
