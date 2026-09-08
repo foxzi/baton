@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,16 +10,23 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/foxzi/baton/internal/config"
+	"github.com/foxzi/baton/internal/engine"
 	"github.com/foxzi/baton/internal/exitcode"
 	"github.com/foxzi/baton/internal/packs"
 	"github.com/foxzi/baton/internal/packs/openapi"
+	"github.com/foxzi/baton/internal/runstore"
+	"github.com/foxzi/baton/internal/scenario"
+	"github.com/foxzi/baton/internal/secrets"
 )
 
 const apisUsage = `Usage:
   baton apis import --openapi <spec> --ops <id,...> [--interface forge/v1] [--name NAME] > pack.yaml
   baton apis validate <pack.yaml|pack-dir>...   # check a pack and its examples/
+  baton apis call <scenario.yaml> <api>.<op> [-a k=v] [-a k:=<json>] [-i k=v] [--config FILE]
 
 Options:
   --openapi FILE     OpenAPI 3 document, JSON or YAML ("-" reads stdin)
@@ -34,6 +42,12 @@ apis validate loads each pack and, for every operation with a matching
 examples/<op>.json, replays the envelope and transform on that recorded
 response. Interface conformance is not checked yet: the interface registry
 does not exist, so implements is only checked for shape.
+
+apis call runs one operation of one apis entry of the given scenario, so that
+a pack can be exercised without writing a step for it. base_url, auth secret
+and timeout all come from the scenario's apis entry, exactly as a run would
+resolve them. -a k=v sets a string argument; -a k:=<json> sets an argument
+parsed as JSON, for numbers, booleans, lists and objects.
 `
 
 // apisCmd implements `baton apis` (spec section 7.4.7).
@@ -47,6 +61,8 @@ func apisCmd(args []string) int {
 		return apisImportCmd(args[1:])
 	case "validate":
 		return apisValidateCmd(args[1:])
+	case "call":
+		return apisCallCmd(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "baton: unknown apis subcommand %q\n\n%s", args[0], apisUsage)
 		return exitcode.Config
@@ -248,4 +264,186 @@ func resolvePackPath(path string) (packPath, examplesDir string, err error) {
 		return "", "", fmt.Errorf("no pack.yaml in %s", path)
 	}
 	return packPath, filepath.Join(path, "examples"), nil
+}
+
+// argsFlag collects the -a arguments of `apis call`: k=v sets a string, and
+// k:=<json> sets a value parsed as JSON, for arguments that are not strings.
+type argsFlag map[string]any
+
+func (a *argsFlag) String() string {
+	if *a == nil {
+		return ""
+	}
+	keys := make([]string, 0, len(*a))
+	for k := range *a {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = fmt.Sprintf("%s=%v", k, (*a)[k])
+	}
+	return strings.Join(parts, ",")
+}
+
+func (a *argsFlag) Set(v string) error {
+	// k:= is checked first: it contains "=", so a plain split on "=" would
+	// otherwise treat the JSON marker as part of the value.
+	if idx := strings.Index(v, ":="); idx >= 0 {
+		key, raw := v[:idx], v[idx+2:]
+		var value any
+		if err := json.Unmarshal([]byte(raw), &value); err != nil {
+			return fmt.Errorf("-a %s: invalid JSON value: %w", v, err)
+		}
+		if *a == nil {
+			*a = argsFlag{}
+		}
+		(*a)[key] = value
+		return nil
+	}
+	if idx := strings.Index(v, "="); idx >= 0 {
+		key, value := v[:idx], v[idx+1:]
+		if *a == nil {
+			*a = argsFlag{}
+		}
+		(*a)[key] = value
+		return nil
+	}
+	return fmt.Errorf("-a %s: expected k=v or k:=<json>", v)
+}
+
+// apisCallCmd calls one operation of one apis entry of a scenario, for
+// debugging a pack without writing a step to hold the call (spec section
+// 7.4.7, docs/ru/spec.md line 788).
+func apisCallCmd(args []string) int {
+	var (
+		opArgs    argsFlag
+		inputs    stringList
+		inputFile string
+		configs   stringList
+	)
+
+	flags := flag.NewFlagSet("apis call", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	flags.Usage = func() { fmt.Fprint(os.Stderr, apisUsage) }
+	flags.Var(&opArgs, "a", "operation argument as k=v or k:=<json>")
+	flags.Var(&inputs, "i", "scenario input as key=value")
+	flags.StringVar(&inputFile, "input-file", "", "JSON file with inputs")
+	flags.Var(&configs, "config", "global configuration file")
+
+	positional, err := parseFlags(flags, args)
+	if err != nil {
+		return exitcode.Config
+	}
+	if len(positional) != 2 {
+		fmt.Fprint(os.Stderr, apisUsage)
+		return exitcode.Config
+	}
+
+	scenarioPath, apiOp := positional[0], positional[1]
+	dot := strings.Index(apiOp, ".")
+	if dot <= 0 || dot == len(apiOp)-1 {
+		fmt.Fprintf(os.Stderr, "baton: expected <api>.<op>, got %q\n", apiOp)
+		return exitcode.Config
+	}
+	apiName, opName := apiOp[:dot], apiOp[dot+1:]
+
+	scn, err := scenario.Load(scenarioPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	if result := scenario.Validate(scn); !result.OK() {
+		for _, problem := range result.Errors {
+			fmt.Fprintf(os.Stderr, "error: %s\n", problem)
+		}
+		fmt.Fprintf(os.Stderr, "%s: %s\n", scenarioPath, plural(len(result.Errors), "error"))
+		return exitcode.Config
+	}
+
+	fileInputs, err := readInputFile(inputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	bound, err := scenario.BindInputs(scn.Inputs, inputs, fileInputs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+
+	cfg, err := config.Load(configs...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+
+	baseDir := filepath.Dir(scenarioPath)
+	secretStore, err := secrets.Resolve(scn.Secrets, baseDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+
+	// The call writes nothing a real run would, but the engine still records
+	// runs in a store, so it gets a throwaway one instead of a directory
+	// under runs/.
+	storeDir, err := os.MkdirTemp("", "baton-apis-call-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	defer os.RemoveAll(storeDir)
+	store, err := runstore.Create(storeDir, "apis-call", secretStore.Redactor())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	defer store.Close()
+
+	eng, err := engine.New(engine.Options{
+		Scenario: scn,
+		Inputs:   bound,
+		Secrets:  secretStore,
+		Store:    store,
+		Config:   cfg,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+
+	result, err := eng.CallOp(context.Background(), apiName, opName, opArgs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		var engErr *engine.Error
+		if errors.As(err, &engErr) && engErr.Class == engine.ClassConfig {
+			return exitcode.Config
+		}
+		return exitcode.Failure
+	}
+
+	out, err := json.MarshalIndent(result.Result, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Failure
+	}
+	out = secretStore.Redactor().Bytes(out)
+	if _, err := fmt.Printf("%s\n", out); err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Failure
+	}
+
+	if result.Pages > 1 || result.TruncatedPages || result.Truncated {
+		note := fmt.Sprintf("baton: %s", plural(result.Pages, "page"))
+		if result.TruncatedPages {
+			note += ", truncated at max_pages"
+		}
+		if result.Truncated {
+			note += ", truncated at max_bytes"
+		}
+		fmt.Fprintln(os.Stderr, note)
+	}
+
+	return exitcode.OK
 }

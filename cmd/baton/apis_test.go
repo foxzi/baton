@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -355,5 +358,235 @@ func TestApisValidateNoExamplesDir(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "without examples") {
 		t.Fatalf("stdout does not report a missing example: %q", stdout)
+	}
+}
+
+// --- argsFlag ---
+
+func TestArgsFlagStringValue(t *testing.T) {
+	var a argsFlag
+	if err := a.Set("name=demo"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if a["name"] != "demo" {
+		t.Errorf("a[name] = %#v, want the string %q", a["name"], "demo")
+	}
+}
+
+func TestArgsFlagJSONNumber(t *testing.T) {
+	var a argsFlag
+	if err := a.Set("id:=123"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if a["id"] != float64(123) {
+		t.Errorf("a[id] = %#v, want float64(123)", a["id"])
+	}
+}
+
+func TestArgsFlagJSONBool(t *testing.T) {
+	var a argsFlag
+	if err := a.Set("active:=true"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if a["active"] != true {
+		t.Errorf("a[active] = %#v, want true", a["active"])
+	}
+}
+
+func TestArgsFlagJSONArray(t *testing.T) {
+	var a argsFlag
+	if err := a.Set("ids:=[1,2]"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	list, ok := a["ids"].([]any)
+	if !ok || len(list) != 2 {
+		t.Fatalf("a[ids] = %#v, want a two-element list", a["ids"])
+	}
+}
+
+func TestArgsFlagBadJSON(t *testing.T) {
+	var a argsFlag
+	err := a.Set("id:={not json}")
+	if err == nil {
+		t.Fatalf("Set succeeded, want an error for invalid JSON")
+	}
+	if !strings.Contains(err.Error(), "invalid JSON value") {
+		t.Errorf("error = %v, want it to say invalid JSON value", err)
+	}
+}
+
+func TestArgsFlagMissingEquals(t *testing.T) {
+	var a argsFlag
+	err := a.Set("no-equals-here")
+	if err == nil {
+		t.Fatalf("Set succeeded, want an error for a missing =")
+	}
+	if !strings.Contains(err.Error(), "expected k=v or k:=<json>") {
+		t.Errorf("error = %v, want it to say the expected form", err)
+	}
+}
+
+func TestArgsFlagRepeatedKeyOverwrites(t *testing.T) {
+	var a argsFlag
+	if err := a.Set("name=first"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := a.Set("name=second"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if a["name"] != "second" {
+		t.Errorf("a[name] = %#v, want %q", a["name"], "second")
+	}
+}
+
+// --- apis call ---
+
+// callPackYAML is a minimal pack with one readonly GET op whose transform
+// picks a field out of the response, and whose base_url is left to the
+// scenario's apis entry.
+const callPackYAML = `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  get_thing:
+    get: /things/{id}
+    readonly: true
+    params:
+      id: { pattern: '^\d+$' }
+    transform: '{ id: .id, name: .name }'
+`
+
+// writeCallScenario writes a scenario whose single apis entry points at a
+// pack directory laid out as demo/demo.yaml, with base_url set to the test
+// server, plus one no-op step: a scenario without any step fails validation.
+func writeCallScenario(t *testing.T, dir, baseURL string) string {
+	t.Helper()
+	apisDir := filepath.Join(dir, "apis")
+	if err := os.MkdirAll(apisDir, 0o755); err != nil {
+		t.Fatalf("mkdir apis: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(apisDir, "demo.yaml"), []byte(callPackYAML), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	scenarioYAML := `
+version: 1
+name: apis-call
+apis:
+  demo:
+    pack: demo
+    from: ./apis/
+    config:
+      base_url: "` + baseURL + `"
+steps:
+  - id: noop
+    run: "echo hi"
+`
+	path := filepath.Join(dir, "s.yaml")
+	if err := os.WriteFile(path, []byte(scenarioYAML), 0o644); err != nil {
+		t.Fatalf("write scenario: %v", err)
+	}
+	return path
+}
+
+// 1. The happy path: the call goes through the scenario's apis entry, the
+// response comes back transformed, and stdout is the transformed JSON.
+func TestApisCallHappyPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/things/7" {
+			t.Errorf("server saw path %q, want /things/7", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":7,"name":"demo"}`))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	scenarioPath := writeCallScenario(t, dir, server.URL)
+
+	var code int
+	stdout, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"call", scenarioPath, "demo.get_thing", "-a", "id:=7"})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, want %d (stderr: %s)", code, exitcode.OK, stderr)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("stdout does not parse as JSON: %v\n%s", err, stdout)
+	}
+	if got["name"] != "demo" {
+		t.Errorf("result[name] = %#v, want demo", got["name"])
+	}
+	if got["id"] != float64(7) {
+		t.Errorf("result[id] = %#v, want 7", got["id"])
+	}
+}
+
+// 2. Wrong positional count is a configuration error, before anything loads.
+func TestApisCallWrongPositionalCount(t *testing.T) {
+	dir := t.TempDir()
+	scenarioPath := writeCallScenario(t, dir, "http://example.invalid")
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"call", scenarioPath})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+	if !strings.Contains(stderr, "Usage:") {
+		t.Errorf("stderr = %q, want the usage", stderr)
+	}
+}
+
+// 3. A malformed -a argument is a configuration error.
+func TestApisCallBadArgSpec(t *testing.T) {
+	dir := t.TempDir()
+	scenarioPath := writeCallScenario(t, dir, "http://example.invalid")
+
+	var code int
+	captureOutput(t, func() {
+		code = apisCmd([]string{"call", scenarioPath, "demo.get_thing", "-a", "no-equals-here"})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+}
+
+// 4. An api name the scenario does not declare is a configuration error.
+func TestApisCallUnknownAPI(t *testing.T) {
+	dir := t.TempDir()
+	scenarioPath := writeCallScenario(t, dir, "http://example.invalid")
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"call", scenarioPath, "nope.get_thing", "-a", "id:=7"})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+	if !strings.Contains(stderr, "nope") {
+		t.Errorf("stderr = %q, want the unknown api named", stderr)
+	}
+}
+
+// 5. A server error surfaces as a plain failure, not a configuration error:
+// the scenario and the call were both fine, the service just failed.
+func TestApisCallServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	scenarioPath := writeCallScenario(t, dir, server.URL)
+
+	var code int
+	captureOutput(t, func() {
+		code = apisCmd([]string{"call", scenarioPath, "demo.get_thing", "-a", "id:=7"})
+	})
+	if code != exitcode.Failure {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Failure)
 	}
 }

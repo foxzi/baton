@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
 	"github.com/foxzi/baton/internal/gateway"
+	"github.com/foxzi/baton/internal/httpx"
 	"github.com/foxzi/baton/internal/scenario"
 )
 
@@ -82,4 +84,17 @@ func findStepIn(step *scenario.Step, id string) *scenario.Step {
 		return findStepIn(step.Foreach.Step, id)
 	}
 	return nil
+}
+
+// CallOp calls one operation of one apis entry directly, as `baton apis
+// call` does: it lets a pack author try an operation against the real
+// service without writing a scenario step to hold it.
+func (e *Engine) CallOp(ctx context.Context, apiName, opName string, args map[string]any) (*httpx.OpResult, error) {
+	api, stepErr := e.api(apiName, "")
+	if stepErr != nil {
+		return nil, stepErr
+	}
+	callCtx, cancel := apiContext(ctx, api)
+	defer cancel()
+	return e.httpClient().Op(callCtx, api, opName, args)
 }
