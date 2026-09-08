@@ -1,0 +1,110 @@
+{
+  "interface": "forge/v1",
+  "ops": {
+    "get_change": {
+      "description": "Fetch one change (merge/pull request) with its files.",
+      "args": {
+        "project": { "type": "string", "required": true },
+        "id": { "type": "string", "required": true }
+      },
+      "result": {
+        "type": "object",
+        "required": ["id", "title", "files"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": ["string", "integer"] },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "author": { "type": "string" },
+          "base": { "type": "string" },
+          "head": { "type": "string" },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path"],
+              "additionalProperties": true,
+              "properties": {
+                "path": { "type": "string" },
+                "diff": { "type": "string" },
+                "deleted": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "list_files": {
+      "description": "List the files touched by a change.",
+      "args": {
+        "project": { "type": "string", "required": true },
+        "id": { "type": "string", "required": true }
+      },
+      "result": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["path"],
+          "additionalProperties": true,
+          "properties": {
+            "path": { "type": "string" },
+            "deleted": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "get_file": {
+      "description": "Fetch the content of a file at a given ref.",
+      "args": {
+        "project": { "type": "string", "required": true },
+        "path": { "type": "string", "required": true },
+        "ref": { "type": "string", "required": false }
+      },
+      "result": {
+        "type": "object",
+        "required": ["content"],
+        "additionalProperties": true,
+        "properties": {
+          "content": { "type": "string" },
+          "path": { "type": "string" },
+          "ref": { "type": "string" }
+        }
+      }
+    },
+    "post_comment": {
+      "description": "Post a single comment on a change.",
+      "args": {
+        "project": { "type": "string", "required": true },
+        "id": { "type": "string", "required": true },
+        "body": { "type": "string", "required": true }
+      },
+      "result": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": ["string", "integer"] },
+          "url": { "type": "string" }
+        }
+      }
+    },
+    "post_review": {
+      "description": "Post a review with a summary and per-line comments in one batch.",
+      "args": {
+        "project": { "type": "string", "required": true },
+        "id": { "type": "string", "required": true },
+        "summary": { "type": "string", "required": false },
+        "comments": { "type": "array", "required": true }
+      },
+      "result": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": ["string", "integer"] },
+          "url": { "type": "string" }
+        }
+      }
+    }
+  }
+}

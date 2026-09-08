@@ -1,0 +1,23 @@
+{
+  "interface": "notify/v1",
+  "ops": {
+    "send": {
+      "description": "Send a notification message to a target.",
+      "args": {
+        "target": { "type": "string", "required": true },
+        "text": { "type": "string", "required": true },
+        "format": { "type": "string", "required": false }
+      },
+      "result": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": ["string", "integer"] },
+          "target": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    }
+  }
+}

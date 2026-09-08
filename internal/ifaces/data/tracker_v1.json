@@ -1,0 +1,79 @@
+{
+  "interface": "tracker/v1",
+  "ops": {
+    "get_issue": {
+      "description": "Fetch one issue by key.",
+      "args": {
+        "key": { "type": "string", "required": true }
+      },
+      "result": {
+        "type": "object",
+        "required": ["key", "title"],
+        "additionalProperties": true,
+        "properties": {
+          "key": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" },
+          "body": { "type": "string" },
+          "author": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    },
+    "search": {
+      "description": "Search issues by query, returning a list of matches.",
+      "args": {
+        "query": { "type": "string", "required": true },
+        "limit": { "type": "integer", "required": false }
+      },
+      "result": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["key"],
+          "additionalProperties": true,
+          "properties": {
+            "key": { "type": "string" },
+            "title": { "type": "string" },
+            "status": { "type": "string" },
+            "url": { "type": "string" }
+          }
+        }
+      }
+    },
+    "create_issue": {
+      "description": "Create a new issue in a project.",
+      "args": {
+        "project": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "body": { "type": "string", "required": false },
+        "type": { "type": "string", "required": false }
+      },
+      "result": {
+        "type": "object",
+        "required": ["key"],
+        "additionalProperties": true,
+        "properties": {
+          "key": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    },
+    "comment": {
+      "description": "Post a comment on an issue.",
+      "args": {
+        "key": { "type": "string", "required": true },
+        "body": { "type": "string", "required": true }
+      },
+      "result": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": ["string", "integer"] },
+          "url": { "type": "string" }
+        }
+      }
+    }
+  }
+}
