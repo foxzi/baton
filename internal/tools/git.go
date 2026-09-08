@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -405,40 +404,16 @@ func checkRevision(name, value string) error {
 
 // checkPath holds a workspace-relative path to what git may be asked to
 // touch: no leading slash, no .. segment, no control character, and not on
-// the deny list of spec section 7.3.
+// the deny list of spec section 7.3. checkWorkspacePath in paths.go is the
+// shared implementation; fs.go calls it too.
 func (g *Git) checkPath(name, value string) (string, error) {
-	switch {
-	case value == "":
-		return "", fmt.Errorf("argument %q is empty", name)
-	case len(value) > 1024:
-		return "", fmt.Errorf("argument %q is longer than 1024 bytes", name)
-	case strings.HasPrefix(value, "/"):
-		return "", fmt.Errorf("argument %q must not be an absolute path", name)
-	case strings.ContainsAny(value, "\x00\n"):
-		return "", fmt.Errorf("argument %q must be a single line", name)
-	}
-	for _, segment := range strings.Split(value, "/") {
-		if segment == ".." {
-			return "", fmt.Errorf("argument %q must not contain ..", name)
-		}
-	}
-
-	cleaned := path.Clean(value)
-	if denied(g.deny, cleaned) {
-		return "", fmt.Errorf("path %q is denied", cleaned)
-	}
-	return cleaned, nil
+	return checkWorkspacePath(name, value, g.deny)
 }
-
-// maxCountPattern is what git.log's max_count argument must look like:
-// decimal digits, nothing else, so that a value such as "-1" or "1e9" is
-// refused before it reaches strconv.Atoi.
-var maxCountPattern = regexp.MustCompile(`\A[0-9]+\z`)
 
 // checkMaxCount holds git.log's max_count to a positive number no larger
 // than maxGitLogCount.
 func checkMaxCount(value string) (int, error) {
-	if !maxCountPattern.MatchString(value) {
+	if !digitsPattern.MatchString(value) {
 		return 0, errors.New(`argument "max_count" must be decimal digits`)
 	}
 	n, err := strconv.Atoi(value)
