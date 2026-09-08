@@ -49,7 +49,7 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 ### Flow control
 
 - `when:` — a condition on a step, using the expr-lang expression language, typed and free of side effects
-- `switch:` / `cases:` — multi-way branching with a completeness check against the schema's `enum`
+- `switch:` / `cases:` — multi-way branching, expanded at load into one `when:`-guarded step per case
 - Static reference checking: referencing the result of a step that may be skipped without handling `null` is a validation error
 - `needs:` — explicit dependencies, for when declaration order is not enough
 
@@ -127,4 +127,4 @@ Go, a single static binary. Dependencies: a YAML parser, expr-lang for expressio
 
 ## Status
 
-The technical specification for the first version is a separate document ([spec.md](spec.md)), and the implementation follows its milestones. Working: the core, the HTTP layer with packs, the model providers and `llm` steps, `foreach`, the cache, `resume`, notifications, `agent` steps with the MCP gateway and the tool profiles, and the interface registry with the `baton apis` commands. Outstanding: execution of `until` and `switch`, third-party MCP servers, the separate `baton-apis` packs repository and the release builds. The [roadmap in the README](../../README.md#status) tracks the state milestone by milestone.
+The technical specification for the first version is a separate document ([spec.md](spec.md)), and the implementation follows its milestones. Working: the core, the HTTP layer with packs, the model providers and `llm` steps, `foreach`, the cache, `resume`, notifications, `agent` steps with the MCP gateway and the tool profiles, the interface registry with the `baton apis` commands, and the `until` and `switch` steps. Outstanding: third-party MCP servers, the separate `baton-apis` packs repository and the release builds. The [roadmap in the README](../../README.md#status) tracks the state milestone by milestone.

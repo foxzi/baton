@@ -99,11 +99,12 @@ The agent in the `review` step can read the repository and call read-only forge 
 | `agent` | Spawn a CLI agent (Claude Code in v1) with skills, tools and MCP servers |
 | `foreach` | Process a list in parallel, with a parallelism cap and partial-success control |
 | `until` | A bounded loop with an exit condition, e.g. "keep fixing until the tests pass" |
+| `switch` | Branch on the value of an expression: one step per case, sugar over `when:` |
 | `assert` | Fail the run deliberately with a distinct exit code, to block a merge in CI |
 
 ## Feature overview
 
-**Flow control.** `when:` conditions in expr-lang (typed, side-effect free); `switch:`/`cases:` with exhaustiveness checking against a schema `enum`; `needs:` for explicit dependencies; static reference checking, so referencing the result of a possibly-skipped step without handling `null` is a validation error.
+**Flow control.** `when:` conditions in expr-lang (typed, side-effect free); `switch:`/`cases:`, expanded at load into one guarded step per case, with a warning when no `default` covers the remaining values; `needs:` for explicit dependencies; static reference checking, so referencing the result of a possibly-skipped step without handling `null` is a validation error.
 
 **Agent tools.** Filesystem reads always, writes only inside the workspace, path deny-lists. Git history commands and local commits, no network operations. Declared argv commands with argument validation, timeouts and call limits. Read-only pack operations from an allowlist, exposed as narrow tools authorised by the runner. `fetch` for public URLs on a domain allowlist. Third-party MCP servers from an allowlist, spawned by the runner, with tools taking arbitrary URLs flagged `unsafe`. `submit_result` as the schema-validated result channel. Cross-run `state` scoped to the scenario. Ready-made permission profiles: `review`, `fix`, `research`.
 
@@ -146,7 +147,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 **Packs are a layer of their own.** A pack loads from a local directory or from a git source pinned by version and checksum, into a local cache. An operation that declares `implements` is checked against the interface registry — argument names, required-ness and the shape of the transformed example — and a scenario's `apis` entry may declare `interface: forge/v1`, in which case the pack it selects is checked for the interface's operations when it loads. `baton apis import` bootstraps a pack from an OpenAPI 3 document, `apis validate` replays every recorded `examples/<op>.json` through the envelope and the transform, and `apis call` calls one operation of a scenario's `apis` entry against the real service. What is missing is the `baton-apis` repository itself: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack.
 
-**Not there yet: loops, branches and releases.** `until` and `switch` steps parse and validate but are not executed yet; `fallback`, `dedupe_key`, `fetch`, `state` and cancellation on SIGINT/SIGTERM do work. Third-party MCP servers cannot be attached to a step yet, and a reference to a step skipped by a branch is not caught statically. Release builds through goreleaser, the schema reference generated from the JSON Schema and the triage example scenario are still outstanding.
+**Not there yet: MCP servers and releases.** `until`, `switch`, `fallback`, `dedupe_key`, `fetch`, `state` and cancellation on SIGINT/SIGTERM do work. Third-party MCP servers cannot be attached to a step yet; a reference to a step skipped by a branch is not caught statically, and the exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values. Release builds through goreleaser, the schema reference generated from the JSON Schema and the triage example scenario are still outstanding.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
