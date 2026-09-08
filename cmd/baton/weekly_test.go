@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -28,6 +29,7 @@ func TestExample_WeeklyReport(t *testing.T) {
 	var (
 		forgeCalls    atomic.Int64
 		providerCalls atomic.Int64
+		mu            sync.Mutex // guards seenProjects/seenQuery: foreach fans out over the handler on many goroutines
 		seenProjects  = map[string]int{}
 		seenQuery     string
 	)
@@ -44,8 +46,10 @@ func TestExample_WeeklyReport(t *testing.T) {
 		}
 		forgeCalls.Add(1)
 		project := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v4/projects/"), "/merge_requests")
+		mu.Lock()
 		seenProjects[project]++
 		seenQuery = r.URL.RawQuery
+		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		// One merge request per project, enough for the digest to name.
@@ -140,12 +144,18 @@ pricing:
 		t.Errorf("forge calls = %d, want 2 (one per project)", got)
 	}
 	for _, project := range []string{"acme%2Fweb", "acme%2Fapi"} {
-		if seenProjects[project] != 1 {
-			t.Errorf("project %s was requested %d times, want 1", project, seenProjects[project])
+		mu.Lock()
+		count := seenProjects[project]
+		mu.Unlock()
+		if count != 1 {
+			t.Errorf("project %s was requested %d times, want 1", project, count)
 		}
 	}
-	if !strings.Contains(seenQuery, "state=merged") || !strings.Contains(seenQuery, "updated_after=2026-01-01") {
-		t.Errorf("query = %q, want state and updated_after", seenQuery)
+	mu.Lock()
+	query := seenQuery
+	mu.Unlock()
+	if !strings.Contains(query, "state=merged") || !strings.Contains(query, "updated_after=2026-01-01") {
+		t.Errorf("query = %q, want state and updated_after", query)
 	}
 	if got := providerCalls.Load(); got != 1 {
 		t.Errorf("provider calls = %d, want 1", got)
