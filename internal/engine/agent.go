@@ -217,6 +217,11 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 		Env:            call.env,
 		TranscriptPath: filepath.Join(dir, "transcript.jsonl"),
 	})
+	// An agent that reached for a tool the step does not have broke the
+	// policy, whatever it did afterwards (section 13).
+	if violation := session.PolicyViolation(); violation != "" {
+		return expr.Step{}, errorf(ClassPolicy, "step %s: %s", step.ID, violation)
+	}
 	if err != nil {
 		return expr.Step{}, e.agentFailure(ctx, step, err)
 	}

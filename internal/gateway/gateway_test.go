@@ -466,6 +466,9 @@ func TestUnknownToolIsNotAvailable(t *testing.T) {
 	if session.Calls() != 0 {
 		t.Errorf("calls = %d, want an unknown tool not to be counted", session.Calls())
 	}
+	if session.PolicyViolation() == "" {
+		t.Error("PolicyViolation() = \"\", want the refused call remembered")
+	}
 }
 
 func TestRequestWithoutTheTokenIsRejected(t *testing.T) {

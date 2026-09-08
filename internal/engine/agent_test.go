@@ -259,17 +259,21 @@ calls:
 	}
 
 	// The command the policy left out is not on the gateway at all, so
-	// calling it is a protocol error for the agent.
+	// calling it is refused as a policy violation (section 13).
 	deniedScript := "calls:\n  - tool: denied\n"
-	eng, _, dir = newTestEngine(t, yamlText, nil)
+	eng, store, dir = newTestEngine(t, yamlText, nil)
 	writeAgentFiles(t, dir, agentSchema, deniedScript)
 
 	result, err = eng.Run(context.Background())
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if result.Error == nil || result.Error.Class != ClassCommand {
-		t.Fatalf("error = %#v, want class %s", result.Error, ClassCommand)
+	if result.Error == nil || result.Error.Class != ClassPolicy {
+		t.Fatalf("error = %#v, want class %s", result.Error, ClassPolicy)
+	}
+	audit = readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	if !strings.Contains(audit, `"tool":"denied"`) || !strings.Contains(audit, `"status":"denied"`) {
+		t.Errorf("the refused call is not in the audit log:\n%s", audit)
 	}
 }
 
@@ -562,6 +566,58 @@ steps:
 	}
 	if !strings.Contains(result.Error.Message, "agent.tools") {
 		t.Errorf("message = %q, want it to point at agent.tools", result.Error.Message)
+	}
+}
+
+// 9a. An agent that asks the gateway for a writing operation of a pack it
+// otherwise has access to is refused at run time as well: the operation is
+// not one of the step's tools (section 13).
+func TestAgent_APIWriteOpIsRefusedAtRuntime(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("the server was called for %s %s, want the call refused by the gateway", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	yamlText := fmt.Sprintf(`
+version: 1
+name: agent-apis-runtime
+apis:
+  gitlab:
+    pack: gitlab
+    from: ./apis/
+    config:
+      base_url: %q
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      tools:
+        apis: [gitlab.get_project]
+      result: result.json
+`, server.URL)
+	script := `
+calls:
+  - tool: gitlab.create_note
+    args: { id: "7", body: "hi" }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`
+	eng, store, dir := newTestEngine(t, yamlText, nil)
+	writeAgentFiles(t, dir, agentSchema, script)
+	writePack(t, dir, "gitlab", gitlabLikePack)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Error == nil || result.Error.Class != ClassPolicy {
+		t.Fatalf("error = %+v, want class %q", result.Error, ClassPolicy)
+	}
+	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	if !strings.Contains(audit, `"status":"denied"`) {
+		t.Errorf("the refused call is not in the audit log:\n%s", audit)
 	}
 }
 

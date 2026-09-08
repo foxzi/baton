@@ -52,9 +52,15 @@ type Session struct {
 	maxCalls int
 	maxBytes int64
 
+	// tools is the set of names the step declared, so that a call to any
+	// other name can be refused as a policy violation rather than answered
+	// with a protocol error (section 13).
+	tools map[string]bool
+
 	mu        sync.Mutex
 	calls     int
 	perTool   map[string]int
+	violation string
 	submitted json.RawMessage
 	done      chan struct{}
 }
@@ -69,6 +75,15 @@ func (s *Session) Calls() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.calls
+}
+
+// PolicyViolation reports the first call the step refused because the tool
+// was not declared for it, or the empty string. An engine turns it into a
+// policy error whatever the agent process did afterwards (section 13).
+func (s *Session) PolicyViolation() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.violation
 }
 
 // Result returns the submitted result, if the agent submitted one.

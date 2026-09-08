@@ -196,6 +196,7 @@ func (g *Gateway) Open(opts StepOptions) (*Session, error) {
 		maxBytes: maxBytes,
 		audit:    newAuditor(opts.Audit, g.redactor),
 		perTool:  make(map[string]int),
+		tools:    make(map[string]bool),
 		done:     make(chan struct{}),
 		info: agent.GatewayInfo{
 			URL:   g.baseURL + stepPrefix + opts.StepID + "/mcp",
@@ -204,6 +205,7 @@ func (g *Gateway) Open(opts StepOptions) (*Session, error) {
 	}
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "baton", Version: version.Version}, nil)
+	server.AddReceivingMiddleware(session.refuseUndeclared)
 	for _, tool := range append(opts.Tools, session.submitTool()) {
 		if err := session.add(server, tool); err != nil {
 			return nil, err
@@ -242,7 +244,35 @@ func (s *Session) add(server *mcp.Server, tool Tool) error {
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return s.call(ctx, tool, req.Params.Arguments), nil
 	})
+	s.tools[tool.Name] = true
 	return nil
+}
+
+// refuseUndeclared answers a call to a tool the step does not have with a
+// refusal the agent can read, and remembers it. Without it the MCP server
+// would return a protocol error, which reaches the run as whatever the agent
+// process makes of it rather than as the policy failure it is (section 13).
+func (s *Session) refuseUndeclared(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		params, ok := req.GetParams().(*mcp.CallToolParamsRaw)
+		if !ok || s.tools[params.Name] {
+			return next(ctx, method, req)
+		}
+
+		message := fmt.Sprintf("%s is not a tool of this step", params.Name)
+		s.audit.write(auditLine{
+			Tool:   params.Name,
+			Args:   params.Arguments,
+			Status: statusDenied,
+			Error:  message,
+		})
+		s.mu.Lock()
+		if s.violation == "" {
+			s.violation = message
+		}
+		s.mu.Unlock()
+		return errorResult(message), nil
+	}
 }
 
 // emptyObjectSchema is what a tool without arguments advertises: MCP requires
