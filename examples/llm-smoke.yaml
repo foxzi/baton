@@ -1,0 +1,69 @@
+version: 1
+name: llm-smoke
+description: >
+  A live check of an llm provider that needs nothing but an API key: no
+  forge, no tokens for a repository, no notification service. The first
+  step asks for plain text, the second asks for JSON against a schema, the
+  third prints what came back. Run it after configuring a provider to see
+  that the key, the model name, the structured output mode and the cost
+  accounting all work.
+
+inputs:
+  text:
+    type: string
+    default: >
+      The new deploy pipeline finally stopped waking us up at night, though
+      the rollback step is still slower than it should be.
+defaults:
+  # The one line to change for another provider: anthropic/…, openai/… or
+  # openrouter/<vendor>/<model>. The provider itself lives in the global
+  # configuration (section 8.3).
+  model: openrouter/openai/gpt-4.1-nano
+  timeout: 60s
+
+budget:
+  usd: 0.05
+  time: 5m
+
+steps:
+  # The shortest possible answer, so a wrong key or a wrong
+  # model name fails in one cheap call.
+  - id: ping
+    llm:
+      system: Answer with one word and nothing else.
+      prompt: What is the capital of France?
+      schema: schemas/llm-ping.json
+      max_tokens: 64
+
+  # The same provider, now with a schema. Whether this goes out as
+  # response_format, as a tool call or as a prompt instruction is decided
+  # by the provider capabilities and recorded in output.json as
+  # structured_mode.
+  - id: extract
+    needs: [ping]
+    llm:
+      system: You label short pieces of text. Answer with JSON only.
+      prompt: |
+        Read the text and describe it:
+
+        {{ .inputs.text }}
+      schema: schemas/llm-smoke.json
+      max_tokens: 200
+      # A second model to try when the first one is unavailable or rate
+      # limited; a schema failure is retried on the first model instead.
+      fallback_models:
+        - openrouter/google/gemini-2.5-flash-lite
+
+  - id: report
+    needs: [extract]
+    notify: report
+    message: |
+      llm-smoke: {{ .steps.ping.result.answer }}
+      language: {{ .steps.extract.result.language }}
+      sentiment: {{ .steps.extract.result.sentiment }}
+      keywords: {{ join ", " .steps.extract.result.keywords }}
+
+on_failure:
+  - id: alert
+    notify: report
+    message: "llm-smoke failed at {{ .run.failed_step }}: {{ .run.error.message }}"

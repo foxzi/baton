@@ -180,7 +180,16 @@ baton run examples/weekly-report.yaml \
     -i 'projects=["acme/web", "acme/api"]' -i since=2026-01-01
 ```
 
-`examples/` holds the scenarios the tests run: `hello.yaml` (a run step and an assert), `mr-comment.yaml` (a merge request read by a model and answered with a comment), `review.yaml` (an agent step over a checkout), `weekly-report.yaml` (a foreach digest sent to a channel) and `triage.yaml` (an issue classified against a schema, labelled, commented on, and paged to the on-call channel only when it is critical).
+`examples/` holds the scenarios the tests run: `hello.yaml` (a run step and an assert), `mr-comment.yaml` (a merge request read by a model and answered with a comment), `review.yaml` (an agent step over a checkout), `weekly-report.yaml` (a foreach digest sent to a channel) and `triage.yaml` (an issue classified against a schema, labelled, commented on, and paged to the on-call channel only when it is critical), plus `llm-smoke.yaml` (two model calls and a notification, the live check of a provider).
+
+`llm-smoke.yaml` is the one example that needs no forge and no repository token, only a provider key, so it is the shortest way to see that a key, a model name, the structured output mode and the cost accounting all work against the real service:
+
+```sh
+export OPENROUTER_API_KEY=...
+baton run examples/llm-smoke.yaml
+```
+
+It costs a fraction of a cent on a small model; `runs/<id>/steps/extract/output.json` then carries the real `cost_usd`, the `model_used` and the `structured_mode` the provider accepted.
 
 The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` or `./baton.yaml`, or wherever `--config` points. Secrets are read from the environment or from files at the moment a step needs them; they never reach the run directory, the cache or a model prompt.
 

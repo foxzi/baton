@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["language", "sentiment", "keywords"],
+  "properties": {
+    "language": {
+      "type": "string",
+      "description": "The language the text is written in, as an ISO 639-1 code",
+      "pattern": "^[a-z]{2}$"
+    },
+    "sentiment": {
+      "type": "string",
+      "description": "How the author feels about the subject of the text",
+      "enum": ["positive", "neutral", "negative"]
+    },
+    "keywords": {
+      "type": "array",
+      "description": "The words the text is about, lowercased, most important first",
+      "items": { "type": "string", "maxLength": 40 },
+      "minItems": 1,
+      "maxItems": 5
+    }
+  }
+}
