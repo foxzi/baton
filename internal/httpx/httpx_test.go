@@ -1281,6 +1281,285 @@ ops:
 	}
 }
 
+func TestPaginationOffsetStyle(t *testing.T) {
+	pages := [][]string{{"a", "b"}, {"c"}}
+	var requests []struct{ offset, limit string }
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, struct{ offset, limit string }{
+			r.URL.Query().Get("offset"), r.URL.Query().Get("limit"),
+		})
+		idx := len(requests) - 1
+		if idx >= len(pages) {
+			w.Write([]byte(`[]`))
+			return
+		}
+		encoded, _ := json.Marshal(pages[idx])
+		w.Write(encoded)
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  list_things:
+    get: /things
+    readonly: true
+    paginate: true
+    pagination:
+      style: offset
+      param: offset
+      limit_param: limit
+      size: 2
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "list_things", nil)
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	list, ok := result.Result.([]any)
+	if !ok || len(list) != 3 {
+		t.Fatalf("Result = %v, want three items", result.Result)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("server saw %d requests, want 2", len(requests))
+	}
+	if requests[0].offset != "0" || requests[0].limit != "2" {
+		t.Errorf("first request offset=%q limit=%q, want offset=0 limit=2", requests[0].offset, requests[0].limit)
+	}
+	if requests[1].offset != "2" || requests[1].limit != "2" {
+		t.Errorf("second request offset=%q limit=%q, want offset=2 limit=2", requests[1].offset, requests[1].limit)
+	}
+}
+
+func TestPaginationOffsetStyleStopsOnTotal(t *testing.T) {
+	// The page is as long as the limit, so only the total tells the walk it
+	// has seen everything.
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`{"items":["a","b"],"total":2}`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  list_things:
+    get: /things
+    readonly: true
+    paginate: true
+    pagination:
+      style: offset
+      param: offset
+      limit_param: limit
+      size: 2
+      total: .total
+      items: .items
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "list_things", nil)
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("server saw %d calls, want 1: the total says there is nothing after this page", calls)
+	}
+	if result.TruncatedPages {
+		t.Errorf("TruncatedPages = true, want false")
+	}
+}
+
+func TestPaginationOffsetStyleInBody(t *testing.T) {
+	var bodies []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode the request body: %v", err)
+		}
+		bodies = append(bodies, body)
+		if len(bodies) == 1 {
+			w.Write([]byte(`["a","b"]`))
+			return
+		}
+		w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  search_things:
+    post: /search
+    readonly: true
+    paginate: true
+    params:
+      query: { in: body, required: true }
+    pagination:
+      style: offset
+      param: from
+      limit_param: size
+      size: 2
+      in: body
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	_, err := New(0).Op(context.Background(), api, "search_things", map[string]any{"query": "cat"})
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("server saw %d requests, want 2", len(bodies))
+	}
+	if bodies[0]["query"] != "cat" {
+		t.Errorf("first body = %v, want the argument kept beside the page parameters", bodies[0])
+	}
+	if bodies[0]["from"] != float64(0) || bodies[0]["size"] != float64(2) {
+		t.Errorf("first body = %v, want from=0 size=2", bodies[0])
+	}
+	if bodies[1]["from"] != float64(2) {
+		t.Errorf("second body = %v, want from=2", bodies[1])
+	}
+}
+
+func TestPaginationCursorStyle(t *testing.T) {
+	var cursors []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cursors = append(cursors, r.URL.Query().Get("cursor"))
+		if len(cursors) == 1 {
+			w.Write([]byte(`{"items":["a","b"],"next":"c2"}`))
+			return
+		}
+		w.Write([]byte(`{"items":["c"],"next":null}`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  list_things:
+    get: /things
+    readonly: true
+    paginate: true
+    pagination:
+      style: cursor
+      param: cursor
+      next: .next
+      items: .items
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "list_things", nil)
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	list, ok := result.Result.([]any)
+	if !ok || len(list) != 3 {
+		t.Fatalf("Result = %v, want three items", result.Result)
+	}
+	if len(cursors) != 2 {
+		t.Fatalf("server saw %d requests, want 2", len(cursors))
+	}
+	if cursors[0] != "" {
+		t.Errorf("first request cursor = %q, want none: no page has named one yet", cursors[0])
+	}
+	if cursors[1] != "c2" {
+		t.Errorf("second request cursor = %q, want c2", cursors[1])
+	}
+}
+
+func TestPaginationCursorStyleFullURL(t *testing.T) {
+	var paths []string
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	mux.HandleFunc("/things", func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.RequestURI())
+		w.Write([]byte(`{"items":["a"],"next":"` + server.URL + `/more?token=x"}`))
+	})
+	mux.HandleFunc("/more", func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.RequestURI())
+		w.Write([]byte(`{"items":["b"],"next":""}`))
+	})
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  list_things:
+    get: /things
+    readonly: true
+    paginate: true
+    pagination:
+      style: cursor
+      param: cursor
+      next: .next
+      items: .items
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "list_things", nil)
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	list, ok := result.Result.([]any)
+	if !ok || len(list) != 2 {
+		t.Fatalf("Result = %v, want two items", result.Result)
+	}
+	want := []string{"/things", "/more?token=x"}
+	if strings.Join(paths, " ") != strings.Join(want, " ") {
+		t.Errorf("requests = %v, want %v: a cursor that is a URL is followed as it is", paths, want)
+	}
+}
+
+func TestPaginationCursorStyleMaxPages(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`{"items":["a"],"next":"more"}`))
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+ops:
+  list_things:
+    get: /things
+    readonly: true
+    paginate: true
+    pagination:
+      style: cursor
+      param: cursor
+      next: .next
+      items: .items
+      max_pages: 3
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	result, err := New(0).Op(context.Background(), api, "list_things", nil)
+	if err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("server saw %d calls, want 3 (max_pages)", calls)
+	}
+	if !result.TruncatedPages {
+		t.Errorf("TruncatedPages = false, want true: the service still had pages")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------

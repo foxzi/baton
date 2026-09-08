@@ -231,14 +231,39 @@ func TestParseValidate(t *testing.T) {
 			wantErr: "pagination.size: required when size_param is set",
 		},
 		{
-			name:    "pagination offset unsupported",
+			name:    "pagination offset without param",
 			yaml:    packYAML("pagination:\n  style: offset\n"),
-			wantErr: "the offset style is not supported yet",
+			wantErr: "pagination.param: required for the offset style",
 		},
 		{
-			name:    "pagination cursor unsupported",
-			yaml:    packYAML("pagination:\n  style: cursor\n"),
-			wantErr: "the cursor style is not supported yet",
+			name:    "pagination limit_param without size",
+			yaml:    packYAML("pagination:\n  style: offset\n  param: offset\n  limit_param: limit\n"),
+			wantErr: "pagination.size: required when limit_param is set",
+		},
+		{
+			name:    "pagination offset with a total",
+			yaml:    packYAML("pagination:\n  style: offset\n  param: offset\n  limit_param: limit\n  size: 2\n  total: .total\n  items: .items\n"),
+			checkOK: true,
+		},
+		{
+			name:    "pagination cursor without next",
+			yaml:    packYAML("pagination:\n  style: cursor\n  param: cursor\n"),
+			wantErr: "pagination.next: required for the cursor style",
+		},
+		{
+			name:    "pagination cursor without param",
+			yaml:    packYAML("pagination:\n  style: cursor\n  next: .next\n"),
+			wantErr: "pagination.param: required for the cursor style",
+		},
+		{
+			name:    "pagination cursor",
+			yaml:    packYAML("pagination:\n  style: cursor\n  param: cursor\n  next: .next\n  items: .items\n"),
+			checkOK: true,
+		},
+		{
+			name:    "pagination next is not jq",
+			yaml:    packYAML("pagination:\n  style: cursor\n  param: cursor\n  next: \"[\"\n"),
+			wantErr: "pagination.next",
 		},
 		{
 			name:    "pagination unknown style",

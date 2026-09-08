@@ -3,6 +3,7 @@ package packs
 import (
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/itchyny/gojq"
 )
@@ -101,16 +102,42 @@ func (p *Pagination) PageItems(page any) (any, error) {
 	return items, nil
 }
 
-// NextCursor extracts the cursor of the following page.
+// NextCursor extracts the cursor of the following page. It returns nil when
+// the strategy names no cursor or the page carries none.
 func (p *Pagination) NextCursor(page any) (any, error) {
-	if p == nil || p.Next == "" {
+	if p == nil || p.next == nil {
 		return nil, nil
 	}
-	code, err := compileJQ("pagination.next", p.Next)
+	cursor, err := runJQ(p.next, page)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("pagination.next: %w", err)
 	}
-	return runJQ(code, page)
+	return cursor, nil
+}
+
+// PageTotal extracts the total item count a page reports, which the offset
+// style stops on. The second result is false when the pack names no total or
+// the page carries no number.
+func (p *Pagination) PageTotal(page any) (int, bool, error) {
+	if p == nil || p.total == nil {
+		return 0, false, nil
+	}
+	value, err := runJQ(p.total, page)
+	if err != nil {
+		return 0, false, fmt.Errorf("pagination.total: %w", err)
+	}
+	switch typed := value.(type) {
+	case nil:
+		return 0, false, nil
+	case int:
+		return typed, true, nil
+	case float64:
+		return int(typed), true, nil
+	case *big.Int:
+		return int(typed.Int64()), true, nil
+	default:
+		return 0, false, fmt.Errorf("pagination.total: %v is not a number", value)
+	}
 }
 
 // Transformed applies the operation transform, or pick, to a result. Results

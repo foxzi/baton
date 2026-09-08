@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/foxzi/baton/internal/packs"
@@ -119,6 +118,20 @@ func buildOpRequest(op *packs.Op, path string, bound *packs.BoundArgs) (*Request
 	return request, nil
 }
 
+// pageWalk is where the walk of a paginated operation has got to: which page
+// comes next and how the strategy asks for it.
+type pageWalk struct {
+	// number is the page number, from 1, for the page style.
+	number int
+	// offset is the item offset, for the offset style.
+	offset int
+	// cursor is the token of the next page, for the cursor style, empty
+	// before the first page has been read.
+	cursor string
+	// url is the whole URL of the next page, when the service gives one.
+	url string
+}
+
 // paginate walks the pages of an operation and concatenates their items.
 func (c *Client) paginate(ctx context.Context, api *API, op *packs.Op, request *Request, what string, result *OpResult) error {
 	strategy := api.Pack.PageStrategy(op)
@@ -127,10 +140,13 @@ func (c *Client) paginate(ctx context.Context, api *API, op *packs.Op, request *
 	}
 	maxPages := strategy.Pages()
 	collected := []any{}
+	walk := pageWalk{number: 1}
 
 	for page := 1; page <= maxPages; page++ {
 		attempt := *request
-		if err := applyPageParams(&attempt, strategy, page); err != nil {
+		if walk.url != "" {
+			attempt.URL, attempt.Path, attempt.Query = walk.url, "", nil
+		} else if err := applyPageParams(&attempt, strategy, walk); err != nil {
 			return errorf(ClassConfig, "%s: %s", what, err.Error())
 		}
 		response, err := c.Do(ctx, api, &attempt)
@@ -156,14 +172,13 @@ func (c *Client) paginate(ctx context.Context, api *API, op *packs.Op, request *
 		collected = append(collected, list...)
 		result.Status, result.Headers, result.Body, result.Pages = response.Status, response.Headers, unwrapped, page
 
-		next, done := nextPage(strategy, response, list)
+		done, err := advance(strategy, response, unwrapped, list, &walk)
+		if err != nil {
+			return errorf(ClassCommand, "%s: %s", what, err.Error())
+		}
 		if done {
 			result.Result = collected
 			return nil
-		}
-		if next != "" {
-			attempt.URL, attempt.Path, attempt.Query = next, "", nil
-			*request = attempt
 		}
 	}
 	result.Result, result.TruncatedPages = collected, true
@@ -172,42 +187,149 @@ func (c *Client) paginate(ctx context.Context, api *API, op *packs.Op, request *
 
 // applyPageParams sets the page parameters of the request for one page. The
 // link_header style needs none: the next URL carries them.
-func applyPageParams(request *Request, strategy *packs.Pagination, page int) error {
-	if strategy.Style != packs.PagePage {
-		return nil
+func applyPageParams(request *Request, strategy *packs.Pagination, walk pageWalk) error {
+	switch strategy.Style {
+	case packs.PagePage:
+		if err := setPageParam(request, strategy.In, strategy.Param, walk.number); err != nil {
+			return err
+		}
+		if strategy.SizeParam != "" && strategy.Size > 0 {
+			return setPageParam(request, strategy.In, strategy.SizeParam, strategy.Size)
+		}
+	case packs.PageOffset:
+		if err := setPageParam(request, strategy.In, strategy.Param, walk.offset); err != nil {
+			return err
+		}
+		if strategy.LimitParam != "" && strategy.Size > 0 {
+			return setPageParam(request, strategy.In, strategy.LimitParam, strategy.Size)
+		}
+	case packs.PageCursor:
+		// The first page is the operation's own request: there is no cursor
+		// to send until a page has named one.
+		if walk.cursor != "" {
+			return setPageParam(request, strategy.In, strategy.Param, walk.cursor)
+		}
 	}
-	if strategy.In == packs.InBody {
-		return fmt.Errorf("pagination.in: body is not supported for the page style yet")
-	}
-	query := map[string]string{}
-	for name, value := range request.Query {
-		query[name] = value
-	}
-	query[strategy.Param] = strconv.Itoa(page)
-	if strategy.SizeParam != "" && strategy.Size > 0 {
-		query[strategy.SizeParam] = strconv.Itoa(strategy.Size)
-	}
-	request.Query = query
 	return nil
 }
 
-// nextPage decides how the walk continues: the URL of the following page, or
-// done when the last page has been seen.
-func nextPage(strategy *packs.Pagination, response *Response, page []any) (next string, done bool) {
+// setPageParam puts one pagination parameter where the pack asks for it: in
+// the query string, or in the request body beside the arguments.
+func setPageParam(request *Request, in packs.ParamIn, name string, value any) error {
+	if in != packs.InBody {
+		query := make(map[string]string, len(request.Query)+1)
+		for key, existing := range request.Query {
+			query[key] = existing
+		}
+		query[name] = paramText(value)
+		request.Query = query
+		return nil
+	}
+
+	headers := make(map[string]string, len(request.Headers)+1)
+	for key, existing := range request.Headers {
+		headers[key] = existing
+	}
+	if strings.HasPrefix(headers["Content-Type"], "application/x-www-form-urlencoded") {
+		form, err := url.ParseQuery(string(request.Body))
+		if err != nil {
+			return fmt.Errorf("pagination.in: the form body cannot be read: %s", err)
+		}
+		form.Set(name, paramText(value))
+		request.Body, request.Headers = []byte(form.Encode()), headers
+		return nil
+	}
+
+	body := map[string]any{}
+	if len(request.Body) > 0 {
+		if err := json.Unmarshal(request.Body, &body); err != nil {
+			return fmt.Errorf("pagination.in: body needs a JSON object body: %s", err)
+		}
+	}
+	body[name] = value
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("pagination.in: the page parameters are not JSON: %s", err)
+	}
+	headers["Content-Type"] = "application/json"
+	request.Body, request.Headers = encoded, headers
+	return nil
+}
+
+// paramText renders a pagination parameter for a query string or a form.
+func paramText(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return fmt.Sprint(value)
+}
+
+// advance decides whether the walk is over and, when it is not, where the
+// following page comes from.
+func advance(strategy *packs.Pagination, response *Response, body any, page []any, walk *pageWalk) (bool, error) {
+	walk.url = ""
 	switch strategy.Style {
 	case packs.PageLinkHeader:
-		next = linkNext(response.Headers.Get("Link"))
-		return next, next == ""
+		walk.url = linkNext(response.Headers.Get("Link"))
+		return walk.url == "", nil
 	case packs.PagePage:
-		switch {
-		case len(page) == 0:
-			return "", true
-		case strategy.Size > 0 && len(page) < strategy.Size:
-			return "", true
+		if shortPage(strategy, page) {
+			return true, nil
 		}
-		return "", false
+		walk.number++
+		return false, nil
+	case packs.PageOffset:
+		if shortPage(strategy, page) {
+			return true, nil
+		}
+		step := strategy.Size
+		if step <= 0 {
+			step = len(page)
+		}
+		walk.offset += step
+		total, known, err := strategy.PageTotal(body)
+		if err != nil {
+			return false, err
+		}
+		return known && walk.offset >= total, nil
+	case packs.PageCursor:
+		cursor, err := strategy.NextCursor(body)
+		if err != nil {
+			return false, err
+		}
+		text := cursorText(cursor)
+		switch {
+		case text == "":
+			return true, nil
+		case strings.HasPrefix(text, "http://"), strings.HasPrefix(text, "https://"):
+			walk.url = text
+		default:
+			walk.cursor = text
+		}
+		return false, nil
 	default:
-		return "", true
+		return true, nil
+	}
+}
+
+// shortPage reports a page that ends the walk: an empty one, or one shorter
+// than the size that was asked for.
+func shortPage(strategy *packs.Pagination, page []any) bool {
+	return len(page) == 0 || (strategy.Size > 0 && len(page) < strategy.Size)
+}
+
+// cursorText is the cursor as the service sent it: a string, or a number a
+// service uses as an opaque token. Anything else means no next page.
+func cursorText(cursor any) string {
+	switch typed := cursor.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case bool:
+		return ""
+	default:
+		return fmt.Sprint(typed)
 	}
 }
 

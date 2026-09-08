@@ -123,6 +123,8 @@ type Pagination struct {
 	Items string `yaml:"items"`
 
 	items *gojq.Code
+	next  *gojq.Code
+	total *gojq.Code
 }
 
 // Pages returns the page cap in effect.

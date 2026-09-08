@@ -276,8 +276,23 @@ func (p *Pagination) check(prefix string) error {
 		if p.SizeParam != "" && p.Size <= 0 {
 			problems = append(problems, fmt.Errorf("%s.size: required when size_param is set", prefix))
 		}
-	case PageOffset, PageCursor:
-		problems = append(problems, fmt.Errorf("%s.style: the %s style is not supported yet", prefix, p.Style))
+	case PageOffset:
+		if p.Param == "" {
+			problems = append(problems, fmt.Errorf("%s.param: required for the offset style", prefix))
+		}
+		if p.LimitParam != "" && p.Size <= 0 {
+			problems = append(problems, fmt.Errorf("%s.size: required when limit_param is set", prefix))
+		}
+	case PageCursor:
+		if p.Next == "" {
+			problems = append(problems, fmt.Errorf("%s.next: required for the cursor style", prefix))
+		}
+		if p.Param == "" {
+			// A cursor that is a whole URL needs no parameter, but the pack
+			// cannot say which one the service returns, so the parameter is
+			// asked for and left unused when the cursor is a URL.
+			problems = append(problems, fmt.Errorf("%s.param: required for the cursor style", prefix))
+		}
 	case "":
 		problems = append(problems, fmt.Errorf("%s.style: required", prefix))
 	default:
@@ -297,6 +312,24 @@ func (p *Pagination) check(prefix string) error {
 			problems = append(problems, err)
 		}
 		p.items = code
+	}
+	for _, field := range []struct {
+		name   string
+		source string
+		into   **gojq.Code
+	}{
+		{prefix + ".next", p.Next, &p.next},
+		{prefix + ".total", p.Total, &p.total},
+	} {
+		if field.source == "" {
+			continue
+		}
+		code, err := compileJQ(field.name, field.source)
+		if err != nil {
+			problems = append(problems, err)
+			continue
+		}
+		*field.into = code
 	}
 	return errors.Join(problems...)
 }
