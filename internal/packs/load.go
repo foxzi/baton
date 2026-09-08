@@ -10,19 +10,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Load reads the pack named name from source. Source is a local directory,
-// absolute or relative to baseDir, which is normally the directory of the
-// scenario. Git sources arrive in a later milestone and are rejected here.
-func Load(source, name, baseDir string) (*Pack, error) {
-	if err := checkLocalSource(source); err != nil {
+// Load reads the pack described by src. The source is a local directory or a
+// git repository with a version pin; a git source is checked out into the
+// pack cache and its checksum is verified on every load (docs/ru/spec.md,
+// section 7.4.1).
+func Load(src Source) (*Pack, error) {
+	dir, pinned, err := src.resolve()
+	if err != nil {
 		return nil, err
 	}
-	dir := source
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(baseDir, dir)
-	}
-	path, err := findPackFile(dir, name)
+	path, nested, err := findPackFile(dir, src.Pack)
 	if err != nil {
+		return nil, err
+	}
+	// A pack laid out as a directory is checksummed whole: its queries and
+	// examples are part of what the scenario pins.
+	location := path
+	if nested {
+		location = filepath.Dir(path)
+	}
+	if err := checkDigest(location, src.SHA256, pinned); err != nil {
 		return nil, err
 	}
 	data, err := os.ReadFile(path)
@@ -33,47 +40,36 @@ func Load(source, name, baseDir string) (*Pack, error) {
 	if err != nil {
 		return nil, err
 	}
-	if pack.Pack != name {
-		return nil, fmt.Errorf("%s: declares pack %q but was loaded as %q", path, pack.Pack, name)
+	if pack.Pack != src.Pack {
+		return nil, fmt.Errorf("%s: declares pack %q but was loaded as %q", path, pack.Pack, src.Pack)
 	}
 	return pack, nil
 }
 
-// checkLocalSource rejects the source forms v1 cannot load.
-func checkLocalSource(source string) error {
-	switch {
-	case source == "":
-		return fmt.Errorf("from is required and must be a local directory")
-	case strings.Contains(source, "@"):
-		return fmt.Errorf("from %q: git pack sources are not supported yet, use a local directory", source)
-	case strings.Contains(source, "://"), strings.HasPrefix(source, "github.com/"),
-		strings.HasPrefix(source, "gitlab.com/"):
-		return fmt.Errorf("from %q: remote pack sources are not supported yet, use a local directory", source)
-	}
-	return nil
-}
-
 // findPackFile looks for the pack file of name in dir, accepting both
 // <name>.yaml next to other packs and <name>/pack.yaml for packs that ship
-// GraphQL queries or examples alongside.
-func findPackFile(dir, name string) (string, error) {
+// GraphQL queries or examples alongside. Nested reports the second layout.
+func findPackFile(dir, name string) (path string, nested bool, err error) {
 	if name == "" {
-		return "", fmt.Errorf("pack is required")
+		return "", false, fmt.Errorf("pack is required")
 	}
 	if name != filepath.Base(name) || name == "." || name == ".." {
-		return "", fmt.Errorf("pack %q must be a plain name", name)
+		return "", false, fmt.Errorf("pack %q must be a plain name", name)
 	}
-	candidates := []string{
-		filepath.Join(dir, name+".yaml"),
-		filepath.Join(dir, name+".yml"),
-		filepath.Join(dir, name, "pack.yaml"),
+	candidates := []struct {
+		path   string
+		nested bool
+	}{
+		{filepath.Join(dir, name+".yaml"), false},
+		{filepath.Join(dir, name+".yml"), false},
+		{filepath.Join(dir, name, "pack.yaml"), true},
 	}
 	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate, nil
+		if info, err := os.Stat(candidate.path); err == nil && !info.IsDir() {
+			return candidate.path, candidate.nested, nil
 		}
 	}
-	return "", fmt.Errorf("pack %q not found in %s", name, dir)
+	return "", false, fmt.Errorf("pack %q not found in %s", name, dir)
 }
 
 // Parse parses, validates and compiles a pack. Path is recorded on the pack

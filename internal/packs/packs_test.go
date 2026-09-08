@@ -645,7 +645,7 @@ func TestJoinedErrorsReportAllProblems(t *testing.T) {
 // TestLoadFindsPack checks that Load finds both <name>.yaml and
 // <name>/pack.yaml layouts.
 func TestLoadFindsPack(t *testing.T) {
-	pack, err := Load("testdata", "demo", "")
+	pack, err := Load(Source{From: "testdata", Pack: "demo"})
 	if err != nil {
 		t.Fatalf("Load(demo) error = %v", err)
 	}
@@ -653,7 +653,7 @@ func TestLoadFindsPack(t *testing.T) {
 		t.Errorf("Load(demo).Pack = %q, want demo", pack.Pack)
 	}
 
-	nested, err := Load("testdata", "nested", "")
+	nested, err := Load(Source{From: "testdata", Pack: "nested"})
 	if err != nil {
 		t.Fatalf("Load(nested) error = %v", err)
 	}
@@ -665,7 +665,7 @@ func TestLoadFindsPack(t *testing.T) {
 // TestLoadNameMismatch checks that a pack file whose pack: field disagrees
 // with the requested name is rejected.
 func TestLoadNameMismatch(t *testing.T) {
-	_, err := Load("testdata", "mismatch", "")
+	_, err := Load(Source{From: "testdata", Pack: "mismatch"})
 	if err == nil {
 		t.Fatalf("Load(mismatch) error = nil, want error")
 	}
@@ -676,7 +676,7 @@ func TestLoadNameMismatch(t *testing.T) {
 
 // TestLoadMissingName checks that an empty pack name is rejected.
 func TestLoadMissingName(t *testing.T) {
-	_, err := Load("testdata", "", "")
+	_, err := Load(Source{From: "testdata"})
 	if err == nil {
 		t.Fatalf("Load(\"\") error = nil, want error")
 	}
@@ -688,7 +688,7 @@ func TestLoadMissingName(t *testing.T) {
 // TestLoadNotFound checks that a pack absent from the directory is
 // rejected, and that the error mentions the directory searched.
 func TestLoadNotFound(t *testing.T) {
-	_, err := Load("testdata", "doesnotexist", "")
+	_, err := Load(Source{From: "testdata", Pack: "doesnotexist"})
 	if err == nil {
 		t.Fatalf("Load(doesnotexist) error = nil, want error")
 	}
@@ -697,20 +697,23 @@ func TestLoadNotFound(t *testing.T) {
 	}
 }
 
-// TestLoadRejectsRemoteSources checks that git and remote pack sources are
-// rejected in v1.
-func TestLoadRejectsRemoteSources(t *testing.T) {
+// TestLoadRejectsSourcesWithoutAPin checks that a source which cannot be a
+// local directory is rejected until it carries a version pin.
+func TestLoadRejectsSourcesWithoutAPin(t *testing.T) {
 	cases := []struct {
 		source  string
 		wantErr string
 	}{
-		{"github.com/org/baton-apis@v1.3.0", "git pack sources are not supported yet"},
-		{"./apis@v1", "git pack sources are not supported yet"},
-		{"https://example.com/packs", "remote pack sources are not supported yet"},
+		{"github.com/org/baton-apis", "a version pin is required"},
+		{"https://example.com/packs", "a version pin is required"},
+		{"github.com/org/baton-apis@", `"" is not a version pin`},
+		{"github.com/org/baton-apis@-flag", `"-flag" is not a version pin`},
+		{"github.com/org/baton-apis@../etc", `"../etc" is not a version pin`},
+		{"", "from is required"},
 	}
 	for _, c := range cases {
 		t.Run(c.source, func(t *testing.T) {
-			_, err := Load(c.source, "irrelevant", "")
+			_, err := Load(Source{From: c.source, Pack: "irrelevant"})
 			if err == nil {
 				t.Fatalf("Load(%q) error = nil, want error", c.source)
 			}
@@ -726,7 +729,7 @@ func TestLoadRejectsRemoteSources(t *testing.T) {
 func TestLoadRejectsBadNames(t *testing.T) {
 	for _, name := range []string{"../x", "a/b"} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Load("testdata", name, "")
+			_, err := Load(Source{From: "testdata", Pack: name})
 			if err == nil {
 				t.Fatalf("Load(%q) error = nil, want error", name)
 			}

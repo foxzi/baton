@@ -264,7 +264,12 @@ func (e *Engine) api(name, authOverride string) (*httpx.API, *Error) {
 	if stepErr != nil {
 		return nil, stepErr
 	}
-	pack, err := packs.Load(entry.From, packName, e.dir)
+	pack, err := packs.Load(packs.Source{
+		From:    entry.From,
+		Pack:    packName,
+		SHA256:  entry.SHA256,
+		BaseDir: e.dir,
+	})
 	if err != nil {
 		return nil, wrapf(ClassConfig, err, "apis.%s", name)
 	}

@@ -252,10 +252,12 @@ type API struct {
 	// pick gitlab or github from an input.
 	Pack string `yaml:"pack"`
 
-	// From is the pack source: a local directory in v1.
+	// From is the pack source: a local directory, or a git repository with
+	// a version pin such as github.com/org/baton-apis@v1.3.0.
 	From string `yaml:"from"`
 
-	// SHA256 pins remote sources and is unused for local directories.
+	// SHA256 pins the content of the pack. It is required for git sources
+	// and optional, but still checked, for local directories.
 	SHA256 string `yaml:"sha256"`
 
 	Config  map[string]string `yaml:"config"`

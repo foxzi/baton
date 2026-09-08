@@ -5,11 +5,11 @@
 // binary knows the protocol, the pack knows the service. Packs never contain
 // secret values, only the names of the authorisation parameters.
 //
-// v1 covers local directory sources, the header, bearer, basic, query and
-// path authorisation schemes and the link_header and page pagination styles.
-// Git sources, exchange authorisation, GraphQL operations, the offset and
-// cursor pagination styles and interface conformance checks are rejected with
-// a clear error until the milestone that implements them.
+// v1 covers local directory and pinned git sources, the header, bearer,
+// basic, query and path authorisation schemes and all four pagination
+// styles. Exchange authorisation, GraphQL operations and interface
+// conformance checks are rejected with a clear error until the milestone
+// that implements them.
 package packs
 
 import (
