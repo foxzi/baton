@@ -139,7 +139,11 @@ type Engine struct {
 	hits map[string]bool
 	// vars are extra template variables of the enclosing construct: the
 	// foreach item under its as name. They are per body, never shared.
-	vars      map[string]any
+	vars map[string]any
+
+	// iter is the result of the previous until iteration, empty outside an
+	// until body (section 3.8).
+	iter      map[string]any
 	state     *runstore.RunState
 	startedAt time.Time
 	// failure is the error that stopped the run, if any.
@@ -431,6 +435,8 @@ func (e *Engine) execute(ctx context.Context, step *scenario.Step, path string) 
 		return e.execAssert(step)
 	case scenario.KindForeach:
 		return e.execForeach(stepCtx, step, path)
+	case scenario.KindUntil:
+		return e.execUntil(stepCtx, step, path)
 	case scenario.KindNotify:
 		return e.execNotify(stepCtx, step, path)
 	case scenario.KindNone:
@@ -566,6 +572,7 @@ func (e *Engine) exprContext() expr.Context {
 		Inputs: e.opts.Inputs,
 		Steps:  e.steps,
 		Run:    e.runContext(),
+		Iter:   e.iter,
 	}
 }
 
@@ -597,12 +604,13 @@ func (e *Engine) templateData() map[string]any {
 	steps := make(map[string]any, len(e.steps))
 	for id, step := range e.steps {
 		steps[id] = map[string]any{
-			"status":    step.Status,
-			"result":    step.Result,
-			"stdout":    step.Stdout,
-			"stderr":    step.Stderr,
-			"exit_code": step.ExitCode,
-			"items":     step.Items,
+			"status":     step.Status,
+			"result":     step.Result,
+			"stdout":     step.Stdout,
+			"stderr":     step.Stderr,
+			"exit_code":  step.ExitCode,
+			"items":      step.Items,
+			"iterations": step.Iterations,
 		}
 	}
 	run := e.runContext()

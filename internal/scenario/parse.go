@@ -228,6 +228,26 @@ func (f *ForeachStep) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+// untilKeys are the field names accepted on an until body.
+var untilKeys = map[string]bool{
+	"condition": true, "max_iterations": true, "step": true,
+}
+
+// UnmarshalYAML decodes an until body. The strict-field check of the decoder
+// does not reach inside a step, so it is done here.
+func (u *UntilStep) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkKeys(node, untilKeys, "until"); err != nil {
+		return err
+	}
+	type plain UntilStep
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*u = UntilStep(decoded)
+	return nil
+}
+
 // UnmarshalYAML decodes an agent body. The strict-field check of the decoder
 // does not reach inside a step, so it is done here; unlike the other bodies
 // the agent body nests blocks several levels deep, so the check walks the

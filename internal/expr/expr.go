@@ -44,6 +44,9 @@ type Step struct {
 	ExitCode int    `expr:"exit_code"`
 	Items    []any  `expr:"items"`
 
+	// Iterations is the number of iterations an until step ran (section 3.8).
+	Iterations int `expr:"iterations"`
+
 	// The fields below belong to http steps (section 3.4). The status of the
 	// response is http_status, because status already names the status of the
 	// step; see docs/ru/spec-review.md, finding 14.

@@ -83,6 +83,9 @@ func findStepIn(step *scenario.Step, id string) *scenario.Step {
 	if step.Foreach != nil && step.Foreach.Step != nil {
 		return findStepIn(step.Foreach.Step, id)
 	}
+	if step.Until != nil && step.Until.Step != nil {
+		return findStepIn(step.Until.Step, id)
+	}
 	return nil
 }
 

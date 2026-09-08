@@ -211,10 +211,7 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 	case KindForeach:
 		validateForeach(scn, step, path+".foreach", res)
 	case KindUntil:
-		// Specification section 4, check 9.
-		if !hasKey(&step.Until, "max_iterations") {
-			res.errorf(path+".until", step.Line, "max_iterations is required")
-		}
+		validateUntil(scn, step, path+".until", res)
 	case KindSwitch:
 		validateSwitch(step, path, res)
 	case KindNotify:
@@ -749,6 +746,34 @@ func validateForeach(scn *Scenario, step *Step, path string, res *Result) {
 	validateExpr(path+".step.when", each.Step.When, each.Step.Line, res)
 }
 
+// validateUntil checks an until body (spec section 3.8).
+func validateUntil(scn *Scenario, step *Step, path string, res *Result) {
+	loop := step.Until
+
+	if strings.TrimSpace(loop.Condition) == "" {
+		res.errorf(path+".condition", step.Line, "must not be empty")
+	}
+	validateExpr(path+".condition", loop.Condition, step.Line, res)
+
+	// Specification section 4, check 9.
+	switch {
+	case loop.MaxIterations == 0:
+		res.errorf(path+".max_iterations", step.Line, "max_iterations is required")
+	case loop.MaxIterations < 1:
+		res.errorf(path+".max_iterations", step.Line, "must be at least 1")
+	}
+
+	if loop.Step == nil {
+		res.errorf(path+".step", step.Line, "must declare a body")
+		return
+	}
+	if loop.Step.ID != "" {
+		res.errorf(path+".step.id", loop.Step.Line, "the body of an until has no id of its own")
+	}
+	validateStepBody(scn, loop.Step, path+".step", res)
+	validateExpr(path+".step.when", loop.Step.When, loop.Step.Line, res)
+}
+
 func validateStepControl(step *Step, path string, declared map[string]bool, res *Result) {
 	for i, need := range step.Needs {
 		needPath := fmt.Sprintf("%s.needs[%d]", path, i)
@@ -800,19 +825,6 @@ func validateRetry(step *Step, path string, res *Result) {
 	if retry.Backoff < 0 {
 		res.errorf(path+".backoff", step.Line, "must not be negative")
 	}
-}
-
-// hasKey reports whether a mapping node contains the given key.
-func hasKey(node *yaml.Node, key string) bool {
-	if node == nil || node.Kind != yaml.MappingNode {
-		return false
-	}
-	for i := 0; i < len(node.Content); i += 2 {
-		if node.Content[i].Value == key {
-			return true
-		}
-	}
-	return false
 }
 
 func joinKinds(kinds []Kind) string {

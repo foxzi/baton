@@ -110,11 +110,11 @@ type Step struct {
 	LLM     *LLMStep     `yaml:"llm"`
 	Agent   *AgentStep   `yaml:"agent"`
 	Foreach *ForeachStep `yaml:"foreach"`
+	Until   *UntilStep   `yaml:"until"`
 
 	// Bodies of step kinds the runner does not execute yet. These are kept
 	// as raw nodes; yaml.v3 only decodes into a yaml.Node value, never into
 	// a *yaml.Node, so presence is reported by IsZero rather than by nil.
-	Until   yaml.Node `yaml:"until"`
 	Switch  string    `yaml:"switch"`
 	Cases   yaml.Node `yaml:"cases"`
 	Default yaml.Node `yaml:"default"`
@@ -165,7 +165,7 @@ func (s *Step) Kinds() []Kind {
 	if s.Foreach != nil {
 		kinds = append(kinds, KindForeach)
 	}
-	if !s.Until.IsZero() {
+	if s.Until != nil {
 		kinds = append(kinds, KindUntil)
 	}
 	if s.Switch != "" {
@@ -379,6 +379,20 @@ type ForeachStep struct {
 
 	// Step is the per-item body. It has no id of its own; it is not a step
 	// in the scenario's own DAG.
+	Step *Step `yaml:"step"`
+}
+
+// UntilStep repeats a body until a condition holds (spec section 3.8).
+type UntilStep struct {
+	// Condition is evaluated after every iteration, with the result of that
+	// iteration in iter. The loop stops the first time it holds.
+	Condition string `yaml:"condition"`
+
+	// MaxIterations caps the number of iterations and is required.
+	MaxIterations int `yaml:"max_iterations"`
+
+	// Step is the body of one iteration. Like a foreach body it has no id of
+	// its own.
 	Step *Step `yaml:"step"`
 }
 

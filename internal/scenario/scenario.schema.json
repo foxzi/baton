@@ -340,7 +340,7 @@
           "$ref": "#/$defs/foreach"
         },
         "until": {
-          "type": "object"
+          "$ref": "#/$defs/until"
         },
         "switch": {
           "description": "Subject expression of a switch; sugar over when, expanded at load (spec section 3.10).",
@@ -704,6 +704,30 @@
         },
         "step": {
           "description": "The per-item body; it has no id of its own.",
+          "$ref": "#/$defs/step-body"
+        }
+      }
+    },
+    "until": {
+      "description": "Repeats its body until the condition holds (spec section 3.8).",
+      "type": "object",
+      "required": [
+        "condition",
+        "max_iterations",
+        "step"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "Checked after every iteration, with that iteration in iter.",
+          "type": "string"
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "step": {
+          "description": "The per-iteration body; it has no id of its own.",
           "$ref": "#/$defs/step-body"
         }
       }

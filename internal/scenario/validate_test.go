@@ -436,8 +436,6 @@ steps:
 			wantErr: "must declare from: env or from: file",
 		},
 		{
-			// Raw bodies are kept as yaml.Node values so that checks such
-			// as this one can look inside them.
 			name: "until with max_iterations",
 			yaml: `
 version: 1
@@ -445,7 +443,7 @@ name: valid
 steps:
   - id: fix
     until:
-      condition: "iter.test.exit_code == 0"
+      condition: "iter.exit_code == 0"
       max_iterations: 3
       step: { run: { argv: ["echo", "retry"] } }
 `,
@@ -461,8 +459,50 @@ steps:
   - id: a
     until:
       condition: "true"
+      step: { run: { argv: ["echo", "hi"] } }
 `,
 			wantErr: "max_iterations is required",
+		},
+		{
+			name: "until without a body",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    until:
+      condition: "true"
+      max_iterations: 2
+`,
+			wantErr: "until.step: must declare a body",
+		},
+		{
+			name: "until body with an id",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    until:
+      condition: "true"
+      max_iterations: 2
+      step: { id: inner, run: { argv: ["echo", "hi"] } }
+`,
+			wantErr: "the body of an until has no id of its own",
+		},
+		{
+			name: "until with an empty condition",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    until:
+      condition: ""
+      max_iterations: 2
+      step: { run: { argv: ["echo", "hi"] } }
+`,
+			wantErr: "until.condition: must not be empty",
 		},
 		{
 			name: "assert with empty condition",
