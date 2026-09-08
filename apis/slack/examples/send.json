@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "channel": "C0123456789",
+  "ts": "1717000000.123456",
+  "message": {
+    "type": "message",
+    "subtype": "bot_message",
+    "text": "nightly-build failed: http on publish",
+    "ts": "1717000000.123456",
+    "username": "baton-ci",
+    "bot_id": "B0123456ABC"
+  }
+}

@@ -1,0 +1,54 @@
+# Slack Web API pack, the second implementation of notify/v1 beside
+# telegram: a scenario sends through send(target, text, format) without
+# knowing which chat service is on the other end.
+pack: slack
+version: 1
+description: Slack Web API
+
+config:
+  base_url: { default: https://slack.com/api }
+
+# A bot token (xoxb-...), sent as a Bearer Authorization header.
+auth:
+  kind: bearer
+
+# Slack answers 200 with {"ok": false, "error": "channel_not_found"} as
+# readily as it answers a genuine success, and never wraps the fields of a
+# successful call in anything: they sit at the top level of the body.
+envelope:
+  error_when: '.ok == false'
+  error_message: .error
+
+ops:
+  send:
+    post: /chat.postMessage
+    description: Post a message to a channel, a group or a user
+    encode: json
+    params:
+      # notify/v1 calls the destination target; Slack calls it channel, and
+      # accepts either a channel/group/DM id or a #name.
+      target:
+        name: channel
+        pattern: '^([CDG][A-Z0-9]{4,}|[@#][\w.-]+)$'
+        in: body
+      text:
+        max_len: 40000
+        in: body
+      # Slack has no format vocabulary of its own beyond how it parses a
+      # message's text for links and mentions, which is what notify/v1's
+      # format maps onto here: none leaves the text as sent, full parses it
+      # the way a user's own message would be parsed.
+      format:
+        name: parse
+        enum: [none, full]
+        pattern: '^(none|full)$'
+        required: false
+        in: body
+    transform: '{ id: .ts, target: .channel }'
+    implements: notify/v1.send
+
+  auth_test:
+    post: /auth.test
+    description: Check that the configured bot token is valid, without sending a message
+    readonly: true
+    transform: '{ id: .user_id, team: .team, user: .user }'
