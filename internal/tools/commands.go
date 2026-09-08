@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -263,44 +262,10 @@ func (c *Commands) renderArgv(id string, argv []string, args map[string]string) 
 	return rendered, nil
 }
 
-// keptVars are the variables a command inherits from the runner: enough to
-// find an executable and reuse a build cache, and nothing that carries a
-// credential (spec section 7.5).
-var keptVars = []string{"PATH", "HOME", "GOCACHE", "GOPATH", "GOFLAGS"}
-
-// env builds the command's environment: the minimal allow list plus what the
-// command declares, secrets included. Secrets reach the child process and
-// nothing else: they are not written to the run directory.
+// env builds the command's environment out of the runner's allow list and
+// what the command declares.
 func (c *Commands) env(declared map[string]scenario.EnvValue) ([]string, error) {
-	env := make([]string, 0, len(keptVars)+len(declared))
-	for _, name := range keptVars {
-		if value, ok := os.LookupEnv(name); ok {
-			env = append(env, name+"="+value)
-		}
-	}
-
-	names := make([]string, 0, len(declared))
-	for name := range declared {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		entry := declared[name]
-		if entry.Secret == "" {
-			env = append(env, name+"="+entry.Value)
-			continue
-		}
-		if c.secrets == nil {
-			return nil, fmt.Errorf("env %s refers to the secret %q, and no secrets are resolved", name, entry.Secret)
-		}
-		secret, ok := c.secrets.Lookup(entry.Secret)
-		if !ok {
-			return nil, fmt.Errorf("env %s refers to the unknown secret %q", name, entry.Secret)
-		}
-		env = append(env, name+"="+secret.Reveal())
-	}
-	return env, nil
+	return processEnv(c.secrets, declared)
 }
 
 // take reserves time for one call out of the step's shared budget.
