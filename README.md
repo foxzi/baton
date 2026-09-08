@@ -147,7 +147,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 **Packs are a layer of their own.** A pack loads from a local directory or from a git source pinned by version and checksum, into a local cache. An operation that declares `implements` is checked against the interface registry — argument names, required-ness and the shape of the transformed example — and a scenario's `apis` entry may declare `interface: forge/v1`, in which case the pack it selects is checked for the interface's operations when it loads. `baton apis import` bootstraps a pack from an OpenAPI 3 document, `apis validate` replays every recorded `examples/<op>.json` through the envelope and the transform, and `apis call` calls one operation of a scenario's `apis` entry against the real service. What is missing is the `baton-apis` repository itself: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack.
 
-**Not there yet: releases.** `until`, `switch`, `fallback`, `dedupe_key`, `fetch`, `state`, third-party MCP servers and cancellation on SIGINT/SIGTERM do work. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values. Release builds through goreleaser, the schema reference generated from the JSON Schema and the triage example scenario are still outstanding.
+**Not there yet: releases.** `until`, `switch`, `fallback`, `dedupe_key`, `fetch`, `state`, third-party MCP servers and cancellation on SIGINT/SIGTERM do work. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values. Release builds through goreleaser and the triage example scenario are still outstanding.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
@@ -169,6 +169,7 @@ make build      # builds ./baton with version metadata
 make test       # go test ./...
 make race       # go test -race ./...
 make all        # fmt, vet, test, build
+make docs       # regenerates docs/{en,ru}/schema.md from the scenario schema
 ```
 
 ## Running
@@ -193,8 +194,9 @@ Go, a single static binary. Dependencies: a YAML parser, expr-lang for expressio
 
 - [Project overview](docs/en/overview.md) — the source this README is based on
 - [Specification for v1](docs/en/spec.md) — the authoritative technical document
+- [Scenario schema reference](docs/en/schema.md) — every field of the format, generated from the JSON Schema
 - [Specification review](docs/en/spec-review.md) — inconsistencies and gaps found while reading the spec
-- Russian originals: [обзор](docs/ru/overview.md), [ТЗ](docs/ru/spec.md), [вычитка](docs/ru/spec-review.md), [README](docs/ru/README.md)
+- Russian originals: [обзор](docs/ru/overview.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [вычитка](docs/ru/spec-review.md), [README](docs/ru/README.md)
 
 ## License
 

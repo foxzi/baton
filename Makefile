@@ -11,7 +11,7 @@ LDFLAGS := -s -w \
 	-X $(PKG)/internal/version.Commit=$(COMMIT) \
 	-X $(PKG)/internal/version.Date=$(DATE)
 
-.PHONY: all build test race vet fmt lint tidy clean
+.PHONY: all build test race vet fmt lint tidy clean docs docs-check
 
 all: fmt vet test build
 
@@ -35,6 +35,18 @@ lint:
 
 tidy:
 	go mod tidy
+
+# docs regenerates the schema reference; edit the schema, never these files.
+docs:
+	go run $(CMD) schema --markdown en > docs/en/schema.md
+	go run $(CMD) schema --markdown ru > docs/ru/schema.md
+
+# docs-check fails when the committed reference no longer matches the schema.
+docs-check:
+	@go run $(CMD) schema --markdown en | diff -u docs/en/schema.md - \
+		|| { echo 'docs/en/schema.md is stale, run make docs'; exit 1; }
+	@go run $(CMD) schema --markdown ru | diff -u docs/ru/schema.md - \
+		|| { echo 'docs/ru/schema.md is stale, run make docs'; exit 1; }
 
 clean:
 	rm -f $(BINARY)

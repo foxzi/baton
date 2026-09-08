@@ -26,6 +26,8 @@ jobs:
           fi
       - name: vet
         run: go vet ./...
+      - name: docs
+        run: make docs-check
       - name: test
         run: go test -race ./...
 
