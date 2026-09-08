@@ -37,10 +37,16 @@ func (e *Engine) execHTTPOp(ctx context.Context, step *scenario.Step, path strin
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
-	e.writeStepJSON(path, "input.json", map[string]any{
+	input := map[string]any{
 		"op":   body.Op,
 		"args": args,
-	})
+	}
+	e.writeStepJSON(path, "input.json", input)
+
+	cacheKey, cached, hit := e.cacheGet(step, path, input, nil)
+	if hit {
+		return cached, nil
+	}
 
 	callCtx, cancel := apiContext(ctx, api)
 	defer cancel()
@@ -63,6 +69,7 @@ func (e *Engine) execHTTPOp(ctx context.Context, step *scenario.Step, path strin
 		"pages":       result.Pages,
 		"truncated":   result.Truncated || result.TruncatedPages,
 	})
+	e.cachePut(cacheKey, step, out)
 	return out, nil
 }
 
@@ -83,14 +90,24 @@ func (e *Engine) execHTTPRaw(ctx context.Context, step *scenario.Step, path stri
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
-	e.writeStepJSON(path, "input.json", map[string]any{
+	input := map[string]any{
 		"api":     body.API,
 		"method":  request.Method,
 		"url":     request.URL,
 		"path":    request.Path,
 		"query":   request.Query,
 		"headers": headerNames(request.Headers),
+	}
+	e.writeStepJSON(path, "input.json", input)
+
+	// The request body is hashed rather than logged: it may carry a secret
+	// that has no business in input.json.
+	cacheKey, cached, hit := e.cacheGet(step, path, input, map[string]string{
+		"body": hashBytes(request.Body),
 	})
+	if hit {
+		return cached, nil
+	}
 
 	callCtx, cancel := apiContext(ctx, api)
 	defer cancel()
@@ -122,6 +139,7 @@ func (e *Engine) execHTTPRaw(ctx context.Context, step *scenario.Step, path stri
 		"result":      result,
 		"truncated":   response.Truncated,
 	})
+	e.cachePut(cacheKey, step, out)
 	return out, nil
 }
 

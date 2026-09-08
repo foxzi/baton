@@ -33,13 +33,23 @@ func (e *Engine) execLLM(ctx context.Context, step *scenario.Step, path string) 
 		return expr.Step{}, stepErr
 	}
 
-	e.writeStepJSON(path, "input.json", map[string]any{
+	input := map[string]any{
 		"model":  call.chain[0],
 		"system": call.system,
 		"prompt": call.prompt,
 		"schema": call.schemaPath,
 		"mode":   string(body.StructuredMode),
+	}
+	e.writeStepJSON(path, "input.json", input)
+
+	// The schema travels by content, not by path: editing the file must
+	// invalidate the entry (section 10.3).
+	cacheKey, cached, hit := e.cacheGet(step, path, input, map[string]string{
+		call.schemaPath: hashBytes(call.schemaRaw),
 	})
+	if hit {
+		return cached, nil
+	}
 
 	// The chain is tried on transient provider failures only; a schema
 	// failure stays on the same model (section 3.5).
@@ -47,6 +57,7 @@ func (e *Engine) execLLM(ctx context.Context, step *scenario.Step, path string) 
 	for i, ref := range call.chain {
 		out, stepErr := e.callModel(ctx, step, path, call, ref)
 		if stepErr == nil {
+			e.cachePut(cacheKey, step, out)
 			return out, nil
 		}
 		lastErr = stepErr

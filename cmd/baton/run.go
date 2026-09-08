@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/foxzi/baton/internal/cache"
 	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/engine"
 	"github.com/foxzi/baton/internal/exitcode"
@@ -31,6 +32,8 @@ Options:
   --runs-dir DIR     Write the run directory here (default: runs/ next to the scenario)
   --workspace DIR    Working directory of run steps (default: the scenario directory)
   --config FILE      Global configuration file; repeatable, later files win
+  --cache-dir DIR    Step cache directory (default: cache/ next to the runs directory)
+  --no-cache         Ignore cached step results; fresh results are still stored
   --dry-run          Validate, resolve secrets and print the plan without executing
   --json             Print events as JSONL on stdout; the human log stays on stderr
   -v                 Print every event, not just step boundaries
@@ -62,6 +65,8 @@ func runCmd(args []string) int {
 		runsDir   string
 		workspace string
 		configs   stringList
+		cacheDir  string
+		noCache   bool
 		dryRun    bool
 		asJSON    bool
 		verbose   bool
@@ -76,6 +81,8 @@ func runCmd(args []string) int {
 	flags.StringVar(&runsDir, "runs-dir", "", "run directory root")
 	flags.StringVar(&workspace, "workspace", "", "working directory of run steps")
 	flags.Var(&configs, "config", "global configuration file")
+	flags.StringVar(&cacheDir, "cache-dir", "", "step cache directory")
+	flags.BoolVar(&noCache, "no-cache", false, "ignore cached step results")
 	flags.BoolVar(&dryRun, "dry-run", false, "print the plan without executing")
 	flags.BoolVar(&asJSON, "json", false, "print events as JSONL on stdout")
 	flags.BoolVar(&verbose, "v", false, "print every event")
@@ -158,6 +165,11 @@ func runCmd(args []string) int {
 	if runID == "" {
 		runID = runstore.NewID(time.Now())
 	}
+	// The cache lives next to the runs directory (section 10.3).
+	if cacheDir == "" {
+		cacheDir = filepath.Join(filepath.Dir(filepath.Clean(runsDir)), "cache")
+	}
+
 	store, err := runstore.Create(runsDir, runID, secretStore.Redactor())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
@@ -170,6 +182,8 @@ func runCmd(args []string) int {
 		Inputs:       bound,
 		Secrets:      secretStore,
 		Store:        store,
+		Cache:        cache.Open(cacheDir),
+		NoCache:      noCache,
 		Workspace:    workspace,
 		Config:       cfg,
 		ProviderKeys: providerKeys,
@@ -239,7 +253,7 @@ func observer(asJSON, verbose bool) func(engine.Event) {
 func interesting(eventType string) bool {
 	switch eventType {
 	case "step_started", "step_finished", "step_failed", "step_skipped", "step_retry",
-		"step_fallback", "on_failure_failed", "store_error":
+		"step_fallback", "cache_hit", "on_failure_failed", "store_error":
 		return true
 	default:
 		return false

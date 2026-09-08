@@ -531,3 +531,83 @@ func TestRunCmd_RunsDirDefault(t *testing.T) {
 		t.Fatalf("stat %s: %v", runJSON, err)
 	}
 }
+
+// readStepOutput decodes runs/<id>/steps/<step>/output.json.
+func readStepOutput(t *testing.T, runsDir, runID, step string) map[string]any {
+	t.Helper()
+	path := filepath.Join(runsDir, runID, "steps", step, "output.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("Unmarshal(%s) error = %v", path, err)
+	}
+	return out
+}
+
+// 16. A repeated run replays the readonly step from the cache, which by
+// default lives next to the runs directory.
+func TestRunCmd_CacheReplay(t *testing.T) {
+	dir := t.TempDir()
+	scenarioPath := writeScenario(t, dir, "s.yaml", okScenario)
+	runsDir := filepath.Join(dir, "runs")
+
+	for _, runID := range []string{"r1", "r2"} {
+		var code int
+		captureOutput(t, func() {
+			code = runCmd([]string{scenarioPath, "--runs-dir", runsDir, "--run-id", runID})
+		})
+		if code != exitcode.OK {
+			t.Fatalf("run %s: runCmd() = %d, want %d", runID, code, exitcode.OK)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "cache")); err != nil {
+		t.Errorf("default cache directory: %v", err)
+	}
+	if cached := readStepOutput(t, runsDir, "r1", "greet")["cached"]; cached == true {
+		t.Errorf("first run: cached = %v, want no replay", cached)
+	}
+	second := readStepOutput(t, runsDir, "r2", "greet")
+	if second["cached"] != true {
+		t.Errorf("second run: cached = %v, want true", second["cached"])
+	}
+	if result, _ := second["result"].(string); !strings.Contains(result, "hello") {
+		t.Errorf("replayed result = %q, want it to contain hello", result)
+	}
+	stdout, err := os.ReadFile(filepath.Join(runsDir, "r2", "steps", "greet", "stdout.log"))
+	if err != nil || !strings.Contains(string(stdout), "hello") {
+		t.Errorf("replayed stdout.log = %q, err = %v", stdout, err)
+	}
+}
+
+// 17. --no-cache ignores an existing entry but still stores the fresh result.
+func TestRunCmd_NoCache(t *testing.T) {
+	dir := t.TempDir()
+	scenarioPath := writeScenario(t, dir, "s.yaml", okScenario)
+	runsDir := filepath.Join(dir, "runs")
+	cacheDir := filepath.Join(dir, "c")
+
+	run := func(runID string, args ...string) {
+		t.Helper()
+		argv := append([]string{scenarioPath, "--runs-dir", runsDir, "--cache-dir", cacheDir, "--run-id", runID}, args...)
+		var code int
+		captureOutput(t, func() { code = runCmd(argv) })
+		if code != exitcode.OK {
+			t.Fatalf("run %s: runCmd() = %d, want %d", runID, code, exitcode.OK)
+		}
+	}
+
+	run("r1")
+	run("r2", "--no-cache")
+	run("r3")
+
+	if cached := readStepOutput(t, runsDir, "r2", "greet")["cached"]; cached == true {
+		t.Errorf("--no-cache run: cached = %v, want no replay", cached)
+	}
+	if cached := readStepOutput(t, runsDir, "r3", "greet")["cached"]; cached != true {
+		t.Errorf("run after --no-cache: cached = %v, want true", cached)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/foxzi/baton/internal/cache"
 	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/httpx"
@@ -48,6 +49,12 @@ type Options struct {
 	ProviderKeys map[string]values.Secret
 	// Store is the run directory to record the run in.
 	Store *runstore.Store
+	// Cache holds step results between runs (section 10.3). It may be nil,
+	// in which case nothing is cached.
+	Cache *cache.Cache
+	// NoCache disables reading from the cache; writing continues, so that
+	// the next run can reuse the fresh results (section 10.3).
+	NoCache bool
 	// Workspace is the default working directory of run steps. It defaults
 	// to the directory of the scenario file.
 	Workspace string
@@ -97,6 +104,9 @@ type Engine struct {
 	providers map[string]provider.Provider
 	cost      *costLedger
 	steps     map[string]expr.Step
+	// hits records step paths served from the cache, so that runStep can
+	// flag them in run.json.
+	hits map[string]bool
 	// vars are extra template variables of the enclosing construct: the
 	// foreach item under its as name. They are per body, never shared.
 	vars      map[string]any
@@ -136,6 +146,7 @@ func New(opts Options) (*Engine, error) {
 		mu:        &sync.Mutex{},
 		cost:      &costLedger{},
 		steps:     map[string]expr.Step{},
+		hits:      map[string]bool{},
 		apis:      map[string]*httpx.API{},
 		providers: map[string]provider.Provider{},
 	}, nil
@@ -250,6 +261,7 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 
 	finishedAt := e.opts.Now()
 	state.FinishedAt = &finishedAt
+	state.CacheHit = e.takeCacheHit(path)
 	if step.Run != nil {
 		code := out.ExitCode
 		state.ExitCode = &code

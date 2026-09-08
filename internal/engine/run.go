@@ -47,14 +47,20 @@ func (e *Engine) execRun(ctx context.Context, step *scenario.Step, path string) 
 		}
 	}
 
-	e.writeStepJSON(path, "input.json", map[string]any{
+	input := map[string]any{
 		"argv":     argv,
 		"cwd":      cwd,
 		"env":      envNames,
 		"stdin":    stdin,
 		"parse":    string(body.Parse),
 		"readonly": body.Readonly,
-	})
+	}
+	e.writeStepJSON(path, "input.json", input)
+
+	cacheKey, cached, hit := e.cacheGet(step, path, input, nil)
+	if hit {
+		return cached, nil
+	}
 
 	limit := body.MaxOutputBytes.Bytes()
 	if limit <= 0 {
@@ -106,6 +112,7 @@ func (e *Engine) execRun(ctx context.Context, step *scenario.Step, path string) 
 		"result":    out.Result,
 		"exit_code": out.ExitCode,
 	})
+	e.cachePut(cacheKey, step, out)
 	return out, nil
 }
 
