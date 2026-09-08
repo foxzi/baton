@@ -163,3 +163,197 @@ func TestApisImportOutputLoadsThroughPacksParse(t *testing.T) {
 		t.Fatalf("packs.Parse: %v\n--- generated ---\n%s", err, stdout)
 	}
 }
+
+// demoPackYAML is the smallest pack that packs.Parse accepts, with one op
+// whose transform picks a single field out of the recorded example.
+const demoPackYAML = `pack: demo
+version: 1
+ops:
+  get_thing:
+    get: /things/{id}
+    params:
+      id: { pattern: '^\d+$' }
+    transform: '{ id: .id }'
+`
+
+func TestApisValidateNoArgs(t *testing.T) {
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"validate"})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+	if !strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr does not report usage: %q", stderr)
+	}
+}
+
+func TestApisValidatePackFileWithExample(t *testing.T) {
+	dir := t.TempDir()
+	packPath := filepath.Join(dir, "demo.yaml")
+	if err := os.WriteFile(packPath, []byte(demoPackYAML), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	examplesDir := filepath.Join(dir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatalf("mkdir examples: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(examplesDir, "get_thing.json"), []byte(`{"id": 1}`), 0o644); err != nil {
+		t.Fatalf("write example: %v", err)
+	}
+
+	var code int
+	stdout, _ := captureOutput(t, func() {
+		code = apisCmd([]string{"validate", packPath})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.OK)
+	}
+	if !strings.Contains(stdout, "ok  demo.get_thing") {
+		t.Fatalf("stdout missing the ok line: %q", stdout)
+	}
+	if !strings.Contains(stdout, "1 ops, 1 examples checked, 0 without examples") {
+		t.Fatalf("stdout missing the summary line: %q", stdout)
+	}
+}
+
+func TestApisValidatePackDirectoryLayout(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pack.yaml"), []byte(demoPackYAML), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	examplesDir := filepath.Join(dir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatalf("mkdir examples: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(examplesDir, "get_thing.json"), []byte(`{"id": 1}`), 0o644); err != nil {
+		t.Fatalf("write example: %v", err)
+	}
+
+	var code int
+	captureOutput(t, func() {
+		code = apisCmd([]string{"validate", dir})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.OK)
+	}
+}
+
+func TestApisValidateDirectoryMissingPackYAML(t *testing.T) {
+	dir := t.TempDir()
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"validate", dir})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+	if !strings.Contains(stderr, "no pack.yaml in") {
+		t.Fatalf("stderr does not report the missing pack.yaml: %q", stderr)
+	}
+}
+
+func TestApisValidateTransformFails(t *testing.T) {
+	dir := t.TempDir()
+	pack := `pack: demo
+version: 1
+ops:
+  list_things:
+    get: /things
+    transform: '.id'
+`
+	packPath := filepath.Join(dir, "demo.yaml")
+	if err := os.WriteFile(packPath, []byte(pack), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	examplesDir := filepath.Join(dir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatalf("mkdir examples: %v", err)
+	}
+	// The transform expects an object field but the recorded example is a
+	// bare array, so the jq expression fails at run time.
+	if err := os.WriteFile(filepath.Join(examplesDir, "list_things.json"), []byte(`[1, 2, 3]`), 0o644); err != nil {
+		t.Fatalf("write example: %v", err)
+	}
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"validate", packPath})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+	if !strings.Contains(stderr, "list_things") {
+		t.Fatalf("stderr does not name the failing op: %q", stderr)
+	}
+}
+
+func TestApisValidateEnvelopeErrorWhen(t *testing.T) {
+	dir := t.TempDir()
+	pack := `pack: demo
+version: 1
+envelope:
+  error_when: '.failed'
+  error_message: '.msg'
+ops:
+  get_thing:
+    get: /things/{id}
+    params:
+      id: { pattern: '^\d+$' }
+`
+	packPath := filepath.Join(dir, "demo.yaml")
+	if err := os.WriteFile(packPath, []byte(pack), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	examplesDir := filepath.Join(dir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatalf("mkdir examples: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(examplesDir, "get_thing.json"), []byte(`{"failed": true, "msg": "boom"}`), 0o644); err != nil {
+		t.Fatalf("write example: %v", err)
+	}
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"validate", packPath})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+	if !strings.Contains(stderr, "get_thing") || !strings.Contains(stderr, "boom") {
+		t.Fatalf("stderr does not report the envelope error: %q", stderr)
+	}
+}
+
+func TestApisValidateMissingPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "does-not-exist.yaml")
+
+	var code int
+	captureOutput(t, func() {
+		code = apisCmd([]string{"validate", path})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+}
+
+func TestApisValidateNoExamplesDir(t *testing.T) {
+	dir := t.TempDir()
+	packPath := filepath.Join(dir, "demo.yaml")
+	if err := os.WriteFile(packPath, []byte(demoPackYAML), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+
+	var code int
+	stdout, _ := captureOutput(t, func() {
+		code = apisCmd([]string{"validate", packPath})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.OK)
+	}
+	if !strings.Contains(stdout, "without examples") {
+		t.Fatalf("stdout does not report a missing example: %q", stdout)
+	}
+}

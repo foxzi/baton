@@ -178,7 +178,7 @@ baton run examples/weekly-report.yaml \
 
 Каждый прогон пишет `runs/<id>/` с `run.json`, `events.jsonl` и выводом каждого шага. Прочитать это обратно можно через `baton runs list`, `baton runs show <id>` и `baton runs logs <id>`, а `baton resume <id>` продолжает упавший прогон с упавшего шага. `--dry-run` печатает план, `--json` печатает события в JSONL, `--no-cache` игнорирует кеш шагов. `baton tools <scenario.yaml> --step ID` печатает инструменты, которые получит агент шага, ничего не выполняя.
 
-`baton apis import` генерирует каркас API-пака из документа OpenAPI 3, например `baton apis import --openapi openapi.yaml --ops listMergeRequests > gitlab.yaml`.
+`baton apis import` генерирует каркас API-пака из документа OpenAPI 3, например `baton apis import --openapi openapi.yaml --ops listMergeRequests > gitlab.yaml`. `baton apis validate <pack.yaml|pack-dir>...` загружает пак и прогоняет каждый `examples/<op>.json` через его конверт и трансформ — это та часть пака, которая ломается незаметно, пока нет живого API для вызова.
 
 ## Технологии
 
