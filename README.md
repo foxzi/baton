@@ -142,7 +142,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 ## Status
 
-**Runnable.** Scenarios built from `run`, `assert`, `http`, `llm`, `foreach` and `notify` steps execute end to end: `baton run`, `resume`, `runs`, `validate`, `schema`. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema, and a notification, cached so that a repeated run of the same week spends no tokens. Agentic steps (`agent`, the MCP gateway, `commands`) are not implemented yet.
+**Runnable.** Scenarios built from `run`, `assert`, `http`, `llm`, `foreach` and `notify` steps execute end to end: `baton run`, `resume`, `runs`, `validate`, `schema`. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema, and a notification, cached so that a repeated run of the same week spends no tokens. `agent` steps run too, with the `fake` engine and the Claude Code adapter: the runner prepares the workspace, serves the step's `commands` as tools through the MCP gateway and takes the result from `submit_result`. The gateway's filesystem, git, api, fetch and state tools are still missing, so an agent currently reaches the declared commands only.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
@@ -150,7 +150,7 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 |---|---|---|
 | M1 | Core: parsing, validation, secrets, expressions, templates, `run`, `assert`, run directory, HTTP layer with auth schemes and pagination, local packs | done |
 | M2 | Providers (Anthropic, OpenAI, OpenAI-compatible/OpenRouter), `llm` steps, structured output, `foreach`, cache, resume, `on_failure`, reports | done |
-| M3 | `fake` engine, Claude Code adapter, MCP gateway, `submit_result`, `commands`, profiles, audit log | not started |
+| M3 | `fake` engine, Claude Code adapter, MCP gateway, `submit_result`, `commands`, profiles, audit log | in progress |
 | M3.5 | Packs from git with pinning and checksums, the `forge/v1`/`tracker/v1`/`notify/v1` interface registry, `baton apis` commands | not started |
 | M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | not started |
 | M5 | Documentation, example scenarios, goreleaser builds for linux/amd64 and linux/arm64 | not started |
