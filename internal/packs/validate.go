@@ -70,30 +70,96 @@ func (p *Pack) validateAuth() error {
 	if p.Auth == nil {
 		return nil
 	}
-	switch p.Auth.Kind {
+	return p.validateScheme("auth", p.Auth)
+}
+
+// validateScheme checks one authorisation scheme, either the pack's own or
+// the base scheme of an exchange. Prefix names the field in error messages,
+// so the same checks read as auth.* at the top level and auth.base.* when
+// applied to the base of an exchange.
+func (p *Pack) validateScheme(prefix string, scheme *Auth) error {
+	switch scheme.Kind {
 	case AuthHeader, AuthQuery:
-		if p.Auth.Name == "" {
-			return fmt.Errorf("auth.name: required for the %s scheme", p.Auth.Kind)
+		if scheme.Name == "" {
+			return fmt.Errorf("%s.name: required for the %s scheme", prefix, scheme.Kind)
 		}
 	case AuthBearer, AuthPath:
 		// Nothing to configure: the value goes into Authorization or the
 		// {auth} placeholder.
 	case AuthBasic:
-		field := p.Auth.User
+		field := scheme.User
 		if field == "" {
 			field = "user"
 		}
 		if _, ok := p.Config[field]; !ok {
-			return fmt.Errorf("auth.user: the basic scheme takes the user from config.%s, which the pack does not declare", field)
+			return fmt.Errorf("%s.user: the basic scheme takes the user from config.%s, which the pack does not declare", prefix, field)
 		}
 	case AuthExchange:
-		return errors.New("auth.kind: exchange authorisation is not supported yet")
+		return p.validateExchange(prefix, scheme)
 	case "":
-		return errors.New("auth.kind: required")
+		return errors.New(prefix + ".kind: required")
 	default:
-		return fmt.Errorf("auth.kind: %q is not an authorisation scheme", p.Auth.Kind)
+		return fmt.Errorf("%s.kind: %q is not an authorisation scheme", prefix, scheme.Kind)
+	}
+	if scheme.Op != "" || scheme.Base != nil || scheme.Extract != "" || scheme.Inject != nil ||
+		scheme.TTL != 0 || scheme.Session != "" || scheme.DependsOn != "" {
+		return fmt.Errorf("%s: op, base, extract, inject, ttl, session and depends_on only apply to the exchange scheme", prefix)
 	}
 	return nil
+}
+
+// validateExchange checks the exchange scheme: the operation that trades the
+// secret for a token, the scheme that authorises that call, how the token is
+// pulled out of the response and where it goes in the calls that follow.
+func (p *Pack) validateExchange(prefix string, scheme *Auth) error {
+	var problems []error
+	add := func(format string, args ...any) {
+		problems = append(problems, fmt.Errorf(format, args...))
+	}
+
+	if scheme.DependsOn != "" {
+		add("%s.depends_on: chained exchanges are not supported yet", prefix)
+	}
+	if scheme.Op == "" {
+		add("%s.op: required for the exchange scheme", prefix)
+	} else if p.Ops[scheme.Op] == nil {
+		add("%s.op: %q is not an operation of the pack", prefix, scheme.Op)
+	}
+	if scheme.Base == nil {
+		add("%s.base: required for the exchange scheme: the exchange call needs an authorisation of its own", prefix)
+	} else if scheme.Base.IsExchange() {
+		add("%s.base.kind: an exchange cannot be authorised by another exchange", prefix)
+	} else if err := p.validateScheme(prefix+".base", scheme.Base); err != nil {
+		problems = append(problems, err)
+	}
+	if scheme.Extract == "" {
+		add("%s.extract: required for the exchange scheme", prefix)
+	} else {
+		code, err := compileJQ(prefix+".extract", scheme.Extract)
+		if err != nil {
+			problems = append(problems, err)
+		}
+		scheme.extract = code
+	}
+	if scheme.Inject == nil {
+		add("%s.inject: required for the exchange scheme", prefix)
+	} else {
+		switch scheme.Inject.In {
+		case InHeader, InQuery, InBody, InForm:
+		default:
+			add("%s.inject.in: %q is not a placement for a token, use header, query, body or form", prefix, scheme.Inject.In)
+		}
+		if scheme.Inject.Name == "" {
+			add("%s.inject.name: required", prefix)
+		}
+	}
+	if scheme.TTL < 0 {
+		add("%s.ttl: must not be negative", prefix)
+	}
+	if scheme.Session != "" && scheme.Session != SessionCookies {
+		add("%s.session: %q is not a session mode, only cookies is", prefix, scheme.Session)
+	}
+	return errors.Join(problems...)
 }
 
 // validateOp checks one operation and derives its method, path and argument

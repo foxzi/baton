@@ -5,9 +5,10 @@
 // binary knows the protocol, the pack knows the service. Packs never contain
 // secret values, only the names of the authorisation parameters.
 //
-// v1 covers local directory and pinned git sources, the header, bearer,
-// basic, query and path authorisation schemes and all four pagination
-// styles. Exchange authorisation, GraphQL operations and interface
+// v1 covers local directory and pinned git sources, all six authorisation
+// schemes, GraphQL operations and all four pagination styles. The exchange
+// scheme does not yet chain: a pack that sets auth.depends_on is rejected,
+// because the format of a chain of exchanges is not settled. Interface
 // conformance checks are rejected with a clear error until the milestone
 // that implements them.
 package packs
@@ -65,6 +66,59 @@ type Auth struct {
 	// User names the config field holding the user half of basic
 	// authorisation; it defaults to user.
 	User string `yaml:"user"`
+
+	// Op names the operation of this pack that trades the configured
+	// secret for a token, for the exchange scheme.
+	Op string `yaml:"op"`
+
+	// Base authorises the exchange call itself.
+	Base *Auth `yaml:"base"`
+
+	// Extract pulls the token out of the response of the exchange
+	// operation.
+	Extract string `yaml:"extract"`
+
+	// Inject says where the token goes in the calls that follow.
+	Inject *Inject `yaml:"inject"`
+
+	// TTL is how long a token is reused; zero keeps it for the whole run.
+	TTL units.Duration `yaml:"ttl"`
+
+	// Session keeps cookies between the calls of a run when set to
+	// cookies.
+	Session Session `yaml:"session"`
+
+	// DependsOn names a preceding exchange chain. The format of a chain is
+	// not settled yet, so the loader rejects the field.
+	DependsOn string `yaml:"depends_on"`
+
+	extract *gojq.Code
+}
+
+// Inject says where a token the exchange scheme obtained goes in the calls
+// that follow.
+type Inject struct {
+	In   ParamIn `yaml:"in"`
+	Name string  `yaml:"name"`
+}
+
+// Session is how a run keeps state between the calls an exchange scheme
+// authorises.
+type Session string
+
+// SessionCookies keeps the cookies a server sets across the calls of a run.
+const SessionCookies Session = "cookies"
+
+// IsExchange reports whether the scheme trades a secret for a token before
+// every call, rather than sending the secret itself.
+func (a *Auth) IsExchange() bool {
+	return a != nil && a.Kind == AuthExchange
+}
+
+// KeepsCookies reports whether the scheme keeps a cookie jar across the
+// calls of a run.
+func (a *Auth) KeepsCookies() bool {
+	return a != nil && a.Session == SessionCookies
 }
 
 // RateLimit names the response headers that report the remaining quota.
@@ -145,6 +199,11 @@ const (
 	InQuery ParamIn = "query"
 	InBody  ParamIn = "body"
 	InForm  ParamIn = "form"
+
+	// InHeader places a value in a request header. Operation params never
+	// use it: they keep query, body, form or path; only the token an
+	// exchange scheme injects can go into a header.
+	InHeader ParamIn = "header"
 )
 
 // Encoding is the request body encoding.

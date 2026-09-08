@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/foxzi/baton/internal/packs"
 	"github.com/foxzi/baton/internal/values"
@@ -644,8 +646,402 @@ auth:
 }
 
 // ---------------------------------------------------------------------------
-// Op: pack operations
+// Auth: exchange scheme
 // ---------------------------------------------------------------------------
+
+// exchangeOpsYAML declares a login operation that trades a bearer secret for
+// a token, and a protected operation the token authorises.
+const exchangeOpsYAML = `ops:
+  login:
+    post: /login
+  get_thing:
+    get: /things/{id}
+    params:
+      id: { pattern: '^\d+$' }
+`
+
+func exchangePack(t *testing.T, auth string) *packs.Pack {
+	t.Helper()
+	return mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+auth:
+  kind: exchange
+`+auth+exchangeOpsYAML)
+}
+
+func TestExchangeFetchesTokenAndInjectsHeader(t *testing.T) {
+	var logins int
+	var gotToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login":
+			logins++
+			if r.Header.Get("Authorization") != "Bearer s3cr3t" {
+				t.Errorf("login Authorization = %q, want Bearer s3cr3t", r.Header.Get("Authorization"))
+			}
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-1"})
+		default:
+			gotToken = r.Header.Get("X-Token")
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: header
+    name: X-Token
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	if _, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"}); err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if logins != 1 {
+		t.Errorf("logins = %d, want 1", logins)
+	}
+	if gotToken != "tok-1" {
+		t.Errorf("X-Token = %q, want tok-1", gotToken)
+	}
+}
+
+func TestExchangeReusesTokenWithinTTL(t *testing.T) {
+	var logins int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			logins++
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-1"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: header
+    name: X-Token
+  ttl: 1m
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	for i := 0; i < 3; i++ {
+		if _, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"}); err != nil {
+			t.Fatalf("Op() error = %v", err)
+		}
+	}
+	if logins != 1 {
+		t.Errorf("logins = %d, want 1", logins)
+	}
+}
+
+func TestExchangeRefetchesAfterTTLExpires(t *testing.T) {
+	var logins int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			logins++
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-1"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: header
+    name: X-Token
+  ttl: 10ms
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	if _, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"}); err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if _, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"}); err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if logins != 2 {
+		t.Errorf("logins = %d, want 2", logins)
+	}
+}
+
+func TestExchangeSessionCookiesPersist(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login":
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc"})
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-1"})
+		default:
+			cookie, err := r.Cookie("session")
+			if err != nil || cookie.Value != "abc" {
+				t.Errorf("session cookie missing or wrong: %v", err)
+			}
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: header
+    name: X-Token
+  session: cookies
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	if _, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"}); err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+}
+
+func TestExchangeInjectQuery(t *testing.T) {
+	var gotToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-1"})
+			return
+		}
+		gotToken = r.URL.Query().Get("token")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: query
+    name: token
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	if _, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"}); err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if gotToken != "tok-1" {
+		t.Errorf("token query param = %q, want tok-1", gotToken)
+	}
+}
+
+func TestExchangeTokenRedactedInError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "s3cr3t-tok"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("no such thing, token was s3cr3t-tok"))
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: query
+    name: token
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	_, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"})
+	if err == nil {
+		t.Fatalf("Op() error = nil, want error")
+	}
+	if strings.Contains(err.Error(), "s3cr3t-tok") {
+		t.Errorf("error = %q, token leaked", err)
+	}
+	if !strings.Contains(err.Error(), values.Redacted) {
+		t.Errorf("error = %q, want mention of %s", err, values.Redacted)
+	}
+}
+
+func TestExchangeInjectsTokenIntoForm(t *testing.T) {
+	var gotContentType string
+	var gotForm url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-1"})
+			return
+		}
+		gotContentType = r.Header.Get("Content-Type")
+		r.ParseForm()
+		gotForm = r.Form
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+auth:
+  kind: exchange
+  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: form
+    name: token
+`+exchangeOpsYAML+`  edit_page:
+    post: /edit
+    encode: form
+    params:
+      title: { in: form }
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	if _, err := client.Op(context.Background(), api, "edit_page", map[string]any{"title": "Home"}); err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if gotContentType != "application/x-www-form-urlencoded" {
+		t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", gotContentType)
+	}
+	if gotForm.Get("title") != "Home" {
+		t.Errorf("form title = %q, want Home", gotForm.Get("title"))
+	}
+	if gotForm.Get("token") != "tok-1" {
+		t.Errorf("form token = %q, want tok-1", gotForm.Get("token"))
+	}
+}
+
+func TestExchangeInjectsTokenIntoBody(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-1"})
+			return
+		}
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+auth:
+  kind: exchange
+  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: body
+    name: token
+`+exchangeOpsYAML+`  create_thing:
+    post: /things
+    encode: json
+    params:
+      name: { in: body }
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	if _, err := client.Op(context.Background(), api, "create_thing", map[string]any{"name": "widget"}); err != nil {
+		t.Fatalf("Op() error = %v", err)
+	}
+	if gotBody["name"] != "widget" {
+		t.Errorf("body name = %v, want widget", gotBody["name"])
+	}
+	if gotBody["token"] != "tok-1" {
+		t.Errorf("body token = %v, want tok-1", gotBody["token"])
+	}
+}
+
+func TestExchangeWithoutTokenFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			json.NewEncoder(w).Encode(map[string]string{"other": "value"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: header
+    name: X-Token
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	_, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"})
+	if err == nil {
+		t.Fatalf("Op() error = nil, want error")
+	}
+	if Class(err) != ClassCommand {
+		t.Errorf("Class(err) = %q, want %q", Class(err), ClassCommand)
+	}
+	if !strings.Contains(err.Error(), "test") {
+		t.Errorf("error = %q, want mention of the API name", err)
+	}
+}
+
+// TestExchangeCallFailureIsReported is a regression test: exchangeToken
+// holds api.exchange.mu across the exchange call, and redactError reads
+// api.exchange.token for the very same exchange while handling the
+// failure. If either side ever needs the mutex to read the token, this
+// deadlocks; the token is read atomically instead so it does not.
+func TestExchangeCallFailureIsReported(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := exchangePack(t, `  op: login
+  base:
+    kind: bearer
+  extract: .access_token
+  inject:
+    in: header
+    name: X-Token
+`)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.NewSecret("tok", "s3cr3t"))
+
+	client := New(0)
+	_, err := client.Op(context.Background(), api, "get_thing", map[string]any{"id": "1"})
+	if err == nil {
+		t.Fatalf("Op() error = nil, want error")
+	}
+	if Class(err) != ClassCommand {
+		t.Errorf("Class(err) = %q, want %q", Class(err), ClassCommand)
+	}
+}
 
 func TestOpSimpleGETPathArgEncodeAndTransform(t *testing.T) {
 	var gotPath string

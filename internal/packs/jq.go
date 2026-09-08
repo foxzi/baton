@@ -140,6 +140,29 @@ func (p *Pagination) PageTotal(page any) (int, bool, error) {
 	}
 }
 
+// ExchangeToken extracts the token from the response of the exchange
+// operation.
+func (a *Auth) ExchangeToken(body any) (string, error) {
+	if a.extract == nil {
+		return "", errors.New("auth.extract: required for the exchange scheme")
+	}
+	value, err := runJQ(a.extract, body)
+	if err != nil {
+		return "", fmt.Errorf("auth.extract: %w", err)
+	}
+	token, ok := value.(string)
+	if !ok {
+		if value == nil {
+			return "", errors.New("auth.extract: the response carries no token")
+		}
+		return "", fmt.Errorf("auth.extract: %v is not a token", value)
+	}
+	if token == "" {
+		return "", errors.New("auth.extract: the response carries no token")
+	}
+	return token, nil
+}
+
 // Transformed applies the operation transform, or pick, to a result. Results
 // without either are returned unchanged.
 func (o *Op) Transformed(result any) (any, error) {

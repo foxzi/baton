@@ -244,29 +244,46 @@ func setPageParam(request *Request, in packs.ParamIn, graphql bool, name string,
 		request.Query = query
 		return nil
 	}
+	if err := setBodyField(request, name, value, graphql); err != nil {
+		return fmt.Errorf("pagination.in: %s", err)
+	}
+	return nil
+}
 
-	headers := make(map[string]string, len(request.Headers)+1)
-	for key, existing := range request.Headers {
+// setBodyField puts one field into the request body, following the encoding
+// the request already uses.
+func setBodyField(req *Request, name string, value any, graphql bool) error {
+	if strings.HasPrefix(req.Headers["Content-Type"], "application/x-www-form-urlencoded") {
+		return setFormField(req, name, paramText(value))
+	}
+	return setJSONField(req, name, value, graphql)
+}
+
+// setFormField puts one field into a form-encoded request body.
+func setFormField(req *Request, name, value string) error {
+	form, err := url.ParseQuery(string(req.Body))
+	if err != nil {
+		return fmt.Errorf("the form body cannot be read: %s", err)
+	}
+	form.Set(name, value)
+	headers := make(map[string]string, len(req.Headers)+1)
+	for key, existing := range req.Headers {
 		headers[key] = existing
 	}
-	if strings.HasPrefix(headers["Content-Type"], "application/x-www-form-urlencoded") {
-		form, err := url.ParseQuery(string(request.Body))
-		if err != nil {
-			return fmt.Errorf("pagination.in: the form body cannot be read: %s", err)
-		}
-		form.Set(name, paramText(value))
-		request.Body, request.Headers = []byte(form.Encode()), headers
-		return nil
-	}
+	headers["Content-Type"] = "application/x-www-form-urlencoded"
+	req.Body, req.Headers = []byte(form.Encode()), headers
+	return nil
+}
 
+// setJSONField puts one field into a JSON request body. A GraphQL request
+// carries its arguments in variables, and so do the fields added to it.
+func setJSONField(req *Request, name string, value any, graphql bool) error {
 	body := map[string]any{}
-	if len(request.Body) > 0 {
-		if err := json.Unmarshal(request.Body, &body); err != nil {
-			return fmt.Errorf("pagination.in: body needs a JSON object body: %s", err)
+	if len(req.Body) > 0 {
+		if err := json.Unmarshal(req.Body, &body); err != nil {
+			return fmt.Errorf("body needs a JSON object body: %s", err)
 		}
 	}
-	// A GraphQL request carries its arguments in variables, and so do its
-	// page parameters.
 	if graphql {
 		graphQLVariables(body)[name] = value
 	} else {
@@ -274,10 +291,14 @@ func setPageParam(request *Request, in packs.ParamIn, graphql bool, name string,
 	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("pagination.in: the page parameters are not JSON: %s", err)
+		return fmt.Errorf("the body cannot be encoded as JSON: %s", err)
+	}
+	headers := make(map[string]string, len(req.Headers)+1)
+	for key, existing := range req.Headers {
+		headers[key] = existing
 	}
 	headers["Content-Type"] = "application/json"
-	request.Body, request.Headers = encoded, headers
+	req.Body, req.Headers = encoded, headers
 	return nil
 }
 

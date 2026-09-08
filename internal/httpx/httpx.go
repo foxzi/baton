@@ -8,6 +8,11 @@
 // secret redactor of the run masks them in everything the runner writes,
 // including the {auth} segment of a URL.
 //
+// The exchange authorisation scheme trades a configured secret for a token
+// through an operation of the pack itself; the token and, when the pack
+// keeps a session, its cookies live only in memory for the run and are
+// injected into the requests that follow, never written to disk.
+//
 // The rate_limit section of a pack is parsed but not acted upon yet;
 // respecting the remaining quota belongs to the resilience milestone.
 package httpx
@@ -21,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"slices"
 	"strconv"
@@ -60,6 +66,10 @@ type API struct {
 
 	// Timeout overrides the client timeout for this API.
 	Timeout time.Duration
+
+	// exchange is the state the exchange scheme keeps across the calls of a
+	// run: nil when the pack authorises some other way.
+	exchange *exchangeState
 }
 
 // NewAPI merges the configuration of an apis entry with the pack defaults and
@@ -93,7 +103,18 @@ func NewAPI(name string, pack *packs.Pack, config map[string]string, auth values
 	if err := errors.Join(problems...); err != nil {
 		return nil, &Error{Class: ClassConfig, Msg: err.Error()}
 	}
-	return &API{Name: name, Pack: pack, Config: merged, Auth: auth}, nil
+	api := &API{Name: name, Pack: pack, Config: merged, Auth: auth}
+	if pack.Auth.IsExchange() {
+		api.exchange = &exchangeState{}
+		if pack.Auth.KeepsCookies() {
+			jar, err := cookiejar.New(nil)
+			if err != nil {
+				return nil, &Error{Class: ClassConfig, Msg: fmt.Sprintf("apis.%s.auth.session: cannot build a cookie jar: %s", name, err)}
+			}
+			api.exchange.jar = jar
+		}
+	}
+	return api, nil
 }
 
 // Request is a raw HTTP request, the second form of an http step. When API is
@@ -127,21 +148,25 @@ type Response struct {
 // Do performs a raw request. API may be nil when the request carries an
 // absolute URL and needs no authorisation.
 func (c *Client) Do(ctx context.Context, api *API, req *Request) (*Response, error) {
+	req, err := c.authorize(ctx, api, req)
+	if err != nil {
+		return nil, err
+	}
 	built, err := c.build(ctx, api, req)
 	if err != nil {
-		return nil, err
+		return nil, api.redactError(err)
 	}
-	response, err := c.send(built, req.MaxBytes)
+	response, err := c.send(api, built, req.MaxBytes)
 	if err != nil {
-		return nil, err
+		return nil, api.redactError(err)
 	}
 	if !statusExpected(response.Status, req.ExpectStatus) {
-		return response, &Error{
+		return response, api.redactError(&Error{
 			Class:    classForStatus(response.Status),
 			Msg:      fmt.Sprintf("%s %s returned %d", built.Method, built.URL.Redacted(), response.Status),
 			Status:   response.Status,
 			BodyTail: tail(response.Body),
-		}
+		})
 	}
 	return response, nil
 }
@@ -201,9 +226,10 @@ func (c *Client) build(ctx context.Context, api *API, req *Request) (*http.Reque
 	return built, nil
 }
 
-// send performs a built request and reads its body up to the cap.
-func (c *Client) send(req *http.Request, maxBytes int64) (*Response, error) {
-	response, err := c.http.Do(req)
+// send performs a built request and reads its body up to the cap. It uses
+// the API's own cookie jar when the pack keeps a session across an exchange.
+func (c *Client) send(api *API, req *http.Request, maxBytes int64) (*Response, error) {
+	response, err := c.doer(api).Do(req)
 	if err != nil {
 		class := ClassTransient
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -262,6 +288,11 @@ func applyAuth(req *http.Request, api *API) error {
 		req.URL.RawQuery = query.Encode()
 	case packs.AuthPath:
 		// Already substituted into the URL by applyPathAuth.
+	case packs.AuthExchange:
+		// The token was already injected into the request by authorize;
+		// the configured secret here only authorises the exchange call
+		// itself, which builds its own request through applyAuth with the
+		// base scheme.
 	default:
 		return errorf(ClassConfig, "apis.%s: authorisation scheme %q is not supported", api.Name, scheme.Kind)
 	}

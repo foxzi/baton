@@ -187,9 +187,186 @@ func TestParseValidate(t *testing.T) {
 			checkOK: true,
 		},
 		{
-			name:    "auth exchange unsupported",
-			yaml:    packYAML("auth:\n  kind: exchange\n"),
-			wantErr: "auth.kind: exchange authorisation is not supported yet",
+			name: "auth exchange ok",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+`),
+			checkOK: true,
+		},
+		{
+			name: "auth exchange missing op",
+			yaml: packYAML(`auth:
+  kind: exchange
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+`),
+			wantErr: "auth.op: required for the exchange scheme",
+		},
+		{
+			name: "auth exchange op not declared",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: nope
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+`),
+			wantErr: `auth.op: "nope" is not an operation of the pack`,
+		},
+		{
+			name: "auth exchange missing base",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+`),
+			wantErr: "auth.base: required for the exchange scheme",
+		},
+		{
+			name: "auth exchange base cannot be another exchange",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: exchange
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+`),
+			wantErr: "auth.base.kind: an exchange cannot be authorised by another exchange",
+		},
+		{
+			name: "auth exchange missing extract",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  inject:
+    in: header
+    name: X-Token
+`),
+			wantErr: "auth.extract: required for the exchange scheme",
+		},
+		{
+			name: "auth exchange extract not jq",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: "["
+  inject:
+    in: header
+    name: X-Token
+`),
+			wantErr: "auth.extract:",
+		},
+		{
+			name: "auth exchange missing inject",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: .token
+`),
+			wantErr: "auth.inject: required for the exchange scheme",
+		},
+		{
+			name: "auth exchange inject.in unsupported",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: cookie
+    name: X-Token
+`),
+			wantErr: "auth.inject.in:",
+		},
+		{
+			name: "auth exchange inject missing name",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: header
+`),
+			wantErr: "auth.inject.name: required",
+		},
+		{
+			name: "auth exchange negative ttl",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+  ttl: -1s
+`),
+			wantErr: "auth.ttl: must not be negative",
+		},
+		{
+			name: "auth exchange unknown session",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+  session: server
+`),
+			wantErr: "auth.session:",
+		},
+		{
+			name: "auth exchange depends_on rejected",
+			yaml: packYAML(`auth:
+  kind: exchange
+  op: get_thing
+  base:
+    kind: bearer
+  extract: .token
+  inject:
+    in: header
+    name: X-Token
+  depends_on: other
+`),
+			wantErr: "auth.depends_on: chained exchanges are not supported yet",
+		},
+		{
+			name:    "auth bearer with exchange-only fields",
+			yaml:    packYAML("auth:\n  kind: bearer\n  op: get_thing\n"),
+			wantErr: "auth: op, base, extract, inject, ttl, session and depends_on only apply to the exchange scheme",
 		},
 		{
 			name:    "auth kind unknown",
