@@ -20,6 +20,10 @@ func (e *Engine) execNotify(ctx context.Context, step *scenario.Step, path strin
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
+	// A template cannot read secrets, but it can quote a failure message or a
+	// step result that echoed one back, and a notification leaves the machine
+	// (section 13).
+	text = e.redact(text)
 	e.writeStepJSON(path, "input.json", map[string]any{
 		"channel": channel.Name,
 		"kind":    channel.Kind,

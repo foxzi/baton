@@ -259,7 +259,7 @@ func (e *Engine) finish(ctx context.Context) {
 
 	e.state.Status = runstore.StatusFailed
 	e.state.FailedStep = e.failedStep
-	e.state.Error = &runstore.RunError{Class: e.failure.Class, Message: e.failure.Msg}
+	e.state.Error = &runstore.RunError{Class: e.failure.Class, Message: e.redact(e.failure.Msg)}
 
 	// A false assert is not a failure class, so on_failure does not run
 	// (section 9.3).
@@ -321,7 +321,7 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 	}
 
 	state.Status = runstore.StatusFailed
-	state.Error = &runstore.RunError{Class: stepErr.Class, Message: stepErr.Msg}
+	state.Error = &runstore.RunError{Class: stepErr.Class, Message: e.redact(stepErr.Msg)}
 	out.Status = expr.StatusFailed
 	out.Result = nil
 	e.steps[step.ID] = out
@@ -553,8 +553,12 @@ func (e *Engine) record(stepID string, state *runstore.StepState) {
 	}
 }
 
-// emit sends an event to the observer and to events.jsonl.
+// emit sends an event to the observer and to events.jsonl. The message and
+// the string fields are redacted first: the observer prints them to the log
+// without knowing the secrets of the run (section 13).
 func (e *Engine) emit(event Event) {
+	event.Message = e.redact(event.Message)
+	event.Fields = e.redactFields(event.Fields)
 	if e.opts.Observer != nil {
 		e.opts.Observer(event)
 	}
@@ -598,8 +602,8 @@ func (e *Engine) runContext() expr.Run {
 		run.FailedStep = e.failedStep
 		run.Error = expr.RunError{
 			Class:      e.failure.Class,
-			Message:    e.failure.Msg,
-			StderrTail: e.failure.StderrTail,
+			Message:    e.redact(e.failure.Msg),
+			StderrTail: e.redact(e.failure.StderrTail),
 		}
 	}
 	return run
