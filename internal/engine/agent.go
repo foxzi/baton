@@ -88,32 +88,12 @@ type agentCall struct {
 // tool policy. Everything here is a config error: none of it depends on the
 // agent doing anything.
 func (e *Engine) prepareAgent(step *scenario.Step) (*agentCall, *Error) {
+	call, stepErr := e.prepareAgentPolicy(step)
+	if stepErr != nil {
+		return nil, stepErr
+	}
+
 	body := step.Agent
-	call := &agentCall{
-		engine:    body.Engine,
-		script:    body.Script,
-		policy:    agent.ResolvePolicy(body),
-		budget:    body.BudgetUSD,
-		startedAt: e.opts.Now(),
-	}
-	if call.engine == "" {
-		return nil, errorf(ClassConfig, "step %s: agent.engine is not set", step.ID)
-	}
-	if call.budget == 0 {
-		call.budget = e.opts.Scenario.Defaults.BudgetUSD
-	}
-
-	if body.Result == "" {
-		return nil, errorf(ClassConfig, "step %s: agent.result is required", step.ID)
-	}
-	raw, err := os.ReadFile(e.resolvePath(body.Result))
-	if err != nil {
-		return nil, wrapf(ClassConfig, err, "step %s: agent.result", step.ID)
-	}
-	if call.schema, err = jsonschema.Compile(body.Result, raw); err != nil {
-		return nil, wrapf(ClassConfig, err, "step %s: agent.result", step.ID)
-	}
-
 	data, stepErr := e.withData(step.ID, "agent", body.With)
 	if stepErr != nil {
 		return nil, stepErr
@@ -138,6 +118,39 @@ func (e *Engine) prepareAgent(step *scenario.Step) (*agentCall, *Error) {
 
 	if call.env, _, stepErr = e.envMap(step.ID, "agent.env", body.Env); stepErr != nil {
 		return nil, stepErr
+	}
+	return call, nil
+}
+
+// prepareAgentPolicy resolves the half of an agent call the tool set is built
+// from: the engine, the policy and the schema submit_result validates
+// against. None of it reads the results of earlier steps, which is what lets
+// `baton tools` report a step's tools before the run reaches it.
+func (e *Engine) prepareAgentPolicy(step *scenario.Step) (*agentCall, *Error) {
+	body := step.Agent
+	call := &agentCall{
+		engine:    body.Engine,
+		script:    body.Script,
+		policy:    agent.ResolvePolicy(body),
+		budget:    body.BudgetUSD,
+		startedAt: e.opts.Now(),
+	}
+	if call.engine == "" {
+		return nil, errorf(ClassConfig, "step %s: agent.engine is not set", step.ID)
+	}
+	if call.budget == 0 {
+		call.budget = e.opts.Scenario.Defaults.BudgetUSD
+	}
+
+	if body.Result == "" {
+		return nil, errorf(ClassConfig, "step %s: agent.result is required", step.ID)
+	}
+	raw, err := os.ReadFile(e.resolvePath(body.Result))
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "step %s: agent.result", step.ID)
+	}
+	if call.schema, err = jsonschema.Compile(body.Result, raw); err != nil {
+		return nil, wrapf(ClassConfig, err, "step %s: agent.result", step.ID)
 	}
 	return call, nil
 }

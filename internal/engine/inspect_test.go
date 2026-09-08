@@ -318,3 +318,35 @@ steps:
 		t.Errorf("the state file exists (%v), want the listing to leave it alone", err)
 	}
 }
+
+// 8. A step is listable before the run reaches it, even when its prompt and
+// its with block read the result of an earlier step: the listing resolves the
+// policy only, and the policy never depends on what the run produced.
+func TestStepTools_BeforeEarlierStepsRan(t *testing.T) {
+	yamlText := `
+version: 1
+name: inspect-pending
+steps:
+  - id: changes
+    run:
+      argv: ["echo", "{}"]
+      parse: json
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      system: "Base is {{ .base }}"
+      prompt: "Review {{ .base }} in {{ .steps.changes.result.title }}"
+      profile: review
+      result: result.json
+      with:
+        base: "{{ .steps.changes.result.base }}"
+`
+	eng, _, dir := newTestEngine(t, yamlText, nil)
+	writeAgentFiles(t, dir, agentSchema, "calls: []")
+
+	want := "fs.read,fs.glob,fs.grep,git.status,git.diff,git.log,git.show,git.blame,state.get,submit_result"
+	if got := strings.Join(toolNames(t, eng, "review"), ","); got != want {
+		t.Errorf("review tools = %s, want %s", got, want)
+	}
+}

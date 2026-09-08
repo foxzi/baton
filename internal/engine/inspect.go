@@ -36,7 +36,7 @@ func (e *Engine) StepTools(stepID string) ([]ToolInfo, error) {
 		return nil, fmt.Errorf("step %s is a %s step: only an agent step has tools", stepID, step.Kind())
 	}
 
-	call, stepErr := e.prepareAgent(step)
+	call, stepErr := e.prepareAgentPolicy(step)
 	if stepErr != nil {
 		return nil, stepErr
 	}
