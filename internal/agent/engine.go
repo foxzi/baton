@@ -66,6 +66,11 @@ type GatewayInfo struct {
 type Result struct {
 	// Submitted says whether the agent called submit_result. A step that
 	// ends without it is an error, and the runner, not the engine, says so.
+	//
+	// Only an engine that makes the tool calls itself can fill this in and
+	// Result below; an engine that hands the tools to a separate process
+	// leaves both unset, and the runner takes them from the gateway's
+	// session, which is the authority in either case.
 	Submitted  bool
 	Result     json.RawMessage
 	Usage      provider.Usage
