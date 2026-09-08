@@ -250,8 +250,8 @@ func (f *FS) globCall(ctx context.Context, raw json.RawMessage) (any, error) {
 	if !ok {
 		return nil, errors.New(`argument "pattern" is required`)
 	}
-	if pattern == "" {
-		return nil, errors.New(`argument "pattern" is empty`)
+	if err := checkWorkspaceGlob("pattern", pattern); err != nil {
+		return nil, err
 	}
 
 	limit := defaultFSGlobResults
@@ -331,6 +331,11 @@ func (f *FS) grepCall(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 
 	glob := given["glob"]
+	if glob != "" {
+		if err := checkWorkspaceGlob("glob", glob); err != nil {
+			return nil, err
+		}
+	}
 
 	limit := defaultFSGrepMatches
 	if value, ok := given["max_matches"]; ok {

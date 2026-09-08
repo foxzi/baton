@@ -446,6 +446,73 @@ func TestCommandBudgetKeepsWhatAQuickCallDidNotUse(t *testing.T) {
 	}
 }
 
+// The pattern is what keeps a shell metacharacter out of argv in the first
+// place: an argument the scenario describes as a path does not match once a
+// semicolon is in it (spec section 13).
+func TestCommandArgumentWithShellMetacharactersIsRefused(t *testing.T) {
+	bin := script(t, t.TempDir(), "argv.sh", `for a in "$@"; do echo "[$a]"; done`)
+
+	c := newCommands(t, t.TempDir(), map[string]scenario.Command{
+		"echo": {
+			Argv: []string{bin, "{{ .args.path }}"},
+			Args: map[string]scenario.CommandArg{"path": {Pattern: `[\w./-]+`}},
+		},
+	})
+
+	if _, err := call(t, c, "echo", `{"path":"; echo pwned"}`); err == nil {
+		t.Fatalf("call with %q: error = nil, want the pattern to refuse it", "; echo pwned")
+	}
+}
+
+// And where the pattern does allow such a value, it reaches the program as
+// one argv entry: there is no shell to expand it (spec sections 7.5 and 13).
+func TestCommandArgumentIsNotInterpretedByAShell(t *testing.T) {
+	bin := script(t, t.TempDir(), "argv.sh", `for a in "$@"; do echo "[$a]"; done`)
+
+	c := newCommands(t, t.TempDir(), map[string]scenario.Command{
+		"echo": {
+			Argv: []string{bin, "{{ .args.free }}"},
+			Args: map[string]scenario.CommandArg{"free": {Pattern: `.+`}},
+		},
+	})
+
+	response, err := call(t, c, "echo", `{"free":"$(id)"}`)
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	if response.Stdout != "[$(id)]\n" {
+		t.Errorf("stdout = %q, want the argument passed literally", response.Stdout)
+	}
+}
+
+// A path that leaves the workspace is refused before the pattern is even
+// consulted, so a loose pattern is not a way out (spec sections 7.5 and 13).
+func TestCommandArgumentRejectsPathsOutsideTheWorkspace(t *testing.T) {
+	bin := script(t, t.TempDir(), "argv.sh", `for a in "$@"; do echo "[$a]"; done`)
+
+	c := newCommands(t, t.TempDir(), map[string]scenario.Command{
+		"echo": {
+			Argv: []string{bin, "{{ .args.path }}"},
+			Args: map[string]scenario.CommandArg{"path": {Pattern: `.+`}},
+		},
+	})
+
+	for _, value := range []string{"/etc/passwd", "../etc/passwd", "src/../../etc/passwd"} {
+		if _, err := call(t, c, "echo", `{"path":`+quoteJSON(value)+`}`); err == nil {
+			t.Errorf("call with %q: error = nil, want it refused", value)
+		}
+	}
+}
+
+// quoteJSON renders a value as a JSON string.
+func quoteJSON(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return string(encoded)
+}
+
 // newCommands builds a command set of every declared command.
 func newCommands(t *testing.T, workspace string, declared map[string]scenario.Command) *Commands {
 	t.Helper()

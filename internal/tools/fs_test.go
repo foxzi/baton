@@ -325,6 +325,30 @@ func TestFSWriteRefusesDeniedAndDotDot(t *testing.T) {
 	}
 }
 
+// 15b. Every fs tool takes a workspace-relative path: an absolute path and a
+// parent-directory path are refused whichever tool they are given to (spec
+// sections 7.4 and 13).
+func TestFSRefusesPathsOutsideTheWorkspace(t *testing.T) {
+	f := writableFS(t, t.TempDir())
+
+	cases := []struct {
+		tool string
+		args string
+	}{
+		{"fs.read", `{"path":"/etc/passwd"}`},
+		{"fs.read", `{"path":"../../etc/passwd"}`},
+		{"fs.glob", `{"pattern":"/etc/*"}`},
+		{"fs.glob", `{"pattern":"../*"}`},
+		{"fs.grep", `{"pattern":"root","glob":"/etc/*"}`},
+		{"fs.write", `{"path":"/etc/passwd","content":"x"}`},
+	}
+	for _, c := range cases {
+		if _, err := callFS(t, f, c.tool, c.args); err == nil {
+			t.Errorf("%s with %s: error = nil, want it refused", c.tool, c.args)
+		}
+	}
+}
+
 // 16. A symlink pointing outside the workspace is refused by both fs.read
 // and fs.write.
 func TestFSRefusesSymlinkEscape(t *testing.T) {
