@@ -311,6 +311,23 @@ cost by step:
 | `triage.yaml` | классификация по `enum`, метки, комментарий, вызов дежурного только при критичности |
 | `review.yaml` | шаг `agent`, работающий над чекаутом |
 
+Паки, которые лежат в репозитории, находятся в `apis/` и подключаются через
+`from: ./apis/`. Каждый объявляет интерфейс, который реализует, поэтому
+сценарий с `interface: forge/v1` переносится между ними сменой входа:
+
+| Пак | Интерфейс | Операции |
+|---|---|---|
+| `gitlab` | `forge/v1` | `get_change`, `list_files`, `get_file`, `post_comment`, `list_merge_requests` |
+| `github` | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review` и `get_change` без списка файлов |
+| `gitea` | `forge/v1` | то же, что у GitHub, только `list_files` не отдаёт текст диффа |
+| `jira` | `tracker/v1` | `get_issue`, `search`, `comment` |
+| `telegram` | `notify/v1` | `send`, `send_document`, `get_me` |
+| `slack` | `notify/v1` | `send`, `auth_test` |
+
+`baton apis validate apis/*` разбирает их все и прогоняет записанные ответы из
+`apis/<pack>/examples/` через трансформы — это же делает тестовый набор на
+каждом коммите.
+
 Полезные команды при написании сценария:
 
 ```sh

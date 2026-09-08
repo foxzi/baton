@@ -308,6 +308,23 @@ rough order of complexity:
 | `triage.yaml` | classification against an `enum`, labels, a comment, paging the on-call only when critical |
 | `review.yaml` | an `agent` step working over a checkout |
 
+The packs the repository ships live in `apis/` and are loaded with
+`from: ./apis/`. Each one names the interface it implements, so a scenario that
+declares `interface: forge/v1` can be moved between them by changing an input:
+
+| Pack | Interface | Operations |
+|---|---|---|
+| `gitlab` | `forge/v1` | `get_change`, `list_files`, `get_file`, `post_comment`, `list_merge_requests` |
+| `github` | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review`, plus `get_change` without the file list |
+| `gitea` | `forge/v1` | the same as GitHub, except that `list_files` carries no diff text |
+| `jira` | `tracker/v1` | `get_issue`, `search`, `comment` |
+| `telegram` | `notify/v1` | `send`, `send_document`, `get_me` |
+| `slack` | `notify/v1` | `send`, `auth_test` |
+
+`baton apis validate apis/*` parses every one of them and replays the recorded
+responses in `apis/<pack>/examples/` through the transforms, which is what the
+test suite does on each commit.
+
 Useful commands while writing one:
 
 ```sh

@@ -117,7 +117,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 **Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until`, `file` and `switch` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
 
-**Outstanding.** The pack set in `apis/`: this repository ships the `gitlab` and `telegram` packs, and any other service still needs a pack of its own. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values.
+**Outstanding.** The pack set in `apis/` covers `gitlab`, `github`, `gitea`, `jira`, `telegram` and `slack`; any other service still needs a pack of its own. Neither GitLab nor Jira implements its interface in full: GitLab has no `post_review` endpoint that takes a batch of line comments, and Jira nests the fields of a new issue under `fields`, which a pack body cannot express. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
