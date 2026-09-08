@@ -14,6 +14,8 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 
 ## Key principles
 
+**No mandatory state between runs.** Baton does not require carrying `state/` from one run to the next. Work results can be saved as files when needed; an ephemeral CI filesystem is not an architectural limitation.
+
 **The runner is deterministic, the agent is a step.** Baton is not an agent. It executes a DAG of steps in a predictable order, and "agency" is encapsulated in the `agent:` step (spawning a CLI agent) or in an `llm:` step with tools (the runner itself drives the tool loop through the API). This makes runs reproducible and lets the budget be tightly bounded.
 
 **Integrations live outside the binary.** Baton knows the protocol (HTTP, JSON, auth schemes, pagination) but not the services. GitLab, GitHub, Jira, Telegram, Confluence, Outline are described by API packs — YAML files in a separate repository, pinned by version and checksum. Packs implement small interfaces (`forge/v1`, `tracker/v1`, `notify/v1`), so one review scenario works against GitLab, GitHub and Gitea by changing a single input. A new integration is a new file, not a new release.

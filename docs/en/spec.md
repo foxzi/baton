@@ -95,7 +95,8 @@ budget:
 
 secrets: { ... }       # section 6
 apis:    { ... }       # section 7.4
-commands: { from: ./commands/go.yaml }
+commands:              # section 7.5
+  test: { argv: ["go", "test", "./..."] }
 
 steps: [ ... ]
 
@@ -890,7 +891,7 @@ Done: the `fix` profile fixes code and runs tests in a loop; the checklist in se
 
 ### M5 — Polish (1 week)
 
-Documentation: README, a schema reference (generated from the JSON Schema), three example scenarios (review, report, triage), `commands/go.yaml`, `commands/node.yaml`. Release build via goreleaser, binaries for linux/amd64 and linux/arm64.
+Documentation: README, a schema reference (generated from the JSON Schema), three example scenarios (review, report, triage). Release build via goreleaser, binaries for linux/amd64 and linux/arm64.
 
 ## 16. Open Questions
 
@@ -900,7 +901,7 @@ The items marked **Resolved** are closed; they stay here together with the decis
 2. **Deny-lists for Claude Code's built-in tools. Resolved:** the `PreToolUse` hook is not used. The built-in `Read`/`Glob`/`Grep`/`Write` stay with the CLI (the gateway serves no `fs.*` tools to the `claude-code` engine), and the step's policy is expressed as denials: `settings.json` carries a `permissions.deny` list with a `Read(<pattern>)`/`Edit(<pattern>)` pair per deny-list entry, while tool names (`Bash`, `BashOutput`, `KillShell`, `WebFetch`, `WebSearch`, `Task`, plus `Edit`/`Write`/`NotebookEdit` when `fs.write` is not `workspace`) go both into the settings and into `--disallowedTools`. Implementation: `internal/agent/claudecode/setup.go`, `internal/engine/agent.go`
 3. **Structured output via OpenRouter. Resolved:** `/models` is not queried. `openrouter` reports `structured_output: true` and `tools: true`, an arbitrary `openai_compatible` reports `structured_output: false` until the config says otherwise through `capabilities`. From there `provider.ResolveMode` picks the mode from the reported capabilities, and inaccurate metadata is overridden by an explicit `structured_mode: tool|prompt` on the `llm` step. There is no automatic downgrade after a model refuses: the refusal surfaces as a `schema`-class error. Implementation: `internal/provider/compat.go`, `internal/provider/structured.go`
 3a. **OpenAI's Responses API. Resolved:** v1 uses Chat Completions (`internal/provider/openai.go`), which is stable. The Responses API is newer and better for tools; reconsider if the Go SDK makes it the primary one
-4. **Where to store `state/`** when running from CI, where the filesystem is ephemeral. Option: `state` via `apis` (for example, a file in the repository or a key in a KV store). In v1 — document the limitation
-5. **Format of `commands.from`**: a separate file per stack, or a directory auto-wired by the presence of `go.mod`/`package.json`. In v1 — an explicit file
+4. **State between runs. Resolved:** Baton does not require `state/` to persist between runs. When needed, a scenario saves its work results as files. An ephemeral CI filesystem is a normal execution environment, not an architectural limitation; no mandatory external state store is needed.
+5. **Format of `commands.from`. Resolved:** `commands.from` is not implemented in v1. Commands and their arguments are declared explicitly inside the scenario's own `commands:` map (section 7.5, `internal/scenario/types.go`'s `Commands map[string]Command`); there is no external command set, no per-stack file, and no auto-wiring by the presence of `go.mod`/`package.json`. A scenario that wants the same commands in several places copies the block or is generated from a shared source outside Baton.
 6. **Scope of the interfaces. Resolved (with a review trigger):** `forge/v1` with five operations may turn out too small (are `get_pipeline_status`, `list_changes` needed?). Rule: an interface is extended only once an operation is needed by two scenarios on two forges; until then — direct pack operations. Reconsider after the first month of operation
 7. **jq in packs as logic outside the binary. Resolved:** the trade-off is accepted deliberately: transforms can have bugs and are tested worse than Go. Compensation — mandatory `examples/` for `implements` and contract tests in `baton-apis`. If transforms start growing toward conditional logic — that is a signal to move the operation into an interface with several simple packs, rather than making the jq more complex
