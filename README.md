@@ -157,7 +157,7 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 | M2 | Providers (Anthropic, OpenAI, OpenAI-compatible/OpenRouter), `llm` steps, structured output, `foreach`, cache, resume, `on_failure`, reports | done |
 | M3 | `fake` engine, Claude Code adapter, MCP gateway, `submit_result`, `commands`, profiles, audit log | done |
 | M3.5 | Packs from git with pinning and checksums, the `forge/v1`/`tracker/v1`/`notify/v1` interface registry, `baton apis` commands | in progress |
-| M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | in progress |
+| M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | done |
 | M5 | Documentation, example scenarios, goreleaser builds for linux/amd64 and linux/arm64 | in progress |
 
 ## Building

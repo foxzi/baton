@@ -834,21 +834,21 @@ mcp_servers:
 
 ## 13. Security Requirements (Acceptance Checklist)
 
-- [ ] No secret appears in `runs/`, logs, notifications, the audit log (test: a secret with a random value, grep the whole directory after the run)
-- [ ] A template with `{{ .secrets.x }}` in a prompt does not pass validation
-- [ ] The agent process has nothing in its environment beyond the allowlist (test: the fake engine writes `os.Environ()` to a file)
-- [ ] The agent cannot call a tool not declared for the step (test via fake: calling someone else's tool → `policy`)
-- [ ] `commands` do not interpret shell metacharacters (test: an argument `; echo pwned` is rejected by `pattern`, an argument `$(id)` with a permissive pattern is passed through literally)
-- [ ] `fetch` to a domain outside the allowlist → `policy`; a redirect to a domain outside the allowlist → `policy`
-- [ ] A path `../x` and `/etc/passwd` in command arguments and `fs` → `policy`
-- [ ] `.git/config` after workspace preparation contains no tokens
-- [ ] `http` with `POST` without `dedupe_key` is not retried on `transient`
-- [ ] `budget` is never retried regardless of `retry` settings
-- [ ] A pack with a `sha256` mismatch or without a version pin does not load
-- [ ] The `path`-authorization token is absent from URLs inside logs, `events.jsonl`, `tool-calls.jsonl` and HTTP error messages
-- [ ] `exchange` tokens do not end up in the step cache or in `runs/`
-- [ ] The agent cannot call a pack operation without `readonly: true`, even if it is listed in `tools.apis` (validation) and even with a direct call to the gateway (runtime → `policy`)
-- [ ] A jq transform with `env`, `input`, `$__loc__` is rejected when the pack is loaded
+- [x] No secret appears in `runs/`, logs, notifications, the audit log (test: a secret with a random value, grep the whole directory after the run)
+- [x] A template with `{{ .secrets.x }}` in a prompt does not pass validation
+- [x] The agent process has nothing in its environment beyond the allowlist (test: the fake engine writes `os.Environ()` to a file)
+- [x] The agent cannot call a tool not declared for the step (test via fake: calling someone else's tool → `policy`)
+- [x] `commands` do not interpret shell metacharacters (test: an argument `; echo pwned` is rejected by `pattern`, an argument `$(id)` with a permissive pattern is passed through literally)
+- [x] `fetch` to a domain outside the allowlist → `policy`; a redirect to a domain outside the allowlist → `policy`
+- [x] A path `../x` and `/etc/passwd` in command arguments and `fs` → `policy`
+- [x] `.git/config` after workspace preparation contains no tokens
+- [x] `http` with `POST` without `dedupe_key` is not retried on `transient`
+- [x] `budget` is never retried regardless of `retry` settings
+- [x] A pack with a `sha256` mismatch or without a version pin does not load
+- [x] The `path`-authorization token is absent from URLs inside logs, `events.jsonl`, `tool-calls.jsonl` and HTTP error messages
+- [x] `exchange` tokens do not end up in the step cache or in `runs/`
+- [x] The agent cannot call a pack operation without `readonly: true`, even if it is listed in `tools.apis` (validation) and even with a direct call to the gateway (runtime → `policy`)
+- [x] A jq transform with `env`, `input`, `$__loc__` is rejected when the pack is loaded
 
 ## 14. Testing
 
