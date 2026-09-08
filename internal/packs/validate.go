@@ -319,6 +319,10 @@ func (p *Pack) resolveParams(op *Op) []error {
 	}
 	slices.Sort(names)
 
+	// wires maps the name an argument is sent under to the argument that
+	// claimed it, so that two params cannot overwrite each other.
+	wires := make(map[string]string, len(op.Params))
+
 	for _, name := range names {
 		param := op.Params[name]
 		prefix := fmt.Sprintf("ops.%s.params.%s", op.name, name)
@@ -333,9 +337,19 @@ func (p *Pack) resolveParams(op *Op) []error {
 			if !placeholders[name] {
 				problems = append(problems, fmt.Errorf("%s: in: path but the operation path has no {%s}", prefix, name))
 			}
+			if param.Name != "" {
+				problems = append(problems, fmt.Errorf("%s: name: a path argument is named by its {%s} placeholder", prefix, name))
+			}
 		case InQuery, InBody, InForm:
 		default:
 			problems = append(problems, fmt.Errorf("%s: in: %q is not a placement", prefix, param.In))
+		}
+		if wire := param.Wire(name); param.In != InPath {
+			if other, taken := wires[wire]; taken {
+				problems = append(problems, fmt.Errorf("%s: name: %q is already sent for params.%s", prefix, wire, other))
+			} else {
+				wires[wire] = name
+			}
 		}
 		if param.Encode != EncodeUnset && param.Encode != EncodePath {
 			problems = append(problems, fmt.Errorf("%s: encode: only path is a value here", prefix))

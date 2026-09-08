@@ -83,12 +83,12 @@ func (o *Op) BindArgs(args map[string]any) (*BoundArgs, error) {
 				continue
 			}
 			if param.In == InQuery {
-				bound.Query[name] = text
+				bound.Query[param.Wire(name)] = text
 			} else {
-				bound.Form[name] = text
+				bound.Form[param.Wire(name)] = text
 			}
 		default:
-			bound.Body[name] = value
+			bound.Body[param.Wire(name)] = value
 		}
 	}
 	if err := errors.Join(problems...); err != nil {

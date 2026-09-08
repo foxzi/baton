@@ -275,6 +275,13 @@ func (o *Op) Document() string { return o.query }
 
 // Param declares one argument of an operation.
 type Param struct {
+	// Name is what the service calls the argument, when that differs from
+	// the name a scenario writes. It is what lets a pack implement an
+	// interface whose argument names are not the service's own: notify/v1
+	// says target, the Telegram API says chat_id. Path arguments cannot
+	// rename, since the path placeholder already names them.
+	Name string `yaml:"name"`
+
 	Pattern  string   `yaml:"pattern"`
 	MaxLen   int      `yaml:"max_len"`
 	Enum     []string `yaml:"enum"`
@@ -293,4 +300,13 @@ func (p *Param) IsRequired() bool {
 		return *p.Required
 	}
 	return p.Default == nil
+}
+
+// Wire returns the name the argument is sent under, which is the name the
+// scenario writes unless the pack renames it.
+func (p *Param) Wire(name string) string {
+	if p.Name != "" {
+		return p.Name
+	}
+	return name
 }

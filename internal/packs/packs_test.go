@@ -1380,3 +1380,104 @@ func TestExpandPath(t *testing.T) {
 		}
 	})
 }
+
+// renamedDemoYAML declares an operation whose arguments are sent under the
+// names the service uses, not the names a scenario writes.
+const renamedDemoYAML = `
+pack: demo
+version: 1
+ops:
+  send:
+    post: /messages
+    encode: json
+    params:
+      target: { name: chat_id, in: body }
+      text:   { in: body }
+      format: { name: parse_mode, in: query, pattern: '^\w+$', required: false }
+      tag:    { name: label, in: form, required: false }
+`
+
+// TestBindArgsRenamesArguments checks that name: decides the wire name of a
+// body, query and form argument, while the scenario keeps writing its own.
+func TestBindArgsRenamesArguments(t *testing.T) {
+	pack, err := Parse([]byte(renamedDemoYAML), "test.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	op, err := pack.Op("send")
+	if err != nil {
+		t.Fatalf("Op(send) error = %v", err)
+	}
+	bound, err := op.BindArgs(map[string]any{
+		"target": "-100123",
+		"text":   "hello",
+		"format": "HTML",
+		"tag":    "ops",
+	})
+	if err != nil {
+		t.Fatalf("BindArgs() error = %v", err)
+	}
+	if bound.Body["chat_id"] != "-100123" {
+		t.Errorf("Body = %#v, want chat_id", bound.Body)
+	}
+	if _, renamed := bound.Body["target"]; renamed {
+		t.Errorf("Body = %#v, want no target", bound.Body)
+	}
+	if bound.Body["text"] != "hello" {
+		t.Errorf("Body[text] = %#v, want the argument sent under its own name", bound.Body["text"])
+	}
+	if bound.Query["parse_mode"] != "HTML" {
+		t.Errorf("Query = %#v, want parse_mode", bound.Query)
+	}
+	if bound.Form["label"] != "ops" {
+		t.Errorf("Form = %#v, want label", bound.Form)
+	}
+}
+
+// TestParamNameRejected covers the two ways a rename is refused: on a path
+// argument, which the placeholder already names, and when two arguments
+// would be sent under one name.
+func TestParamNameRejected(t *testing.T) {
+	cases := map[string]struct {
+		yaml string
+		want string
+	}{
+		"path argument": {
+			yaml: `
+pack: demo
+version: 1
+ops:
+  get:
+    get: /items/{id}
+    params:
+      id: { name: item_id, pattern: '^\d+$' }
+`,
+			want: "{id} placeholder",
+		},
+		"collision": {
+			yaml: `
+pack: demo
+version: 1
+ops:
+  create:
+    post: /items
+    encode: json
+    params:
+      target: { name: chat_id, in: body }
+      chat_id: { in: body }
+`,
+			want: `already sent for params.chat_id`,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse([]byte(tc.yaml), "test.yaml")
+			if err == nil {
+				t.Fatalf("Parse() error = nil, want error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("Parse() error = %q, want mention of %q", err, tc.want)
+			}
+		})
+	}
+}
