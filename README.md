@@ -174,6 +174,9 @@ make docs       # regenerates docs/{en,ru}/schema.md from the scenario schema
 
 ## Running
 
+Starting from scratch? The [quickstart](docs/en/quickstart.md) walks through a
+first run, the files it leaves behind and the first model call.
+
 ```sh
 baton validate examples/weekly-report.yaml
 baton run examples/weekly-report.yaml \
@@ -203,11 +206,12 @@ Go, a single static binary. Dependencies: a YAML parser, expr-lang for expressio
 
 ## Documentation
 
+- [Quickstart](docs/en/quickstart.md) — build, first scenario, run artifacts, first model call
 - [Project overview](docs/en/overview.md) — the source this README is based on
 - [Specification for v1](docs/en/spec.md) — the authoritative technical document
 - [Scenario schema reference](docs/en/schema.md) — every field of the format, generated from the JSON Schema
 - [Specification review](docs/en/spec-review.md) — inconsistencies and gaps found while reading the spec
-- Russian originals: [обзор](docs/ru/overview.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [вычитка](docs/ru/spec-review.md), [README](docs/ru/README.md)
+- Russian originals: [быстрый старт](docs/ru/quickstart.md), [обзор](docs/ru/overview.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [вычитка](docs/ru/spec-review.md), [README](docs/ru/README.md)
 
 ## License
 

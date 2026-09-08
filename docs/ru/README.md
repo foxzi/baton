@@ -174,6 +174,9 @@ make docs       # пересобирает docs/{en,ru}/schema.md из схем�
 
 ## Запуск
 
+Если начинаете с нуля, [быстрый старт](quickstart.md) проводит через первый
+прогон, оставленные им файлы и первый вызов модели.
+
 ```sh
 baton validate examples/weekly-report.yaml
 baton run examples/weekly-report.yaml \
@@ -203,11 +206,12 @@ Go, один статический бинарник. Зависимости: п
 
 ## Документация
 
+- [Быстрый старт](quickstart.md) — сборка, первый сценарий, артефакты прогона, первый вызов модели
 - [Обзор проекта](overview.md) — источник, на основе которого написан этот README
 - [Техническое задание на v1](spec.md) — основной технический документ
 - [Справочник схемы сценария](schema.md) — все поля формата, генерируется из JSON Schema
 - [Вычитка ТЗ](spec-review.md) — расхождения и пробелы, найденные при чтении ТЗ
-- English versions: [project overview](../en/overview.md), [specification](../en/spec.md), [schema reference](../en/schema.md), [spec review](../en/spec-review.md)
+- English versions: [quickstart](../en/quickstart.md), [project overview](../en/overview.md), [specification](../en/spec.md), [schema reference](../en/schema.md), [spec review](../en/spec-review.md)
 - [Корневой README на английском](../../README.md)
 
 ## Лицензия
