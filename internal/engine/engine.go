@@ -368,6 +368,13 @@ func (e *Engine) attempt(ctx context.Context, step *scenario.Step, path string, 
 // retryFor decides whether a class is retried for this step. retry.attempts
 // counts retries after the first try, matching the defaults of section 9.1.
 func (e *Engine) retryFor(step *scenario.Step, class string) (retryPolicy, bool) {
+	// Classes the table of section 9.1 marks as never retried: no retry
+	// block turns them back on. Trying again cannot help — the money or the
+	// turns are already spent, the policy answer will not change, and a
+	// broken configuration stays broken.
+	if neverRetried[class] {
+		return retryPolicy{}, false
+	}
 	// An llm step owns its schema retry: retrying it here would start from
 	// a fresh conversation and lose the validation message (section 3.5).
 	if step.LLM != nil && class == ClassSchema {

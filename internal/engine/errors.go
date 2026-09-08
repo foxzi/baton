@@ -79,3 +79,11 @@ var defaultRetries = map[string]retryPolicy{
 	ClassTransient: {attempts: 2, backoff: 5 * time.Second},
 	ClassSchema:    {attempts: 1, backoff: 0},
 }
+
+// neverRetried are the classes the table of section 9.1 marks as never
+// retried, whatever the step's retry block says.
+var neverRetried = map[string]bool{
+	ClassBudget: true,
+	ClassPolicy: true,
+	ClassConfig: true,
+}

@@ -569,6 +569,40 @@ steps:
 	}
 }
 
+// 10a. A retry block does not turn the budget class back on: section 9.1
+// marks it as never retried (section 13, check 10).
+func TestRun_LLMRunBudgetIgnoresRetry(t *testing.T) {
+	fake := newLLMServer(t, submitCall(t, `{"answer":"ok"}`, `{"prompt_tokens":1000000,"completion_tokens":0}`))
+	eng, store, dir := newTestEngine(t, `
+name: llm
+budget:
+  usd: 1
+steps:
+  - id: ask
+    retry: { attempts: 3, backoff: 0s }
+    llm:
+      model: local/test-model
+      prompt: "hi"
+      schema: schemas/answer.json
+`, func(opts *Options) {
+		cfg := llmConfig(map[string]string{"local": fake.url})
+		cfg.Pricing = map[string]config.Price{"local/test-model": {InputPerMTok: 3}}
+		opts.Config = cfg
+	})
+	writeSchema(t, dir, "schemas/answer.json", llmSchema)
+
+	result, err := eng.Run(t.Context())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusFailed || result.Error.Class != ClassBudget {
+		t.Fatalf("status = %s, error = %+v", result.Status, result.Error)
+	}
+	if got := readRunState(t, store.Dir()).Steps["ask"].Attempts; got != 1 {
+		t.Errorf("attempts = %d, want 1: budget is never retried", got)
+	}
+}
+
 // 11. An unknown provider, a missing schema file and an empty prompt are all
 // configuration errors, reported before the provider is called.
 func TestRun_LLMConfigErrors(t *testing.T) {
