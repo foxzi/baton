@@ -160,15 +160,27 @@ func (s *Session) charge(tool Tool) error {
 	return nil
 }
 
+// The submit_result tool, named here so that `baton tools` can list what a
+// step's agent sees without opening a session.
+const (
+	SubmitToolName = "submit_result"
+
+	SubmitToolDescription = "Submit the step's result. The argument must be the result object itself, " +
+		"matching the step's schema. On a schema error the tool answers with the error and " +
+		"the step continues, so the result can be corrected and submitted again."
+
+	// SubmitToolSchema is what the tool advertises: the step's own result
+	// schema is checked on submission, not handed to the model here.
+	SubmitToolSchema = `{"type":"object"}`
+)
+
 // submitTool is how a step ends. Nothing else does: an agent that stops
 // talking without calling it has not delivered a result (spec section 3.6).
 func (s *Session) submitTool() Tool {
 	return Tool{
-		Name: "submit_result",
-		Description: "Submit the step's result. The argument must be the result object itself, " +
-			"matching the step's schema. On a schema error the tool answers with the error and " +
-			"the step continues, so the result can be corrected and submitted again.",
-		InputSchema: json.RawMessage(`{"type":"object"}`),
+		Name:        SubmitToolName,
+		Description: SubmitToolDescription,
+		InputSchema: json.RawMessage(SubmitToolSchema),
 		Handler: func(_ context.Context, args json.RawMessage) (any, error) {
 			if len(args) == 0 {
 				return nil, fmt.Errorf("result is missing")

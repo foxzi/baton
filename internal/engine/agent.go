@@ -37,10 +37,10 @@ type agentRuntime struct {
 // execAgent hands a prompt to an agent engine and returns the result the
 // agent submitted through the gateway (section 3.6).
 //
-// The tool set is the step's commands (section 7.5) and the readonly pack
-// operations its policy names (section 7.4.8). The fetch and state tools of
-// section 7.6 are not wired into the gateway yet, so a policy asking for
-// them gets nothing of the sort.
+// The tool set is the step's commands (section 7.5), the readonly pack
+// operations its policy names (section 7.4.8) and the fetch and state tools
+// of section 7.6. Third-party MCP servers are not proxied yet, so a policy
+// naming one gets nothing of the sort.
 func (e *Engine) execAgent(ctx context.Context, step *scenario.Step, path string) (expr.Step, *Error) {
 	call, stepErr := e.prepareAgent(step)
 	if stepErr != nil {
@@ -154,34 +154,10 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 		return expr.Step{}, stepErr
 	}
 
-	commands, err := tools.NewCommands(tools.CommandOptions{
-		Workspace: root,
-		Declared:  e.opts.Scenario.Commands,
-		Policy:    call.policy,
-		Secrets:   e.secretSource(),
-		// The commands of a step share half of its timeout (section 7.5).
-		Budget:         e.stepLimit(step) / 2,
-		MaxOutputBytes: call.policy.MaxResultBytes,
-	})
-	if err != nil {
-		return expr.Step{}, wrapf(ClassConfig, err, "step %s: agent.tools", step.ID)
-	}
-
-	apis, stepErr := e.agentAPIs(call)
+	toolSet, stepErr := e.agentToolSet(step, call, root)
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
-	state, stepErr := e.agentState(call)
-	if stepErr != nil {
-		return expr.Step{}, stepErr
-	}
-	fetch, stepErr := e.agentFetch(call)
-	if stepErr != nil {
-		return expr.Step{}, stepErr
-	}
-	toolSet := append(commands.Tools(), apis.Tools()...)
-	toolSet = append(toolSet, state.Tools()...)
-	toolSet = append(toolSet, fetch.Tools()...)
 
 	audit, closeAudit := e.auditWriter(path, dir)
 	defer closeAudit()
@@ -230,6 +206,43 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 		return expr.Step{}, e.agentFailure(ctx, step, err)
 	}
 	return e.agentResult(step, path, call, session, res)
+}
+
+// agentToolSet builds every tool the step's agent is given: its commands
+// (section 7.5), the readonly pack operations of its policy (section 7.4.8)
+// and the fetch and state tools of section 7.6. The gateway adds
+// submit_result itself.
+func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string) ([]gateway.Tool, *Error) {
+	commands, err := tools.NewCommands(tools.CommandOptions{
+		Workspace: root,
+		Declared:  e.opts.Scenario.Commands,
+		Policy:    call.policy,
+		Secrets:   e.secretSource(),
+		// The commands of a step share half of its timeout (section 7.5).
+		Budget:         e.stepLimit(step) / 2,
+		MaxOutputBytes: call.policy.MaxResultBytes,
+	})
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "step %s: agent.tools", step.ID)
+	}
+
+	apis, stepErr := e.agentAPIs(call)
+	if stepErr != nil {
+		return nil, stepErr
+	}
+	state, stepErr := e.agentState(call)
+	if stepErr != nil {
+		return nil, stepErr
+	}
+	fetch, stepErr := e.agentFetch(call)
+	if stepErr != nil {
+		return nil, stepErr
+	}
+
+	set := append(commands.Tools(), apis.Tools()...)
+	set = append(set, state.Tools()...)
+	set = append(set, fetch.Tools()...)
+	return set, nil
 }
 
 // agentAPIs builds the tools of the pack operations the step's policy names.
