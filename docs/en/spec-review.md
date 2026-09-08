@@ -94,6 +94,14 @@ If the format is validated by a regex (and it should be, since `run-id` can be o
 
 Decision at the time of implementation: the response status is available as `steps.<id>.http_status`, and `steps.<id>.status` stays the status of the step. `headers` (the first value of each header) and `body` were added as declared.
 
+## Additions beyond the spec
+
+### 15. The `file:` step is not required by the spec
+
+Neither `docs/ru/spec.md` nor `overview.md` list `file` among the step types (§1/§3.2). It was added so that scenarios reading and writing files inside the workspace do not have to shell out to `cat`, `tee` or `find` from a `run` step.
+
+Decision at the time of implementation: `file:` with `read`, `write`, `append` and `glob` is an addition on top of ТЗ v1, not a gap in it. It is workspace-scoped by design: an absolute path, a `..` segment or a symlink leaving the workspace is refused with the `config` error class.
+
 ## Technical risks
 
 ### R1. Static reference checking does not come free with expr-lang

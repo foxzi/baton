@@ -9,7 +9,7 @@ Tasks shaped like *collect data with a script → hand it to a model for interpr
 ## Key features
 
 - **Scenarios are YAML in git.** Typed inputs with defaults and patterns, steps with explicit dependencies, `when:` conditions in expr-lang, static reference checking — `baton validate` reports every problem before anything runs, and `--dry-run` prints the plan.
-- **Eight step types.** `run`, `http`, `llm`, `agent`, `foreach`, `until`, `switch`, `assert` — see [the table below](#step-types).
+- **Nine step types.** `run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `assert` — see [the table below](#step-types).
 - **Model calls with a contract.** Anthropic, OpenAI and any OpenAI-compatible endpoint (OpenRouter included). Every `llm` step returns JSON validated against a schema, with a fallback model chain and the structured-output mode negotiated per provider.
 - **Coding agents as one step.** Claude Code in v1, driven through a built-in MCP gateway: the runner prepares the workspace, serves exactly the tools the step's profile allows and takes the answer from `submit_result`.
 - **Capability instead of access.** No shell, no `curl`, no ambient network. An agent gets declared argv commands with validated arguments, workspace-scoped file writes with path deny-lists, git history and local commits, `fetch` on a domain allowlist, read-only pack operations, cross-run `state` and proxied third-party MCP servers. The `review`, `fix` and `research` profiles pick the set.
@@ -93,6 +93,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 | `agent` | Spawn a CLI agent (Claude Code in v1) with skills, tools and MCP servers |
 | `foreach` | Process a list in parallel, with a parallelism cap and partial-success control |
 | `until` | A bounded loop with an exit condition, e.g. "keep fixing until the tests pass" |
+| `file` | Reading, writing and listing files in the workspace |
 | `switch` | Branch on the value of an expression: one step per case, sugar over `when:` |
 | `assert` | Fail the run deliberately with a distinct exit code, to block a merge in CI |
 
@@ -114,7 +115,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 ## Status
 
-**Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until` and `switch` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
+**Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until`, `file` and `switch` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
 
 **Outstanding.** The `baton-apis` repository itself: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values. Release builds through goreleaser are not done yet.
 
