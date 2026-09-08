@@ -40,8 +40,9 @@ not used at run time.
 
 apis validate loads each pack and, for every operation with a matching
 examples/<op>.json, replays the envelope and transform on that recorded
-response. Interface conformance is not checked yet: the interface registry
-does not exist, so implements is only checked for shape.
+response. An operation that declares implements is additionally checked
+against the interface registry: argument names and the shape of the
+transformed example.
 
 apis call runs one operation of one apis entry of the given scenario, so that
 a pack can be exercised without writing a step for it. base_url, auth secret
@@ -162,18 +163,10 @@ func apisValidateCmd(args []string) int {
 	}
 
 	failed := false
-	sawImplements := false
 	for _, path := range positional {
-		ok, implements := validatePack(path)
-		if !ok {
+		if !validatePack(path) {
 			failed = true
 		}
-		if implements {
-			sawImplements = true
-		}
-	}
-	if sawImplements {
-		fmt.Fprintln(os.Stderr, "baton: note: implements is only checked for shape; interface conformance needs the interface registry")
 	}
 	if failed {
 		return exitcode.Config
@@ -182,22 +175,22 @@ func apisValidateCmd(args []string) int {
 }
 
 // validatePack validates one pack path. It reports whether the pack and all
-// of its examples checked out, and whether any operation declares implements.
-func validatePack(path string) (ok, implements bool) {
+// of its examples checked out.
+func validatePack(path string) (ok bool) {
 	packPath, examplesDir, err := resolvePackPath(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
-		return false, false
+		return false
 	}
 	data, err := os.ReadFile(packPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
-		return false, false
+		return false
 	}
 	pack, err := packs.Parse(data, packPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
-		return false, false
+		return false
 	}
 
 	ok = true
@@ -209,9 +202,6 @@ func validatePack(path string) (ok, implements bool) {
 			fmt.Fprintf(os.Stderr, "baton: %s: %s: %v\n", packPath, name, err)
 			ok = false
 			continue
-		}
-		if op.Implements != "" {
-			implements = true
 		}
 		examplePath := filepath.Join(examplesDir, name+".json")
 		raw, err := os.ReadFile(examplePath)
@@ -242,11 +232,15 @@ func validatePack(path string) (ok, implements bool) {
 		checked++
 		fmt.Printf("ok  %s.%s  %s\n", pack.Pack, name, examplePath)
 	}
+	if err := pack.CheckImplements(); err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %s: %v\n", packPath, err)
+		ok = false
+	}
 	if ok {
 		fmt.Printf("%s: ok (%d ops, %d examples checked, %d without examples)\n",
 			packPath, len(names), checked, missing)
 	}
-	return ok, implements
+	return ok
 }
 
 // resolvePackPath resolves a positional apis-validate argument to the pack

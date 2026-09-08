@@ -258,6 +258,92 @@ func TestApisValidateDirectoryMissingPackYAML(t *testing.T) {
 	}
 }
 
+// forgeGetChangeImplementsPack is a get_change operation that fully
+// conforms to forge/v1: it names its params project and id, and its
+// transform yields a result the interface's schema accepts.
+const forgeGetChangeImplementsPack = `pack: demo
+version: 1
+ops:
+  get_change:
+    get: /projects/{project}/changes/{id}
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      id: { pattern: '^\d+$' }
+    transform: |
+      { id, title, files: [ .changes[] | { path: .new_path } ] }
+    implements: forge/v1.get_change
+`
+
+// forgeGetChangeImplementsExample is a recorded response that transforms
+// into a value forgeGetChangeImplementsPack's implements declaration
+// accepts.
+const forgeGetChangeImplementsExample = `{
+	"id": 7,
+	"title": "Speed things up",
+	"changes": [ { "new_path": "main.go" } ]
+}`
+
+func TestApisValidateImplementsOK(t *testing.T) {
+	dir := t.TempDir()
+	packPath := filepath.Join(dir, "demo.yaml")
+	if err := os.WriteFile(packPath, []byte(forgeGetChangeImplementsPack), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	examplesDir := filepath.Join(dir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatalf("mkdir examples: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(examplesDir, "get_change.json"), []byte(forgeGetChangeImplementsExample), 0o644); err != nil {
+		t.Fatalf("write example: %v", err)
+	}
+
+	var code int
+	captureOutput(t, func() {
+		code = apisCmd([]string{"validate", packPath})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.OK)
+	}
+}
+
+func TestApisValidateImplementsWrongParamName(t *testing.T) {
+	dir := t.TempDir()
+	pack := `pack: demo
+version: 1
+ops:
+  get_change:
+    get: /projects/{project}/changes/{iid}
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      iid: { pattern: '^\d+$' }
+    transform: |
+      { id, title, files: [ .changes[] | { path: .new_path } ] }
+    implements: forge/v1.get_change
+`
+	packPath := filepath.Join(dir, "demo.yaml")
+	if err := os.WriteFile(packPath, []byte(pack), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	examplesDir := filepath.Join(dir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatalf("mkdir examples: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(examplesDir, "get_change.json"), []byte(forgeGetChangeImplementsExample), 0o644); err != nil {
+		t.Fatalf("write example: %v", err)
+	}
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = apisCmd([]string{"validate", packPath})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+	}
+	if !strings.Contains(stderr, `interface argument "id" is missing`) {
+		t.Fatalf("stderr does not report the missing interface argument: %q", stderr)
+	}
+}
+
 func TestApisValidateTransformFails(t *testing.T) {
 	dir := t.TempDir()
 	pack := `pack: demo
