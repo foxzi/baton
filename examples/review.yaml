@@ -1,0 +1,110 @@
+version: 1
+name: review
+description: >
+  Reviews the changes of a merge request with an agent and posts the findings
+  as a comment. Runs from CI in a checkout of the merge request's branch: the
+  agent reads that working copy through the gateway's fs and git tools and
+  never sees the forge token.
+
+inputs:
+  project:
+    type: string
+    # Both the numeric id and the namespace/path form are accepted; the pack
+    # percent-encodes the value as a single path segment.
+    pattern: '^[\w./-]+$'
+    required: true
+  mr:
+    type: string
+    pattern: '^\d+$'
+    required: true
+  api_url:
+    type: string
+    default: https://gitlab.com/api/v4
+    pattern: '^https?://[\w.:/-]+$'
+
+budget:
+  usd: 2
+  time: 20m
+
+secrets:
+  # The forge token belongs to the runner: it reaches the http steps and the
+  # forge.get_change tool, never the agent's process.
+  gitlab_rw: { from: env, key: GITLAB_TOKEN }
+  # The engine talks to its own provider, so it needs its own credential
+  # (spec section 8.2).
+  anthropic: { from: env, key: ANTHROPIC_API_KEY }
+
+apis:
+  forge:
+    pack: gitlab
+    from: ../apis/
+    config: { base_url: "{{ .inputs.api_url }}" }
+    auth: { secret: gitlab_rw }
+    timeout: 20s
+
+steps:
+  - id: changes
+    http:
+      op: forge.get_change
+      args:
+        project: "{{ .inputs.project }}"
+        iid: "{{ .inputs.mr }}"
+
+  - id: review
+    needs: [changes]
+    agent:
+      engine: claude-code
+      model: claude-sonnet-4-6
+      prompt: prompts/review.md
+      with:
+        project: "{{ .inputs.project }}"
+        iid: "{{ .inputs.mr }}"
+        title: "{{ .steps.changes.result.title }}"
+        base: "{{ .steps.changes.result.base }}"
+        head: "{{ .steps.changes.result.head }}"
+        files: "{{ range .steps.changes.result.files }}- {{ .path }}\n{{ end }}"
+      # review is the read-only profile: fs.read, git.read, no writes, no
+      # commands (spec section 7.2).
+      profile: review
+      tools:
+        # The one operation of the pack the agent may call itself. It is
+        # readonly, so the runner can serve it as a tool.
+        apis: [forge.get_change]
+      limits:
+        max_tool_calls: 80
+      max_turns: 25
+      budget_usd: 1.5
+      env:
+        ANTHROPIC_API_KEY: { secret: anthropic }
+      result: schemas/review.json
+
+  - id: publish
+    needs: [review]
+    http:
+      op: forge.post_comment
+      args:
+        project: "{{ .inputs.project }}"
+        iid: "{{ .inputs.mr }}"
+        body: |
+          **baton review of `{{ .steps.changes.result.head }}`** — {{ .steps.review.result.verdict }}
+
+          {{ .steps.review.result.summary }}
+          {{ range .steps.review.result.findings }}
+          - `{{ .file }}{{ if .line }}:{{ .line }}{{ end }}` **{{ .severity }}** {{ .message }}{{ end }}
+    dedupe_key: "review-{{ .inputs.project }}-{{ .inputs.mr }}-{{ .steps.changes.result.head }}"
+
+  - id: posted
+    needs: [publish]
+    assert:
+      condition: 'steps.publish.result.url != ""'
+      message: "the review was posted but the comment carries no url"
+
+on_failure:
+  - id: note
+    http:
+      op: forge.post_comment
+      args:
+        project: "{{ .inputs.project }}"
+        iid: "{{ .inputs.mr }}"
+        body: "baton could not finish the review: {{ .run.failed_step }} failed with {{ .run.error.class }}."
+    dedupe_key: "review-failed-{{ .inputs.project }}-{{ .inputs.mr }}-{{ .run.id }}"

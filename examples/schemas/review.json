@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "findings"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "description": "approve when nothing has to change before merging",
+      "enum": ["approve", "comment", "block"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "What the change does and whether it is safe to merge",
+      "maxLength": 600
+    },
+    "findings": {
+      "type": "array",
+      "description": "One entry per problem worth a reviewer's attention",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "severity", "message"],
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Path as it appears in the change"
+          },
+          "line": {
+            "type": "integer",
+            "description": "Line in the new file; omitted when the finding is about the file as a whole",
+            "minimum": 1
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["bug", "risk", "nit"]
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      }
+    }
+  }
+}
