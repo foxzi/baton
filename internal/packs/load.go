@@ -43,6 +43,9 @@ func Load(src Source) (*Pack, error) {
 	if pack.Pack != src.Pack {
 		return nil, fmt.Errorf("%s: declares pack %q but was loaded as %q", path, pack.Pack, src.Pack)
 	}
+	if err := pack.CheckImplements(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return pack, nil
 }
 
