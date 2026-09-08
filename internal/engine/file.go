@@ -238,7 +238,7 @@ func checkFilePath(value string) (string, error) {
 	}
 	for _, segment := range strings.Split(value, "/") {
 		if segment == ".." {
-			return "", errors.New("must not contain ..")
+			return "", errors.New(`must not contain a ".." segment`)
 		}
 	}
 	cleaned := path.Clean(value)
