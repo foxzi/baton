@@ -15,6 +15,7 @@ import (
 	"github.com/foxzi/baton/internal/agent/fake"
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/gateway"
+	"github.com/foxzi/baton/internal/httpx"
 	"github.com/foxzi/baton/internal/jsonschema"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
@@ -36,9 +37,10 @@ type agentRuntime struct {
 // execAgent hands a prompt to an agent engine and returns the result the
 // agent submitted through the gateway (section 3.6).
 //
-// The tool set is the step's commands (section 7.5); the filesystem, git,
-// api, fetch and state tools of sections 7.4 and 7.6 are not wired into the
-// gateway yet, so a policy asking for them gets the commands only.
+// The tool set is the step's commands (section 7.5) and the readonly pack
+// operations its policy names (section 7.4.8). The fetch and state tools of
+// section 7.6 are not wired into the gateway yet, so a policy asking for
+// them gets nothing of the sort.
 func (e *Engine) execAgent(ctx context.Context, step *scenario.Step, path string) (expr.Step, *Error) {
 	call, stepErr := e.prepareAgent(step)
 	if stepErr != nil {
@@ -165,6 +167,12 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 		return expr.Step{}, wrapf(ClassConfig, err, "step %s: agent.tools", step.ID)
 	}
 
+	apis, stepErr := e.agentAPIs(call)
+	if stepErr != nil {
+		return expr.Step{}, stepErr
+	}
+	toolSet := append(commands.Tools(), apis.Tools()...)
+
 	audit, closeAudit := e.auditWriter(path, dir)
 	defer closeAudit()
 
@@ -174,7 +182,7 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 	}
 	session, err := gw.Open(gateway.StepOptions{
 		StepID:         path,
-		Tools:          commands.Tools(),
+		Tools:          toolSet,
 		Result:         call.schema,
 		MaxToolCalls:   call.policy.MaxToolCalls,
 		MaxResultBytes: call.policy.MaxResultBytes,
@@ -192,7 +200,7 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 
 	e.emit(Event{Type: "agent_started", Step: step.ID, Message: call.engine, Fields: map[string]any{
 		"model": step.Agent.Model,
-		"tools": len(commands.Tools()),
+		"tools": len(toolSet),
 	}})
 
 	res, err := engine.Run(ctx, agent.Request{
@@ -212,6 +220,27 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 		return expr.Step{}, e.agentFailure(ctx, step, err)
 	}
 	return e.agentResult(step, path, call, session, res)
+}
+
+// agentAPIs builds the tools of the pack operations the step's policy names.
+// Resolving them here means an operation the scenario cannot reach is a
+// configuration error before the agent starts, not a failed tool call.
+func (e *Engine) agentAPIs(call *agentCall) (*tools.APIs, *Error) {
+	set, err := tools.NewAPIs(tools.APIOptions{
+		Policy: call.policy,
+		Client: e.httpClient(),
+		Resolve: func(name string) (*httpx.API, error) {
+			api, stepErr := e.api(name, "")
+			if stepErr != nil {
+				return nil, stepErr
+			}
+			return api, nil
+		},
+	})
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "agent.tools.apis")
+	}
+	return set, nil
 }
 
 // agentResult validates the submitted result and records what the step

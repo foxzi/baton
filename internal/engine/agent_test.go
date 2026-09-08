@@ -2,6 +2,9 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -420,5 +423,140 @@ calls:
 	})
 	if err != nil {
 		t.Fatalf("walk run directory: %v", err)
+	}
+}
+
+// authPack mirrors gitlabLikePack but declares header authorisation, so the
+// runner has a credential to inject on the agent's behalf.
+const authPack = `pack: gitlab
+version: 1
+auth: { kind: header, name: PRIVATE-TOKEN }
+config:
+  base_url: {}
+ops:
+  get_project:
+    get: /projects/{id}
+    readonly: true
+    params:
+      id: { pattern: '^\d+$' }
+  create_note:
+    post: /projects/{id}/notes
+    params:
+      id: { pattern: '^\d+$' }
+      body: {}
+    encode: json
+`
+
+// 8. The readonly pack operations the step's policy names reach the agent as
+// tools, and the runner performs the call with the credential the agent
+// never sees (sections 7.4.1 and 7.4.8).
+func TestAgent_APIToolCall(t *testing.T) {
+	var gotPath, gotToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotToken = r.Header.Get("PRIVATE-TOKEN")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":7,"name":"demo"}`))
+	}))
+	defer server.Close()
+
+	yamlText := fmt.Sprintf(`
+version: 1
+name: agent-apis
+secrets:
+  forge: { from: env, key: BATON_TEST_FORGE }
+apis:
+  gitlab:
+    pack: gitlab
+    from: ./apis/
+    auth: { secret: forge }
+    config:
+      base_url: %q
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      tools:
+        apis: [gitlab.get_project]
+      result: result.json
+`, server.URL)
+	script := `
+calls:
+  - tool: gitlab.get_project
+    args: { id: "7" }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`
+	t.Setenv("BATON_TEST_FORGE", "s3cr3t")
+	eng, store, dir := newTestEngine(t, yamlText, func(o *Options) {
+		s, err := secrets.Resolve(o.Scenario.Secrets, filepath.Dir(o.Scenario.Path))
+		if err != nil {
+			t.Fatalf("secrets.Resolve: %v", err)
+		}
+		o.Secrets = s
+	})
+	writeAgentFiles(t, dir, agentSchema, script)
+	writePack(t, dir, "gitlab", authPack)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
+	}
+	if gotPath != "/projects/7" {
+		t.Errorf("server saw path %q, want /projects/7", gotPath)
+	}
+	if gotToken != "s3cr3t" {
+		t.Errorf("server saw PRIVATE-TOKEN %q, want the runner to inject the credential", gotToken)
+	}
+
+	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	if !strings.Contains(audit, `"tool":"gitlab.get_project"`) {
+		t.Errorf("the api call is not in the audit log:\n%s", audit)
+	}
+	if strings.Contains(audit, "s3cr3t") {
+		t.Errorf("the audit log leaks the credential:\n%s", audit)
+	}
+}
+
+// 9. A step that names an operation the pack marks as writing is a
+// configuration error: only readonly operations may become tools.
+func TestAgent_APIToolMustBeReadonly(t *testing.T) {
+	yamlText := `
+version: 1
+name: agent-apis-write
+apis:
+  gitlab:
+    pack: gitlab
+    from: ./apis/
+    config:
+      base_url: "http://example.invalid"
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      tools:
+        apis: [gitlab.create_note]
+      result: result.json
+`
+	eng, _, dir := newTestEngine(t, yamlText, nil)
+	writeAgentFiles(t, dir, agentSchema, "calls: []\n")
+	writePack(t, dir, "gitlab", gitlabLikePack)
+
+	result, _ := eng.Run(context.Background())
+	if result.Status != runstore.StatusFailed {
+		t.Fatalf("Status = %q, want failed", result.Status)
+	}
+	if result.Error == nil || result.Error.Class != ClassConfig {
+		t.Fatalf("error = %+v, want class %q", result.Error, ClassConfig)
+	}
+	if !strings.Contains(result.Error.Message, "agent.tools") {
+		t.Errorf("message = %q, want it to point at agent.tools", result.Error.Message)
 	}
 }
