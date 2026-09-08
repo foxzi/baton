@@ -25,6 +25,7 @@ Commands:
   resume     Continue a failed run at the step that failed
   runs       List runs, show one, print step logs
   tools      Print the tools an agent step would be given
+  apis       Generate a pack skeleton from an OpenAPI document
   schema     Print the JSON Schema of the scenario format
   version    Print the build identity
   help       Print this message
@@ -69,6 +70,8 @@ func run(args []string) int {
 		return runsCmd(args[1:])
 	case "tools":
 		return toolsCmd(args[1:])
+	case "apis":
+		return apisCmd(args[1:])
 	case "schema":
 		return schemaCmd(args[1:])
 	case "version", "--version", "-v":
