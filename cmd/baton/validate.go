@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/exitcode"
 	"github.com/foxzi/baton/internal/scenario"
 )
@@ -36,6 +37,12 @@ func validateCmd(args []string) int {
 	}
 
 	result := scenario.Validate(scn)
+	// The pricing table lives in the global configuration, so a model with
+	// no price can only be reported when that configuration loads. A broken
+	// one is the business of `baton run`, not of a scenario check.
+	if cfg, err := config.Load(); err == nil {
+		result.Warnings = append(result.Warnings, pricingWarnings(scn, cfg)...)
+	}
 	for _, warning := range result.Warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
 	}

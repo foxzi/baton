@@ -152,9 +152,6 @@ func execute(req runRequest) int {
 	}
 
 	result := scenario.Validate(scn)
-	for _, warning := range result.Warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
-	}
 	if !result.OK() {
 		for _, problem := range result.Errors {
 			fmt.Fprintf(os.Stderr, "error: %s\n", problem)
@@ -177,6 +174,13 @@ func execute(req runRequest) int {
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config
+	}
+
+	// A model with no price is a warning of the pair scenario+configuration,
+	// so it joins the scenario warnings once the configuration is loaded.
+	result.Warnings = append(result.Warnings, pricingWarnings(scn, cfg)...)
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
 	}
 
 	baseDir := filepath.Dir(path)
