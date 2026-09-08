@@ -117,7 +117,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 **Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until`, `file` and `switch` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
 
-**Outstanding.** The `baton-apis` repository itself: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values. Release builds through goreleaser are not done yet.
+**Outstanding.** The pack set in `apis/`: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
@@ -126,9 +126,9 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 | M1 | Core: parsing, validation, secrets, expressions, templates, `run`, `assert`, run directory, HTTP layer with auth schemes and pagination, local packs | done |
 | M2 | Providers (Anthropic, OpenAI, OpenAI-compatible/OpenRouter), `llm` steps, structured output, `foreach`, cache, resume, `on_failure`, reports | done |
 | M3 | `fake` engine, Claude Code adapter, MCP gateway, `submit_result`, `commands`, profiles, audit log | done |
-| M3.5 | Packs from git with pinning and checksums, the `forge/v1`/`tracker/v1`/`notify/v1` interface registry, `baton apis` commands | in progress |
+| M3.5 | Packs from git with pinning and checksums, the `forge/v1`/`tracker/v1`/`notify/v1` interface registry, `baton apis` commands, the packs themselves in `apis/` | in progress |
 | M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | done |
-| M5 | Documentation, example scenarios, goreleaser builds for linux/amd64 and linux/arm64 | in progress |
+| M5 | Documentation, example scenarios, goreleaser builds for linux/amd64 and linux/arm64 | done |
 
 ## Building
 

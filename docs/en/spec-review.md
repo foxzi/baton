@@ -102,6 +102,12 @@ Neither `docs/ru/spec.md` nor `overview.md` list `file` among the step types (§
 
 Decision at the time of implementation: `file:` with `read`, `write`, `append` and `glob` is an addition on top of ТЗ v1, not a gap in it. It is workspace-scoped by design: an absolute path, a `..` segment or a symlink leaving the workspace is refused with the `config` error class.
 
+### 16. The first-party packs live in this repository
+
+Line 18 and §15 of `docs/ru/spec.md` place the starter packs -- `gitlab`, `github`, `gitea` under `forge/v1`, `jira` under `tracker/v1`, `telegram` and `slack` under `notify/v1` -- in a separate `baton-apis` repository, with their contract tests in that repository's CI (§13).
+
+Decision: the separate repository is not created. The packs live in `apis/` inside this repository and a scenario names them as `from: ./apis/`, which needs no `sha256`. Their contract tests -- `baton apis validate` replaying the recorded `examples/<op>.json` through the envelope, the transform and the interface schema -- run in this repository's CI, next to the Go tests. Nothing changes in the pack format or the loader: a git source with a version pin and a checksum stays implemented and remains the way to consume a third-party pack. The trade-off accepted here is that a pack fix now needs a release of this repository rather than a tag of a data-only one.
+
 ## Technical risks
 
 ### R1. Static reference checking does not come free with expr-lang
@@ -125,6 +131,6 @@ The version installed in the development environment is Claude Code 2.1.263.
 
 ### R3. Project name
 
-Open question #1 proposes settling the name question by M5. But the name is part of the module path, the binary name, the `~/.config/baton/` path, the `BATON_*` environment variable prefix, and the name of the packs repository `baton-apis`. Renaming after M1 means edits in hundreds of places plus broken config compatibility for early users.
+Open question #1 proposes settling the name question by M5. But the name is part of the module path, the binary name, the `~/.config/baton/` path, and the `BATON_*` environment variable prefix. Renaming after M1 means edits in hundreds of places plus broken config compatibility for early users.
 
 Decision at the time of repository initialisation: stay with `baton`, module path `github.com/foxzi/baton`. The question is considered open until M5, as in the spec, but the cost of deferring it grows with every stage.
