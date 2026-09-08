@@ -151,7 +151,7 @@ on_failure:
 | M1 | Ядро: парсинг, валидация, секреты, выражения, шаблоны, `run`, `assert`, каталог прогона, HTTP-слой со схемами авторизации и пагинацией, локальные паки | готово |
 | M2 | Провайдеры (Anthropic, OpenAI, OpenAI-совместимые/OpenRouter), шаги `llm`, структурированный вывод, `foreach`, кеш, resume, `on_failure`, отчёты | готово |
 | M3 | Движок `fake`, адаптер Claude Code, шлюз MCP, `submit_result`, `commands`, профили, аудит-лог | в работе |
-| M3.5 | Паки из git с пинингом и чексуммами, реестр интерфейсов `forge/v1`/`tracker/v1`/`notify/v1`, команды `baton apis` | не начато |
+| M3.5 | Паки из git с пинингом и чексуммами, реестр интерфейсов `forge/v1`/`tracker/v1`/`notify/v1`, команды `baton apis` | в работе |
 | M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, сторонние MCP, обработка сигналов | не начато |
 | M5 | Документация, примеры сценариев, сборки goreleaser для linux/amd64 и linux/arm64 | не начато |
 
