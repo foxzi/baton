@@ -1,6 +1,6 @@
 # Baton — project overview
 
-> Working title. The word `baton` is already taken by several projects in the agentic-automation niche; the final name is still open (`segue` is the leading alternative).
+> The name is settled: `baton`. Several other projects in the agentic-automation niche use the word too; the binary, the `~/.config/baton` config directory and the `github.com/foxzi/baton` module path stay as they are.
 
 ## In one sentence
 

@@ -894,7 +894,7 @@ Documentation: README, a schema reference (generated from the JSON Schema), thre
 
 ## 16. Open Questions
 
-1. **Name.** `baton` is taken in this niche by several projects; the candidate replacement is `segue`. Decide by M5, to avoid renaming the binary and config after release
+1. **Name. Resolved:** the name stays `baton`, even though the word is taken in this niche by several projects. The binary, the `~/.config/baton` config directory and the `github.com/foxzi/baton` module path are final; `segue` is dropped
 2. **Deny-lists for Claude Code's built-in tools.** The PreToolUse hook works but is a fragile mechanism. Alternative — expose `fs` through the gateway and forbid the built-in `Read`/`Grep`. Decide in M3 based on experiment results: if the hook proves unreliable, switch to the gateway
 3. **Structured output via OpenRouter.** Support for `response_format` depends on the underlying model, and the `/models` data is not always accurate. Decide in M2: trust the metadata, or always start with the tool-wrapper for `openrouter` and move up to native mode only on an explicit `structured_mode: native`
 3a. **OpenAI's Responses API.** Chat Completions is stable, the Responses API is newer and better for tools. In v1 — Chat Completions; reconsider if the Go SDK makes Responses the primary one

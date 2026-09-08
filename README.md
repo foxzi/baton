@@ -1,6 +1,6 @@
 # Baton
 
-> Working title. `baton` is already taken by several projects in the agentic-automation niche; the final name is still open (`segue` is the leading alternative).
+> The name is settled: `baton`. Several other projects in the agentic-automation niche use the word too; the binary, the `~/.config/baton` config directory and the `github.com/foxzi/baton` module path stay as they are.
 
 A headless runner for YAML scenarios that interleave **deterministic** steps (scripts, HTTP calls) with **non-deterministic** ones (LLM calls, coding agents). One binary, one run per invocation, no UI and no server. Think n8n for teams that would rather keep their workflows as YAML in git and trigger them from CI or cron.
 
