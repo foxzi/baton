@@ -32,10 +32,15 @@ go.work.sum
 /dist/
 /bin/
 
-# Run state produced by the runner
-/runs/
+# Run state produced by the runner. runs/ is unanchored because the run
+# directory lands next to the scenario, not at the repository root; cache/
+# and state/ stay anchored so that a package named internal/cache or
+# internal/state is not swallowed with them.
+runs/
 /cache/
 /state/
+examples/cache/
+examples/state/
 
 # Local configuration overrides
 /baton.yaml
