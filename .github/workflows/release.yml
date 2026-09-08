@@ -8,7 +8,24 @@ permissions:
   contents: write
 
 jobs:
+  # A tag publishes binaries, so it runs the same checks as a branch first.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: vet
+        run: go vet ./...
+      - name: docs
+        run: make docs-check
+      - name: test
+        run: go test -race ./...
+
   goreleaser:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
