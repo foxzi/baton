@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["headline", "projects"],
+  "properties": {
+    "headline": {
+      "type": "string",
+      "description": "One sentence about the week across all projects",
+      "maxLength": 200
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["project", "merged", "highlight"],
+        "properties": {
+          "project": { "type": "string" },
+          "merged": { "type": "integer", "minimum": 0 },
+          "highlight": { "type": "string", "maxLength": 300 }
+        }
+      }
+    }
+  }
+}

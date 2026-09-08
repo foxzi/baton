@@ -1,0 +1,96 @@
+version: 1
+name: weekly-report
+description: >
+  Collects the merge requests several projects merged since a date, asks a
+  model for a digest and sends it to a notification channel. Made for cron:
+  the http and llm steps are cached, so a repeated run of the same week
+  spends no tokens. Swapping the provider is one line: defaults.model.
+
+inputs:
+  projects:
+    type: list
+    required: true
+  since:
+    type: string
+    # An ISO date or timestamp, as GitLab expects in updated_after.
+    pattern: '^\d{4}-\d{2}-\d{2}'
+    required: true
+  api_url:
+    type: string
+    default: https://gitlab.com/api/v4
+    pattern: '^https?://[\w.:/-]+$'
+
+defaults:
+  # The only line that changes between anthropic/…, openai/… and
+  # openrouter/…; the provider itself is configured globally (section 8.3).
+  model: openrouter/anthropic/claude-3.5-sonnet
+  timeout: 60s
+
+budget:
+  usd: 0.5
+  time: 10m
+
+secrets:
+  gitlab_ro: { from: env, key: GITLAB_TOKEN }
+
+apis:
+  forge:
+    pack: gitlab
+    from: ../apis/
+    config: { base_url: "{{ .inputs.api_url }}" }
+    auth: { secret: gitlab_ro }
+    timeout: 30s
+
+steps:
+  - id: merged
+    foreach:
+      items: "{{ .inputs.projects }}"
+      as: project
+      max_parallel: 3
+      # A project that cannot be read does not lose the whole report, but
+      # more than a third of them failing means the report is not worth
+      # sending.
+      on_item_error: continue
+      min_success: 0.67
+      step:
+        cache: true
+        http:
+          op: forge.list_merge_requests
+          args:
+            project: "{{ .project }}"
+            state: merged
+            updated_after: "{{ .inputs.since }}"
+
+  - id: digest
+    needs: [merged]
+    cache: true
+    llm:
+      system: You write short engineering status reports. Be factual.
+      prompt: |
+        Merge requests merged since {{ .inputs.since }} in the projects
+        {{ join ", " .inputs.projects }}, in the same order:
+
+        {{ toJSON .steps.merged.items }}
+
+        Write one project entry per project that was read successfully:
+        the number of merged merge requests and the single most notable
+        change, named after its title. Skip projects whose status is not
+        success.
+      schema: schemas/weekly-report.json
+      max_tokens: 1200
+
+  - id: send
+    needs: [digest]
+    # The channel comes from the global configuration: a webhook to a chat
+    # bot, or stdout while writing the scenario (section 12).
+    notify: report
+    message: |
+      *Weekly report since {{ .inputs.since }}*
+      {{ .steps.digest.result.headline }}
+      {{ range .steps.digest.result.projects }}
+      - {{ .project }}: {{ .merged }} merged. {{ .highlight }}{{ end }}
+
+on_failure:
+  - id: alert
+    notify: report
+    message: "weekly-report failed at {{ .run.failed_step }}: {{ .run.error.message }}"
