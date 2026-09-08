@@ -1126,53 +1126,17 @@ func TestPaginationNextCursorUnset(t *testing.T) {
 	}
 }
 
-// TestTransformIsPure checks that transforms cannot reach the process
-// environment or the runner's stdin, per spec section 7.4.2.
+// TestTransformIsPure checks that a transform cannot reach the process
+// environment or the runner's stdin, per spec section 7.4.2: the names that
+// would reach them are refused when the expression compiles.
 func TestTransformIsPure(t *testing.T) {
 	t.Setenv("BATON_PACKS_TEST_VAR", "leaked")
 
-	t.Run("env is empty", func(t *testing.T) {
-		code, err := compileJQ("transform", "env")
-		if err != nil {
-			t.Fatalf("compileJQ() error = %v", err)
+	for _, source := range []string{"env", "env.BATON_PACKS_TEST_VAR", "$ENV", "input", "inputs"} {
+		if _, err := compileJQ("transform", source); err == nil {
+			t.Errorf("compileJQ(%q) error = nil, want it refused", source)
 		}
-		op := &Op{transform: code}
-		got, err := op.Transformed(nil)
-		if err != nil {
-			t.Fatalf("Transformed() error = %v", err)
-		}
-		m, ok := got.(map[string]any)
-		if !ok {
-			t.Fatalf("Transformed() = %#v (%T), want an empty map", got, got)
-		}
-		if len(m) != 0 {
-			t.Errorf("Transformed() = %#v, want empty, env leaked", m)
-		}
-	})
-
-	t.Run("env.HOME is null", func(t *testing.T) {
-		code, err := compileJQ("transform", "env.HOME")
-		if err != nil {
-			t.Fatalf("compileJQ() error = %v", err)
-		}
-		op := &Op{transform: code}
-		got, err := op.Transformed(nil)
-		if err != nil {
-			t.Fatalf("Transformed() error = %v", err)
-		}
-		if got != nil {
-			t.Errorf("Transformed() = %#v, want nil (env.HOME must not resolve)", got)
-		}
-	})
-
-	t.Run("input is rejected", func(t *testing.T) {
-		// gojq refuses input/inputs at compile time when no input iterator
-		// is supplied, which is exactly what compileJQ does not supply.
-		_, err := compileJQ("transform", "input")
-		if err == nil {
-			t.Fatalf("compileJQ() error = nil, want error (input must be rejected)")
-		}
-	})
+	}
 }
 
 // argsDemoYAML declares one operation exercising every argument placement,

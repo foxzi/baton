@@ -21,6 +21,9 @@ func compileJQ(field, source string) (*gojq.Code, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", field, err)
 	}
+	if err := checkPure(query); err != nil {
+		return nil, fmt.Errorf("%s: %w", field, err)
+	}
 	code, err := gojq.Compile(query, gojq.WithEnvironLoader(emptyEnv))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", field, err)
