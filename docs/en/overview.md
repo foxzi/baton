@@ -51,7 +51,7 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 
 ### Agent tools
 
-- Filesystem: reads always allowed, writes only inside the workspace, path deny-lists
+- Filesystem: `fs.read`, `fs.glob`, `fs.grep`, `fs.write` for an engine without file tools of its own; reads always allowed, writes only inside the workspace, path deny-lists
 - Git: `status`, `log`, `diff`, `blame`, `show`, local `commit`; network operations unavailable
 - Commands: declared argv commands with argument validation, timeouts and call limits
 - API: read-only pack operations from an allowlist only, exposed as narrow tools authorised by the runner

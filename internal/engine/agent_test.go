@@ -248,10 +248,10 @@ calls:
 		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
 	}
 	// One of the two declared commands is offered, the allowed one, next to
-	// the six git tools and the state.get the fix profile grants (section
-	// 7.2).
-	if tools != 8 {
-		t.Fatalf("agent_started tools = %#v, want 8", tools)
+	// the four file tools, the six git tools and the state.get the fix
+	// profile grants (section 7.2).
+	if tools != 12 {
+		t.Fatalf("agent_started tools = %#v, want 12", tools)
 	}
 	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
 	if !strings.Contains(audit, `"tool":"allowed"`) {
@@ -834,5 +834,71 @@ calls:
 	}
 	if strings.Contains(audit, `"status":"error"`) {
 		t.Errorf("a git call was audited as an error:\n%s", audit)
+	}
+}
+
+// 21. The file tools of section 7.3 reach an agent whose engine has none of
+// its own, and they act on the prepared workspace: what fs.write leaves
+// behind is on disk when the run ends.
+func TestAgent_FileToolsReadAndWrite(t *testing.T) {
+	yamlText := `
+version: 1
+name: agent-fs
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      profile: fix
+      result: result.json
+`
+	script := `
+calls:
+  - tool: fs.glob
+    args: { pattern: "*.txt" }
+  - tool: fs.grep
+    args: { pattern: "needle" }
+  - tool: fs.read
+    args: { path: "a.txt" }
+  - tool: fs.write
+    args: { path: "out/note.txt", content: "written by the agent\n" }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "a.txt"), []byte("a needle here\n"), 0o644); err != nil {
+		t.Fatalf("write a.txt: %v", err)
+	}
+
+	eng, store, dir := newTestEngine(t, yamlText, func(o *Options) {
+		o.Workspace = workspace
+	})
+	writeAgentFiles(t, dir, agentSchema, script)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
+	}
+
+	written, err := os.ReadFile(filepath.Join(workspace, "out", "note.txt"))
+	if err != nil {
+		t.Fatalf("read what fs.write left: %v", err)
+	}
+	if string(written) != "written by the agent\n" {
+		t.Errorf("note.txt = %q, want what the agent wrote", written)
+	}
+
+	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	for _, tool := range []string{"fs.glob", "fs.grep", "fs.read", "fs.write"} {
+		if !strings.Contains(audit, `"tool":"`+tool+`"`) {
+			t.Errorf("%s is not in the audit log:\n%s", tool, audit)
+		}
+	}
+	if strings.Contains(audit, `"status":"error"`) {
+		t.Errorf("a file call was audited as an error:\n%s", audit)
 	}
 }

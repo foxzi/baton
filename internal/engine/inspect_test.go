@@ -58,7 +58,12 @@ steps:
 	for i, tool := range list {
 		names[i] = tool.Name
 	}
-	want := []string{"bye", "hello", "git.status", "git.diff", "git.log", "git.show", "git.blame", "git.commit", "state.get", "submit_result"}
+	want := []string{
+		"bye", "hello",
+		"fs.read", "fs.glob", "fs.grep", "fs.write",
+		"git.status", "git.diff", "git.log", "git.show", "git.blame", "git.commit",
+		"state.get", "submit_result",
+	}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}
@@ -123,7 +128,7 @@ steps:
 	eng, _, dir := newTestEngine(t, yamlText, nil)
 	writeAgentFiles(t, dir, agentSchema, "calls: []")
 
-	wantReview := "git.status,git.diff,git.log,git.show,git.blame,state.get,submit_result"
+	wantReview := "fs.read,fs.glob,fs.grep,git.status,git.diff,git.log,git.show,git.blame,state.get,submit_result"
 	got := strings.Join(toolNames(t, eng, "review"), ",")
 	if got != wantReview {
 		t.Errorf("review tools = %s, want %s: the profile runs no commands and cannot commit", got, wantReview)
@@ -141,7 +146,7 @@ steps:
 			fetch = &list[i]
 		}
 	}
-	want := "git.status,git.diff,git.log,git.show,git.blame,state.get,state.set,fetch,submit_result"
+	want := "fs.read,fs.glob,fs.grep,git.status,git.diff,git.log,git.show,git.blame,state.get,state.set,fetch,submit_result"
 	if strings.Join(names, ",") != want {
 		t.Fatalf("research tools = %v, want %s", names, want)
 	}
@@ -219,7 +224,7 @@ steps:
 	eng, _, dir := newTestEngine(t, yamlText, nil)
 	writeAgentFiles(t, dir, agentSchema, "calls: []")
 
-	want := "git.status,git.diff,git.log,git.show,git.blame,state.get,submit_result"
+	want := "fs.read,fs.glob,fs.grep,git.status,git.diff,git.log,git.show,git.blame,state.get,submit_result"
 	if got := strings.Join(toolNames(t, eng, "body"), ","); got != want {
 		t.Errorf("body tools = %s, want %s", got, want)
 	}

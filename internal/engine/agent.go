@@ -209,9 +209,10 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 }
 
 // agentToolSet builds every tool the step's agent is given: its commands
-// (section 7.5), the readonly pack operations of its policy (section 7.4.8),
-// the git tools of section 7.4.7 and the fetch and state tools of section
-// 7.6. The gateway adds submit_result itself.
+// (section 7.5), the file tools of section 7.3, the readonly pack operations
+// of its policy (section 7.4.8), the git tools of section 7.4.7 and the
+// fetch and state tools of section 7.6. The gateway adds submit_result
+// itself.
 func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string) ([]gateway.Tool, *Error) {
 	commands, err := tools.NewCommands(tools.CommandOptions{
 		Workspace: root,
@@ -226,6 +227,10 @@ func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string)
 		return nil, wrapf(ClassConfig, err, "step %s: agent.tools", step.ID)
 	}
 
+	fs, stepErr := e.agentFS(call, root)
+	if stepErr != nil {
+		return nil, stepErr
+	}
 	git, stepErr := e.agentGit(call, root)
 	if stepErr != nil {
 		return nil, stepErr
@@ -243,11 +248,35 @@ func (e *Engine) agentToolSet(step *scenario.Step, call *agentCall, root string)
 		return nil, stepErr
 	}
 
-	set := append(commands.Tools(), git.Tools()...)
+	set := append(commands.Tools(), fs.Tools()...)
+	set = append(set, git.Tools()...)
 	set = append(set, apis.Tools()...)
 	set = append(set, state.Tools()...)
 	set = append(set, fetch.Tools()...)
 	return set, nil
+}
+
+// agentFS builds the file tools of the step, but only for an engine that
+// has none of its own: claude-code reads and writes with its built-in Read,
+// Glob, Grep and Write (section 8.2), and serving it fs.read as well would
+// only give it two ways to do one thing.
+func (e *Engine) agentFS(call *agentCall, root string) (*tools.FS, *Error) {
+	if nativeFileTools(call.engine) {
+		return &tools.FS{}, nil
+	}
+	set, err := tools.NewFS(tools.FSOptions{
+		Workspace: root,
+		Policy:    call.policy,
+	})
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "agent.tools.fs")
+	}
+	return set, nil
+}
+
+// nativeFileTools reports whether an engine brings its own file tools.
+func nativeFileTools(engine string) bool {
+	return engine == "claude-code"
 }
 
 // agentGit builds the git tools of the step. They run in the prepared
