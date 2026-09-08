@@ -77,6 +77,7 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 - Step results are cached by a hash of the step definition and its inputs: a repeat run does not pay for tokens again
 - `baton resume <id>` — continue from the failed step
 - An audit log of every tool call made by the agent
+- `baton tools <scenario.yaml> --step ID` — print the tools an agent step would be given, without running it
 
 ### Budgets and observability
 
