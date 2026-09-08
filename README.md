@@ -1,30 +1,24 @@
 # Baton
 
-> The name is settled: `baton`. Several other projects in the agentic-automation niche use the word too; the binary, the `~/.config/baton` config directory and the `github.com/foxzi/baton` module path stay as they are.
-
 A headless runner for YAML scenarios that interleave **deterministic** steps (scripts, HTTP calls) with **non-deterministic** ones (LLM calls, coding agents). One binary, one run per invocation, no UI and no server. Think n8n for teams that would rather keep their workflows as YAML in git and trigger them from CI or cron.
 
 ## Why
 
-Tasks shaped like *collect data with a script → hand it to a model for interpretation → destructure the result and publish it* are usually solved one of two bad ways. Either a bash wrapper around `claude -p` in every repository, which controls neither budget nor security, or a heavyweight platform with a server, a database and a web UI, which is overkill for a one-shot run in CI.
+Tasks shaped like *collect data with a script → hand it to a model for interpretation → destructure the result and publish it* are usually solved one of two bad ways: a bash wrapper around `claude -p` in every repository, which controls neither budget nor security, or a heavyweight platform with a server, a database and a web UI, which is overkill for a one-shot run in CI. Baton fills the gap — a scenario is a file in the repository, a run is a single command, and all run state is a directory on disk.
 
-Baton fills the gap: a scenario is a file in the repository, a run is a single command, and all run state is a directory on disk.
+## Key features
 
-## Principles
-
-**The runner is deterministic; agency is a step.** Baton is not an agent. It executes a DAG of steps in a predictable order, and all agency is encapsulated in an `agent:` step (spawning a CLI agent) or an `llm:` step with tools (the runner drives the tool loop itself). That makes runs reproducible and budgets enforceable.
-
-**Integrations live outside the binary.** Baton knows protocols — HTTP, JSON, auth schemes, pagination — but not services. GitLab, GitHub, Jira, Telegram and friends are described by *API packs*: YAML files in a separate repository, pinned by version and checksum. Packs implement small interfaces (`forge/v1`, `tracker/v1`, `notify/v1`), so one review scenario runs against GitLab, GitHub and Gitea by changing a single input. A new integration is a new file, not a new release.
-
-**The model never sees credentials.** Every authorised call to an external API goes through a built-in gateway: the agent gets narrow tools like `gitlab.get_mr_changes(iid)` while the runner injects the tokens. Publishing results is a separate deterministic step with its own permissions. Secrets are their own type in the value system, and trying to interpolate one into a prompt is rejected at validation time.
-
-**Capability instead of access.** The agent gets no `curl`, no `bash`, no network. Instead the scenario declares parameterised commands (`test`, `lint`) which become tools with validated arguments, executed without a shell.
-
-**A structural contract between steps.** Every LLM step returns JSON matching a schema. Branching is only allowed on validated fields, ideally on an `enum`. Invalid model output is its own error class with its own retry strategy.
-
-**Fail-fast by default, always notify.** Any failing step fails the run unless stated otherwise. The `on_failure` section runs for every error class, budget exhaustion included.
-
-**Triggers are external.** Baton knows nothing about schedules or webhooks. Use cron, a systemd timer, or your CI's schedule. That is what separates a CLI tool from a platform.
+- **Scenarios are YAML in git.** Typed inputs with defaults and patterns, steps with explicit dependencies, `when:` conditions in expr-lang, static reference checking — `baton validate` reports every problem before anything runs, and `--dry-run` prints the plan.
+- **Eight step types.** `run`, `http`, `llm`, `agent`, `foreach`, `until`, `switch`, `assert` — see [the table below](#step-types).
+- **Model calls with a contract.** Anthropic, OpenAI and any OpenAI-compatible endpoint (OpenRouter included). Every `llm` step returns JSON validated against a schema, with a fallback model chain and the structured-output mode negotiated per provider.
+- **Coding agents as one step.** Claude Code in v1, driven through a built-in MCP gateway: the runner prepares the workspace, serves exactly the tools the step's profile allows and takes the answer from `submit_result`.
+- **Capability instead of access.** No shell, no `curl`, no ambient network. An agent gets declared argv commands with validated arguments, workspace-scoped file writes with path deny-lists, git history and local commits, `fetch` on a domain allowlist, read-only pack operations, cross-run `state` and proxied third-party MCP servers. The `review`, `fix` and `research` profiles pick the set.
+- **API packs instead of built-in integrations.** The HTTP layer knows auth schemes (bearer, header, query, basic, token exchange), pagination and gojq transforms; services are YAML packs loaded from a directory or from git, pinned by version and checksum. Packs implement `forge/v1`, `tracker/v1` and `notify/v1`, so swapping GitLab for GitHub is an input rather than a rewrite.
+- **Packs are debuggable.** `baton apis import` bootstraps a pack from an OpenAPI 3 document, `apis validate` replays every recorded example through the envelope and the transform, `apis call` runs a single operation against the real service.
+- **Secrets the model never sees.** A secret is its own value type, interpolating one into a prompt fails validation, the runner injects tokens into API calls itself, and every output, the run directory and the cache are redacted.
+- **Budgets and cost accounting.** Dollar, token, agent-turn and wall-time limits per step and per run; the real cost of every model call lands in the run state and in notifications.
+- **Classified errors.** `transient`, `schema`, `command`, `timeout`, `budget`, `policy` and `config`, each with its own retry policy — a schema failure is retried with the validation error in context. `on_error: fail | continue | fallback`, `min_success` for `foreach`, `dedupe_key` guarding side effects, a run-level `on_failure` that always notifies, and distinct exit codes for CI.
+- **Runs on disk, cache and resume.** Every run is a `runs/<id>/` directory with state, step outputs, a JSONL event log and an audit log of every agent tool call. Step results are cached by hash, so a repeat run pays no tokens again, and `baton resume <id>` continues from the failed step.
 
 ## What a scenario looks like
 
@@ -102,52 +96,27 @@ The agent in the `review` step can read the repository and call read-only forge 
 | `switch` | Branch on the value of an expression: one step per case, sugar over `when:` |
 | `assert` | Fail the run deliberately with a distinct exit code, to block a merge in CI |
 
-## Feature overview
-
-**Flow control.** `when:` conditions in expr-lang (typed, side-effect free); `switch:`/`cases:`, expanded at load into one guarded step per case, with a warning when no `default` covers the remaining values; `needs:` for explicit dependencies; static reference checking, so referencing the result of a possibly-skipped step without handling `null` is a validation error.
-
-**Agent tools.** Filesystem reads always, writes only inside the workspace, path deny-lists. Git history commands and local commits, no network operations. Declared argv commands with argument validation, timeouts and call limits. Read-only pack operations from an allowlist, exposed as narrow tools authorised by the runner. `fetch` for public URLs on a domain allowlist. Third-party MCP servers from an allowlist, spawned by the runner, with tools taking arbitrary URLs flagged `unsafe`. `submit_result` as the schema-validated result channel. Cross-run `state` scoped to the scenario. Ready-made permission profiles: `review`, `fix`, `research`.
-
-**Error handling.** Classified errors — `transient`, `schema`, `command`, `timeout`, `budget`, `policy`, `config` — with class-bound retry; a `schema` failure is retried with the validation error in context. `on_error: fail | continue | fallback`. No automatic retry of side-effecting steps without a `dedupe_key`. Partial success in `foreach` behind a `min_success` threshold. Run-level `on_failure` with notification channels from the global config. Distinct exit codes for success, execution failure, a tripped assert, bad configuration, exhausted budget and interruption.
-
-**Runs, caching, resume.** Every run is a `runs/<id>/` directory holding state, artifacts, tool-call logs and cost. Step results are cached by a hash of the step definition and its inputs, so a repeat run does not pay for tokens again. `baton resume <id>` continues from the failed step. Every agent tool call is written to an audit log.
-
-**Budgets and observability.** Per-step and per-run limits on tokens, dollars, agent turns and wall time. Run cost recorded in state and included in notifications. Structured JSONL event log with secret redaction across every output.
-
 ## Use cases
 
-- **Code review in CI.** A job calls `baton run review.yaml -i mr=$CI_MERGE_REQUEST_IID`. The scenario classifies the change, picks a review depth, runs a read-only agent, publishes findings in a separate step and blocks the merge if there are blockers. One scenario covers every forge; only the invocation is forge-specific.
-- **Periodic reports.** Cron runs a scenario that walks repositories or systems, gathers data with scripts, has a model summarise it and sends the report to Telegram, Slack or email. One failing source does not sink the report but is recorded in it.
-- **Triage and classification.** Route incoming tickets or incidents: classify against an `enum`, dispatch with `switch`, create tickets through `http` steps holding write credentials the model never sees.
-- **Automated fixes with verification.** The `fix` profile lets an agent edit the workspace and run declared test commands inside an iteration-bounded `until` loop; the result is a diff artifact and applying it is a separate step.
-- **Compliance checks.** Deterministic steps collect facts about dependencies, licences or configuration, an LLM step interprets them, and `assert` halts the pipeline on a violation.
+- **Code review in CI.** Classify the change, pick a review depth, run a read-only agent, publish findings in a separate step, block the merge on blockers. One scenario covers every forge.
+- **Periodic reports.** Cron walks repositories or systems, scripts gather the data, a model summarises it, the report goes to a channel. One failing source does not sink the report but is recorded in it.
+- **Triage and classification.** Classify incoming tickets against an `enum`, dispatch with `switch`, create tickets through `http` steps holding write credentials the model never sees.
+- **Automated fixes with verification.** The `fix` profile lets an agent edit the workspace and run declared test commands inside a bounded `until` loop; the result is a diff artifact and applying it is a separate step.
+- **Compliance checks.** Deterministic steps collect facts, an LLM step interprets them, `assert` halts the pipeline on a violation.
 
-## What Baton is not
+## Principles
 
-- **Not a platform.** No web UI, no server, no database.
-- **Not a scheduler.** No built-in cron or webhooks (possibly later, as `baton serve`).
-- **Not an agent.** It does not decide which APIs to call; the scenario does.
-- **Not a CI replacement.** Deterministic builds and tests stay in CI. Baton adds the steps that need interpretation.
-
-## Compared to the alternatives
-
-| | Baton | gh-aw | Kestra | Dagu | Dagger |
-|---|---|---|---|---|---|
-| Scenarios in YAML | yes | md + frontmatter | yes | yes | no, code |
-| Serverless | yes | yes | no | yes | yes |
-| Forge-agnostic | yes | GitHub only | yes | yes | yes |
-| LLM steps | yes | yes | yes | no | yes |
-| Credentials isolated from the model | by design | safe-outputs | no | no | containers |
-| Per-run budget | yes | yes | no | no | no |
-| Ops burden | one binary | none | JVM + DB | one binary | daemon |
+- **The runner is deterministic; agency is a step.** Baton executes a DAG in a predictable order; all agency is encapsulated in an `agent:` step or an `llm:` step with tools. That makes runs reproducible and budgets enforceable.
+- **A structural contract between steps.** Every LLM step returns JSON matching a schema, and branching is only allowed on validated fields, ideally on an `enum`.
+- **Fail-fast by default, always notify.** Any failing step fails the run unless stated otherwise, and `on_failure` runs for every error class, budget exhaustion included.
+- **Triggers are external.** No built-in scheduler and no webhooks: use cron, a systemd timer or your CI's schedule. That is what separates a CLI tool from a platform.
+- **Not a platform, not an agent, not a CI replacement.** No web UI, server or database. Baton does not decide which APIs to call — the scenario does. Deterministic builds and tests stay in CI; Baton adds the steps that need interpretation.
 
 ## Status
 
-**Runnable.** Scenarios built from `run`, `assert`, `http`, `llm`, `foreach` and `notify` steps execute end to end: `baton run`, `resume`, `runs`, `validate`, `schema`. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema, and a notification, cached so that a repeated run of the same week spends no tokens. `agent` steps run too, with the `fake` engine and the Claude Code adapter: the runner prepares the workspace, serves the step's `commands` as tools through the MCP gateway and takes the result from `submit_result`. The gateway also serves the file, api, git, fetch and state tools of the step's profile and proxies the third-party MCP servers the step names; an engine that brings its own file tools, as Claude Code does, is not served the gateway's.
+**Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until` and `switch` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
 
-**Packs are a layer of their own.** A pack loads from a local directory or from a git source pinned by version and checksum, into a local cache. An operation that declares `implements` is checked against the interface registry — argument names, required-ness and the shape of the transformed example — and a scenario's `apis` entry may declare `interface: forge/v1`, in which case the pack it selects is checked for the interface's operations when it loads. `baton apis import` bootstraps a pack from an OpenAPI 3 document, `apis validate` replays every recorded `examples/<op>.json` through the envelope and the transform, and `apis call` calls one operation of a scenario's `apis` entry against the real service. What is missing is the `baton-apis` repository itself: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack.
-
-**Not there yet: releases.** `until`, `switch`, `fallback`, `dedupe_key`, `fetch`, `state`, third-party MCP servers and cancellation on SIGINT/SIGTERM do work. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values. Release builds through goreleaser and the triage example scenario are still outstanding.
+**Outstanding.** The `baton-apis` repository itself: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack. The exhaustiveness of a `switch` over a schema `enum` is only a missing-`default` warning rather than a check against the values. Release builds through goreleaser are not done yet.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
@@ -162,7 +131,7 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
 ## Building
 
-Requires Go 1.25.7 or newer.
+Go, a single static binary, no external services and no database. Requires Go 1.25.7 or newer.
 
 ```sh
 make build      # builds ./baton with version metadata
@@ -183,26 +152,16 @@ baton run examples/weekly-report.yaml \
     -i 'projects=["acme/web", "acme/api"]' -i since=2026-01-01
 ```
 
-`examples/` holds the scenarios the tests run: `hello.yaml` (a run step and an assert), `mr-comment.yaml` (a merge request read by a model and answered with a comment), `review.yaml` (an agent step over a checkout), `weekly-report.yaml` (a foreach digest sent to a channel) and `triage.yaml` (an issue classified against a schema, labelled, commented on, and paged to the on-call channel only when it is critical), plus `llm-smoke.yaml` (two model calls and a notification, the live check of a provider).
-
-`llm-smoke.yaml` is the one example that needs no forge and no repository token, only a provider key, so it is the shortest way to see that a key, a model name, the structured output mode and the cost accounting all work against the real service:
+`examples/` holds the scenarios the tests run: `hello.yaml`, `mr-comment.yaml`, `review.yaml`, `weekly-report.yaml`, `triage.yaml` and `llm-smoke.yaml`. The last one needs no forge and no repository token, only a provider key, so it is the shortest way to see that a key, a model name, the structured output mode and the cost accounting all work against the real service:
 
 ```sh
 export OPENROUTER_API_KEY=...
 baton run examples/llm-smoke.yaml
 ```
 
-It costs a fraction of a cent on a small model; `runs/<id>/steps/extract/output.json` then carries the real `cost_usd`, the `model_used` and the `structured_mode` the provider accepted.
+The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` or `./baton.yaml`, or wherever `--config` points. Secrets are read from the environment or from files at the moment a step needs them.
 
-The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` or `./baton.yaml`, or wherever `--config` points. Secrets are read from the environment or from files at the moment a step needs them; they never reach the run directory, the cache or a model prompt.
-
-Every run writes `runs/<id>/` with `run.json`, `events.jsonl` and the outputs of each step. `baton runs list`, `baton runs show <id>` and `baton runs logs <id>` read it back, `baton resume <id>` continues a failed run from the step that failed. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached step results. `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given, without running anything.
-
-`baton apis import` generates the skeleton of an API pack from an OpenAPI 3 document, e.g. `baton apis import --openapi openapi.yaml --ops listMergeRequests > gitlab.yaml`. `baton apis validate <pack.yaml|pack-dir>...` loads a pack and replays every `examples/<op>.json` through its envelope and transform, which is the part of a pack that breaks silently without a live API to call. `baton apis call <scenario.yaml> <api>.<op> -a k=v` calls a single operation through the scenario's `apis` entry, for trying a pack against the real service before a step depends on it.
-
-## Technology
-
-Go, a single static binary. Dependencies: a YAML parser, expr-lang for expressions, gojq for pack transforms, a JSON Schema validator, the Go MCP SDK, and model provider SDKs (Anthropic, OpenAI, and OpenAI-compatible endpoints including OpenRouter). No external services, no database. Service integrations live in a separate packs repository.
+Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>` and `runs logs <id>`; `baton resume <id>` continues a failed run. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached results, and `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given without running anything. `baton apis import|validate|call` generates a pack from an OpenAPI 3 document, replays its recorded examples, and calls one operation through a scenario's `apis` entry.
 
 ## Documentation
 
