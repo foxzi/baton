@@ -199,6 +199,15 @@ func execute(req runRequest) int {
 	}
 	secretStore = secretStore.WithHidden(secretValues(providerKeys)...)
 
+	// The secrets of the global packs are the same: a scenario must not be
+	// able to name one, but every value they carry is masked.
+	apiSecrets, err := cfg.ResolveAPISecrets(baseDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	secretStore = secretStore.WithHidden(secretValues(apiSecrets)...)
+
 	// A webhook url is a secret too: it goes to the redactor, and the
 	// engine only sees the channel it actually sends to.
 	channels, channelErrors := notify.ResolveAll(cfg.Notify, baseDir)
@@ -248,6 +257,7 @@ func execute(req runRequest) int {
 		ChannelErrors: channelErrors,
 		Stdout:        os.Stdout,
 		ProviderKeys:  providerKeys,
+		APISecrets:    apiSecrets,
 		Observer:      observer(req.asJSON, req.verbose),
 	})
 	if err != nil {

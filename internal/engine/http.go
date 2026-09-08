@@ -243,13 +243,22 @@ func (e *Engine) renderArg(name string, value any) (any, *Error) {
 // api resolves an apis entry into a bound pack, loading and caching the pack
 // on first use. The authorisation secret comes from the entry unless the step
 // overrides it (section 3.4).
+//
+// The scenario's own entries come first; an entry only the configuration
+// declares is available too, since a global pack is available to every
+// scenario (section 7.4.1).
 func (e *Engine) api(name, authOverride string) (*httpx.API, *Error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	entry, ok := e.opts.Scenario.APIs[name]
 	if !ok {
-		return nil, errorf(ClassConfig, "unknown api %q", name)
+		if e.opts.Config == nil {
+			return nil, errorf(ClassConfig, "unknown api %q", name)
+		}
+		if entry, ok = e.opts.Config.APIs[name]; !ok {
+			return nil, errorf(ClassConfig, "unknown api %q", name)
+		}
 	}
 	secretName := entry.Auth.Secret
 	if authOverride != "" {
@@ -305,19 +314,21 @@ func (e *Engine) api(name, authOverride string) (*httpx.API, *Error) {
 
 // authSecret looks up the secret that feeds the authorisation scheme of a
 // pack. An entry without auth is allowed; the pack decides whether it needs
-// one.
+// one. A secret the scenario does not declare may still be one of the
+// configuration's own, which a global apis entry authorises with.
 func (e *Engine) authSecret(apiName, secretName string) (values.Secret, *Error) {
 	if secretName == "" {
 		return values.Secret{}, nil
 	}
-	if e.opts.Secrets == nil {
-		return values.Secret{}, errorf(ClassConfig, "apis.%s.auth.secret: undeclared secret %q", apiName, secretName)
+	if e.opts.Secrets != nil {
+		if secret, ok := e.opts.Secrets.Lookup(secretName); ok {
+			return secret, nil
+		}
 	}
-	secret, ok := e.opts.Secrets.Lookup(secretName)
-	if !ok {
-		return values.Secret{}, errorf(ClassConfig, "apis.%s.auth.secret: undeclared secret %q", apiName, secretName)
+	if secret, ok := e.opts.APISecrets[secretName]; ok {
+		return secret, nil
 	}
-	return secret, nil
+	return values.Secret{}, errorf(ClassConfig, "apis.%s.auth.secret: undeclared secret %q", apiName, secretName)
 }
 
 // httpClient returns the shared HTTP client. Deadlines come from the step

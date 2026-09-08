@@ -57,6 +57,11 @@ type Options struct {
 	// name. The caller resolves them so that a key is part of the redactor
 	// before any provider can echo it back (section 13).
 	ProviderKeys map[string]values.Secret
+	// APISecrets are the resolved secrets the global apis: entries
+	// authorise with, by secret name (config.ResolveAPISecrets). They live
+	// in the configuration rather than the scenario, so a scenario cannot
+	// name one in a step; only a global pack entry reaches them.
+	APISecrets map[string]values.Secret
 	// Store is the run directory to record the run in.
 	Store *runstore.Store
 	// Cache holds step results between runs (section 10.3). It may be nil,

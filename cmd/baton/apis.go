@@ -379,6 +379,15 @@ func apisCallCmd(args []string) int {
 		return exitcode.Config
 	}
 
+	// A call may name an api the configuration declares globally, so the
+	// secrets those entries authorise with are resolved too, and masked.
+	apiSecrets, err := cfg.ResolveAPISecrets(baseDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	secretStore = secretStore.WithHidden(secretValues(apiSecrets)...)
+
 	// The call writes nothing a real run would, but the engine still records
 	// runs in a store, so it gets a throwaway one instead of a directory
 	// under runs/.
@@ -396,11 +405,12 @@ func apisCallCmd(args []string) int {
 	defer store.Close()
 
 	eng, err := engine.New(engine.Options{
-		Scenario: scn,
-		Inputs:   bound,
-		Secrets:  secretStore,
-		Store:    store,
-		Config:   cfg,
+		Scenario:   scn,
+		Inputs:     bound,
+		Secrets:    secretStore,
+		Store:      store,
+		Config:     cfg,
+		APISecrets: apiSecrets,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)

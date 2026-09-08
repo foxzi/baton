@@ -101,6 +101,13 @@ func toolsCmd(args []string) int {
 		return exitcode.Config
 	}
 
+	apiSecrets, err := cfg.ResolveAPISecrets(baseDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	secretStore = secretStore.WithHidden(secretValues(apiSecrets)...)
+
 	// The listing writes nothing, but the engine records runs in a store, so
 	// it gets a throwaway one instead of a directory under runs/.
 	storeDir, err := os.MkdirTemp("", "baton-tools-")
@@ -117,12 +124,13 @@ func toolsCmd(args []string) int {
 	defer store.Close()
 
 	eng, err := engine.New(engine.Options{
-		Scenario:  scn,
-		Inputs:    bound,
-		Secrets:   secretStore,
-		Store:     store,
-		Config:    cfg,
-		Workspace: workspace,
+		Scenario:   scn,
+		Inputs:     bound,
+		Secrets:    secretStore,
+		Store:      store,
+		Config:     cfg,
+		Workspace:  workspace,
+		APISecrets: apiSecrets,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)

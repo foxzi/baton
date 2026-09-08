@@ -48,3 +48,51 @@ func (c *Config) ResolveProviderKeys(baseDir string) (map[string]values.Secret, 
 	}
 	return keys, nil
 }
+
+// ResolveAPISecrets reads the secrets the global apis: entries authorise
+// with (spec sections 7.4.1 and 12). They are declared in the config's own
+// secrets: block, which a scenario cannot see, so they are resolved here and
+// handed to the engine separately from the scenario's secrets.
+//
+// The result is keyed by secret name, the name an apis entry refers to.
+// Relative file paths are resolved against baseDir, as for provider keys.
+func (c *Config) ResolveAPISecrets(baseDir string) (map[string]values.Secret, error) {
+	if c == nil {
+		return nil, nil
+	}
+	names := make([]string, 0, len(c.APIs))
+	for name := range c.APIs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	resolved := make(map[string]values.Secret, len(names))
+	var problems []error
+	for _, name := range names {
+		secretName := c.APIs[name].Auth.Secret
+		if secretName == "" {
+			continue
+		}
+		if _, done := resolved[secretName]; done {
+			continue
+		}
+		ref, declared := c.Secrets[secretName]
+		if !declared {
+			problems = append(problems, fmt.Errorf("apis.%s.auth.secret: undeclared secret %q", name, secretName))
+			continue
+		}
+		secret, err := secrets.ResolveOne(secretName, ref.Secret(), baseDir)
+		if err != nil {
+			if ref.Optional {
+				continue
+			}
+			problems = append(problems, fmt.Errorf("secrets.%s: %w", secretName, err))
+			continue
+		}
+		resolved[secretName] = secret
+	}
+	if len(problems) > 0 {
+		return nil, errors.Join(problems...)
+	}
+	return resolved, nil
+}
