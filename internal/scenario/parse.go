@@ -45,7 +45,7 @@ var stepKeys = map[string]bool{
 	"on_error": true, "fallback": true, "cache": true, "dedupe_key": true,
 	"run": true, "assert": true, "http": true, "llm": true, "agent": true,
 	"foreach": true, "until": true, "switch": true, "cases": true, "default": true,
-	"notify": true, "message": true,
+	"notify": true, "message": true, "file": true,
 }
 
 // UnmarshalYAML decodes a step and remembers where it was declared.

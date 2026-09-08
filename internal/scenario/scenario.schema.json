@@ -342,6 +342,9 @@
         "until": {
           "$ref": "#/$defs/until"
         },
+        "file": {
+          "$ref": "#/$defs/file"
+        },
         "switch": {
           "description": "Subject expression of a switch; sugar over when, expanded at load (spec section 3.10).",
           "type": "string"
@@ -397,6 +400,11 @@
         {
           "required": [
             "until"
+          ]
+        },
+        {
+          "required": [
+            "file"
           ]
         },
         {
@@ -731,6 +739,67 @@
           "$ref": "#/$defs/step-body"
         }
       }
+    },
+    "file": {
+      "description": "Reads, writes, appends or lists files inside the workspace. Exactly one of read, write, append and glob is set.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read": {
+          "description": "Workspace-relative path to read.",
+          "$ref": "#/$defs/template"
+        },
+        "write": {
+          "description": "Workspace-relative path to write; replaces the file's content.",
+          "$ref": "#/$defs/template"
+        },
+        "append": {
+          "description": "Workspace-relative path to append to; created if it does not exist.",
+          "$ref": "#/$defs/template"
+        },
+        "glob": {
+          "description": "Pattern matched against workspace-relative paths.",
+          "$ref": "#/$defs/template"
+        },
+        "content": {
+          "description": "Text written by write and append.",
+          "$ref": "#/$defs/template"
+        },
+        "parse": {
+          "description": "Read only: how the file's content becomes the step result.",
+          "enum": [
+            "text",
+            "json",
+            "lines"
+          ]
+        },
+        "max_bytes": {
+          "description": "Read only: largest file the step accepts, 1MiB by default; a bigger file is an error.",
+          "$ref": "#/$defs/size"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "read"
+          ]
+        },
+        {
+          "required": [
+            "write"
+          ]
+        },
+        {
+          "required": [
+            "append"
+          ]
+        },
+        {
+          "required": [
+            "glob"
+          ]
+        }
+      ]
     },
     "retry": {
       "type": "object",

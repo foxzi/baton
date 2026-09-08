@@ -115,6 +115,7 @@ type Step struct {
 	Agent   *AgentStep   `yaml:"agent"`
 	Foreach *ForeachStep `yaml:"foreach"`
 	Until   *UntilStep   `yaml:"until"`
+	File    *FileStep    `yaml:"file"`
 
 	// Bodies of step kinds the runner does not execute yet. These are kept
 	// as raw nodes; yaml.v3 only decodes into a yaml.Node value, never into
@@ -144,6 +145,7 @@ const (
 	KindAgent   Kind = "agent"
 	KindForeach Kind = "foreach"
 	KindUntil   Kind = "until"
+	KindFile    Kind = "file"
 	KindSwitch  Kind = "switch"
 	KindNotify  Kind = "notify"
 )
@@ -171,6 +173,9 @@ func (s *Step) Kinds() []Kind {
 	}
 	if s.Until != nil {
 		kinds = append(kinds, KindUntil)
+	}
+	if s.File != nil {
+		kinds = append(kinds, KindFile)
 	}
 	if s.Switch != "" {
 		kinds = append(kinds, KindSwitch)
@@ -398,6 +403,63 @@ type UntilStep struct {
 	// Step is the body of one iteration. Like a foreach body it has no id of
 	// its own.
 	Step *Step `yaml:"step"`
+}
+
+// FileStep reads, writes or lists files inside the workspace. Exactly one of
+// Read, Write, Append and Glob is set; Op reports which one.
+type FileStep struct {
+	Read   string `yaml:"read"`
+	Write  string `yaml:"write"`
+	Append string `yaml:"append"`
+	Glob   string `yaml:"glob"`
+
+	// Content is the text written by write and append.
+	Content string `yaml:"content"`
+	// Parse turns the content read into the step result; read only.
+	Parse ParseMode `yaml:"parse"`
+	// MaxBytes caps the size of the file read; read only.
+	MaxBytes ByteSize `yaml:"max_bytes"`
+}
+
+// FileOp names a file step operation.
+type FileOp string
+
+// File step operations.
+const (
+	FileOpNone   FileOp = ""
+	FileOpRead   FileOp = "read"
+	FileOpWrite  FileOp = "write"
+	FileOpAppend FileOp = "append"
+	FileOpGlob   FileOp = "glob"
+)
+
+// Op reports which of Read, Write, Append and Glob is set, and its value.
+// It returns FileOpNone and an empty target when none or more than one is
+// set.
+func (f *FileStep) Op() (op FileOp, target string) {
+	type candidate struct {
+		op    FileOp
+		value string
+	}
+	candidates := []candidate{
+		{FileOpRead, f.Read},
+		{FileOpWrite, f.Write},
+		{FileOpAppend, f.Append},
+		{FileOpGlob, f.Glob},
+	}
+
+	var found candidate
+	n := 0
+	for _, c := range candidates {
+		if strings.TrimSpace(c.value) != "" {
+			found = c
+			n++
+		}
+	}
+	if n != 1 {
+		return FileOpNone, ""
+	}
+	return found.op, found.value
 }
 
 // ItemErrorMode selects what happens when one foreach item fails.

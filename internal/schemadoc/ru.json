@@ -23,5 +23,13 @@
   "The per-iteration body; it has no id of its own.": "Тело одной итерации; собственного id у него нет.",
   "A command executed without a shell (spec section 3.3). The bare string form is split by baton and reported as a warning.": "Команда, выполняемая без оболочки (ТЗ, раздел 3.3). Форму в виде голой строки baton разбивает сам и сообщает об этом предупреждением.",
   "An operation of a pack, or a raw request (spec section 3.4).": "Операция пака либо сырой запрос (ТЗ, раздел 3.4).",
-  "A command the runner executes on behalf of an agent, never the agent's own process (spec section 7.5).": "Команда, которую раннер выполняет от имени агента, но никогда не в процессе самого агента (ТЗ, раздел 7.5)."
+  "A command the runner executes on behalf of an agent, never the agent's own process (spec section 7.5).": "Команда, которую раннер выполняет от имени агента, но никогда не в процессе самого агента (ТЗ, раздел 7.5).",
+  "Reads, writes, appends or lists files inside the workspace. Exactly one of read, write, append and glob is set.": "Читает, записывает, дополняет или перечисляет файлы внутри workspace. Задаётся ровно одно из read, write, append и glob.",
+  "Workspace-relative path to read.": "Путь для чтения, относительно workspace.",
+  "Workspace-relative path to write; replaces the file's content.": "Путь для записи, относительно workspace; заменяет содержимое файла.",
+  "Workspace-relative path to append to; created if it does not exist.": "Путь для дополнения, относительно workspace; создаётся, если не существует.",
+  "Pattern matched against workspace-relative paths.": "Шаблон, сопоставляемый с путями относительно workspace.",
+  "Text written by write and append.": "Текст, записываемый write и append.",
+  "Read only: how the file's content becomes the step result.": "Только для read: как содержимое файла становится результатом шага.",
+  "Read only: largest file the step accepts, 1MiB by default; a bigger file is an error.": "Только для read: наибольший файл, который принимает шаг, по умолчанию 1MiB; файл больше — ошибка."
 }

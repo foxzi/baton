@@ -88,7 +88,7 @@ name: valid
 steps:
   - id: s
 `,
-			wantErr: "must declare one of run, http, llm, agent, foreach, until, assert",
+			wantErr: "must declare one of run, http, llm, agent, foreach, until, file, assert",
 		},
 		{
 			name: "step with two bodies",
@@ -1029,6 +1029,86 @@ steps:
   - id: s
     run:
       argv: ["echo", "hi"]
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
+		{
+			name: "file valid read",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: s
+    file:
+      read: notes/a.txt
+      parse: text
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
+		{
+			name: "file two operations set at once",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: s
+    file:
+      read: notes/a.txt
+      write: notes/b.txt
+      content: hi
+`,
+			wantErr: "must set exactly one of read, write, append, glob",
+		},
+		{
+			name: "file write without content",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: s
+    file:
+      write: notes/a.txt
+`,
+			wantErr: "file.content: write requires content",
+		},
+		{
+			name: "file content on a read",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: s
+    file:
+      read: notes/a.txt
+      content: hi
+`,
+			wantErr: "file.content: belongs to write and append, not to read",
+		},
+		{
+			name: "file parse on a write",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: s
+    file:
+      write: notes/a.txt
+      content: hi
+      parse: json
+`,
+			wantErr: "file.parse: belongs to read, not to write",
+		},
+		{
+			name: "file absolute path is not a validation error",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: s
+    file:
+      read: /etc/passwd
 `,
 			checkOK:     true,
 			checkNoWarn: true,

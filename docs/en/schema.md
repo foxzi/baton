@@ -141,6 +141,7 @@ The fields of a step without the id rule, so that a foreach body (spec section 3
 | `agent` | [agent](#agent) | no |  |
 | `foreach` | [foreach](#foreach) | no |  |
 | `until` | [until](#until) | no |  |
+| `file` | [file](#file) | no |  |
 | `switch` | string | no | Subject expression of a switch; sugar over when, expanded at load (spec section 3.10). |
 | `cases` | map of name to [step](#step) | no | One step per value of the switch subject. At least fields: 1. |
 | `default` | [step](#step) | no | Step taken when no case matches. |
@@ -288,6 +289,22 @@ Repeats its body until the condition holds (spec section 3.8).
 | `condition` | string | yes | Checked after every iteration, with that iteration in iter. |
 | `max_iterations` | integer | yes | Minimum 1. |
 | `step` | [step-body](#step-body) | yes | The per-iteration body; it has no id of its own. |
+
+No other fields are allowed.
+
+### file
+
+Reads, writes, appends or lists files inside the workspace. Exactly one of read, write, append and glob is set.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `read` | [template](#template) | no | Workspace-relative path to read. |
+| `write` | [template](#template) | no | Workspace-relative path to write; replaces the file's content. |
+| `append` | [template](#template) | no | Workspace-relative path to append to; created if it does not exist. |
+| `glob` | [template](#template) | no | Pattern matched against workspace-relative paths. |
+| `content` | [template](#template) | no | Text written by write and append. |
+| `parse` | `text`, `json`, `lines` | no | Read only: how the file's content becomes the step result. |
+| `max_bytes` | [size](#size) | no | Read only: largest file the step accepts, 1MiB by default; a bigger file is an error. |
 
 No other fields are allowed.
 

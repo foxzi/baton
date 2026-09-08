@@ -201,7 +201,7 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 	switch len(kinds) {
 	case 1:
 	case 0:
-		res.errorf(path, step.Line, "must declare one of run, http, llm, agent, foreach, until, assert")
+		res.errorf(path, step.Line, "must declare one of run, http, llm, agent, foreach, until, file, assert")
 		return
 	default:
 		res.errorf(path, step.Line, "must declare exactly one body, got %s", joinKinds(kinds))
@@ -227,6 +227,8 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		validateForeach(scn, step, path+".foreach", res)
 	case KindUntil:
 		validateUntil(scn, step, path+".until", res)
+	case KindFile:
+		validateFile(step, path+".file", res)
 	case KindNotify:
 		validateNotify(step, path, res)
 	}
@@ -786,6 +788,57 @@ func validateUntil(scn *Scenario, step *Step, path string, res *Result) {
 	}
 	validateStepBody(scn, loop.Step, path+".step", res)
 	validateExpr(path+".step.when", loop.Step.When, loop.Step.Line, res)
+}
+
+// validateFile checks a file step: exactly one of read, write, append and
+// glob, and that only the fields its operation uses are set.
+func validateFile(step *Step, path string, res *Result) {
+	body := step.File
+	op, target := body.Op()
+	if op == FileOpNone {
+		res.errorf(path, step.Line, "must set exactly one of read, write, append, glob")
+		return
+	}
+	validateTemplate(fmt.Sprintf("%s.%s", path, op), target, step.Line, res)
+
+	switch op {
+	case FileOpRead:
+		if !parseModes[body.Parse] {
+			res.errorf(path+".parse", step.Line, "unknown mode %q, want text, json or lines", body.Parse)
+		}
+		if body.MaxBytes < 0 {
+			res.errorf(path+".max_bytes", step.Line, "must not be negative")
+		}
+		if body.Content != "" {
+			res.errorf(path+".content", step.Line, "belongs to write and append, not to read")
+		}
+	case FileOpWrite, FileOpAppend:
+		if body.Content == "" {
+			res.errorf(path+".content", step.Line, "%s requires content", op)
+		}
+		validateTemplate(path+".content", body.Content, step.Line, res)
+		if body.Parse != ParseUnset {
+			res.errorf(path+".parse", step.Line, "belongs to read, not to %s", op)
+		}
+		if body.MaxBytes != 0 {
+			res.errorf(path+".max_bytes", step.Line, "belongs to read, not to %s", op)
+		}
+		// Section 9.4: a write may change something, so a retry needs a
+		// dedupe key before it can repeat safely.
+		if step.DedupeKey == "" && step.Retry != nil {
+			res.warnf(path, step.Line, "retry on a %s without dedupe_key may repeat side effects", op)
+		}
+	case FileOpGlob:
+		if body.Content != "" {
+			res.errorf(path+".content", step.Line, "belongs to write and append, not to glob")
+		}
+		if body.Parse != ParseUnset {
+			res.errorf(path+".parse", step.Line, "belongs to read, not to glob")
+		}
+		if body.MaxBytes != 0 {
+			res.errorf(path+".max_bytes", step.Line, "belongs to read, not to glob")
+		}
+	}
 }
 
 func validateStepControl(step *Step, path string, declared map[string]bool, res *Result) {
