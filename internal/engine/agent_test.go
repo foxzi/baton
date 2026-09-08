@@ -621,3 +621,126 @@ calls:
 		t.Errorf("state.get is not in the audit log:\n%s", audit)
 	}
 }
+
+// 11. A step whose policy names an allowed host can fetch a page with the
+// fetch tool and submit a result from what it read (section 7.6). The call
+// is audited as a success, and the extracted text reaches the transcript,
+// which is the one place the fake engine's tool answers are observable.
+func TestAgent_FetchToolGetsPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, "<html><body><p>hello from the page</p></body></html>")
+	}))
+	defer server.Close()
+	host := strings.TrimPrefix(server.URL, "http://")
+
+	yamlText := fmt.Sprintf(`
+version: 1
+name: agent-fetch
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      tools:
+        fetch: { allow: [%q] }
+      result: result.json
+`, host)
+	script := fmt.Sprintf(`
+calls:
+  - tool: fetch
+    args: { url: %q }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`, server.URL+"/page")
+
+	eng, store, dir := newTestEngine(t, yamlText, nil)
+	writeAgentFiles(t, dir, agentSchema, script)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
+	}
+
+	stepDir := filepath.Join(store.Dir(), "steps", "review")
+	audit := readFile(t, filepath.Join(stepDir, "tool-calls.jsonl"))
+	if !strings.Contains(audit, `"tool":"fetch"`) {
+		t.Fatalf("the fetch call is not in the audit log:\n%s", audit)
+	}
+	if !strings.Contains(audit, `"status":"ok"`) {
+		t.Fatalf("the fetch call is not audited as a success:\n%s", audit)
+	}
+
+	transcript := readFile(t, filepath.Join(stepDir, "transcript.jsonl"))
+	if !strings.Contains(transcript, "hello from the page") {
+		t.Fatalf("the fetched page's text is not in the transcript:\n%s", transcript)
+	}
+}
+
+// 12. A step whose policy names a different host than the one it tries to
+// fetch never reaches the server: the fetch tool refuses the call before any
+// request is made, and the fake script's stop_on_error ends the run without
+// a submit_result, which the runner reports the way it always does when an
+// agent finishes without one (section 3.6).
+func TestAgent_FetchToolDeniedHostNeverReached(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+	}))
+	defer server.Close()
+
+	yamlText := `
+version: 1
+name: agent-fetch-denied
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      tools:
+        fetch: { allow: ["example.com"] }
+      result: result.json
+`
+	script := fmt.Sprintf(`
+calls:
+  - tool: fetch
+    args: { url: %q }
+    stop_on_error: true
+`, server.URL)
+
+	eng, store, dir := newTestEngine(t, yamlText, nil)
+	writeAgentFiles(t, dir, agentSchema, script)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("server calls = %d, want the host outside the allow list never reached", calls)
+	}
+	if result.Status != runstore.StatusFailed {
+		t.Fatalf("Status = %q, want %q", result.Status, runstore.StatusFailed)
+	}
+	if result.Error == nil || result.Error.Class != ClassSchema {
+		t.Fatalf("error = %#v, want class %s", result.Error, ClassSchema)
+	}
+	if !strings.Contains(result.Error.Message, "submit_result") {
+		t.Fatalf("message = %q, want it to mention submit_result", result.Error.Message)
+	}
+
+	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	if !strings.Contains(audit, `"tool":"fetch"`) {
+		t.Fatalf("the fetch call is not in the audit log:\n%s", audit)
+	}
+	if !strings.Contains(audit, `"status":"error"`) {
+		t.Fatalf("the fetch call is not audited as an error:\n%s", audit)
+	}
+	if !strings.Contains(audit, "allow list") {
+		t.Fatalf("the audit entry does not mention the allow list refusal:\n%s", audit)
+	}
+}

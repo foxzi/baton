@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"path/filepath"
 	"sync"
 	"time"
@@ -78,6 +79,9 @@ type Options struct {
 	// (section 7.6). It defaults to the state/ directory next to the run
 	// directory root.
 	StateDir string
+	// FetchClient performs the requests of the agent fetch tool, for tests.
+	// A nil client gets the one the tool builds itself.
+	FetchClient *http.Client
 	// Stdout is where the built-in stdout notify channel writes. It may be
 	// nil, in which case such a message is dropped.
 	Stdout io.Writer

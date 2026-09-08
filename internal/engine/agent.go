@@ -175,8 +175,13 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
+	fetch, stepErr := e.agentFetch(call)
+	if stepErr != nil {
+		return expr.Step{}, stepErr
+	}
 	toolSet := append(commands.Tools(), apis.Tools()...)
 	toolSet = append(toolSet, state.Tools()...)
+	toolSet = append(toolSet, fetch.Tools()...)
 
 	audit, closeAudit := e.auditWriter(path, dir)
 	defer closeAudit()
@@ -258,6 +263,20 @@ func (e *Engine) agentState(call *agentCall) (*tools.State, *Error) {
 	})
 	if err != nil {
 		return nil, wrapf(ClassConfig, err, "agent.tools.state")
+	}
+	return set, nil
+}
+
+// agentFetch builds the fetch tool of the step. The allow list comes from
+// the policy, so a step that names no hosts and has no profile granting the
+// tool gets none (section 7.6).
+func (e *Engine) agentFetch(call *agentCall) (*tools.Fetch, *Error) {
+	set, err := tools.NewFetch(tools.FetchOptions{
+		Policy: call.policy,
+		Client: e.opts.FetchClient,
+	})
+	if err != nil {
+		return nil, wrapf(ClassConfig, err, "agent.tools.fetch")
 	}
 	return set, nil
 }
