@@ -1,0 +1,22 @@
+[
+  {
+    "old_path": "internal/httpx/paginate.go",
+    "new_path": "internal/httpx/paginate.go",
+    "a_mode": "100644",
+    "b_mode": "100644",
+    "diff": "@@ -18,7 +18,7 @@\n-\tfor page := 1; page < strategy.Pages(); page++ {\n+\tfor page := 1; page <= strategy.Pages(); page++ {\n",
+    "new_file": false,
+    "renamed_file": false,
+    "deleted_file": false
+  },
+  {
+    "old_path": "internal/httpx/testdata/link_header.txt",
+    "new_path": "internal/httpx/testdata/link_header.txt",
+    "a_mode": "100644",
+    "b_mode": "0",
+    "diff": "@@ -1,2 +0,0 @@\n-Link: <https://gitlab.example.com/api/v4/projects/7/merge_requests?page=2>; rel=\"next\"\n",
+    "new_file": false,
+    "renamed_file": false,
+    "deleted_file": true
+  }
+]

@@ -1,8 +1,11 @@
 # GitLab pack (spec section 7.4.2). The first pack of the project: it teaches
 # baton the GitLab REST API without putting the name GitLab into the binary.
 #
-# Packs move to their own repository in milestone M3.5, together with the
-# forge/v1 interface this pack already declares.
+# The pack implements four of the five operations of forge/v1. GitLab posts
+# one discussion per comment and has no batch review call, so post_review is
+# left out on purpose (spec section 7.4.5): a scenario walks post_comment in
+# a foreach instead, and a scenario that declares interface: forge/v1 is told
+# so during validation rather than at run time.
 pack: gitlab
 version: 1
 description: GitLab REST API v4
@@ -44,6 +47,34 @@ ops:
         base: .diff_refs.base_sha, head: .diff_refs.head_sha,
         files: [ .changes[] | { path: .new_path, diff, deleted: .deleted_file } ] }
     implements: forge/v1.get_change
+    max_bytes: 500k
+
+  list_files:
+    get: /projects/{project}/merge_requests/{id}/diffs
+    description: Files a merge request touches, with their diffs
+    readonly: true
+    paginate: true
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      id: { pattern: '^\d+$' }
+    transform: '[ .[] | { path: .new_path, diff, deleted: .deleted_file } ]'
+    implements: forge/v1.list_files
+    max_bytes: 500k
+
+  get_file:
+    get: /projects/{project}/repository/files/{path}
+    description: Content of one file at a ref
+    readonly: true
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      # The whole path is one segment for GitLab, slashes included.
+      path: { pattern: '^[^\s?#]+$', encode: path }
+      # forge/v1 leaves the ref optional; GitLab always wants one, so the
+      # default stands in for "whatever the default branch points at".
+      ref: { pattern: '^[\w./-]+$', default: HEAD, in: query }
+    # GitLab answers with the content base64-encoded, whatever the file is.
+    transform: '{ content: (.content | @base64d), path: .file_path, ref }'
+    implements: forge/v1.get_file
     max_bytes: 500k
 
   list_merge_requests:
