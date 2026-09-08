@@ -5,6 +5,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/foxzi/baton/internal/gateway"
 )
 
 // checkWorkspacePath holds a workspace-relative path to what any of these
@@ -19,19 +21,19 @@ func checkWorkspacePath(name, value string, deny []string) (string, error) {
 	case len(value) > 1024:
 		return "", fmt.Errorf("argument %q is longer than 1024 bytes", name)
 	case strings.HasPrefix(value, "/"):
-		return "", fmt.Errorf("argument %q must not be an absolute path", name)
+		return "", gateway.Refusef("argument %q must not be an absolute path", name)
 	case strings.ContainsAny(value, "\x00\n"):
 		return "", fmt.Errorf("argument %q must be a single line", name)
 	}
 	for _, segment := range strings.Split(value, "/") {
 		if segment == ".." {
-			return "", fmt.Errorf("argument %q must not contain ..", name)
+			return "", gateway.Refusef("argument %q must not contain ..", name)
 		}
 	}
 
 	cleaned := path.Clean(value)
 	if denied(deny, cleaned) {
-		return "", fmt.Errorf("path %q is denied", cleaned)
+		return "", gateway.Refusef("path %q is denied", cleaned)
 	}
 	return cleaned, nil
 }
@@ -50,13 +52,13 @@ func checkWorkspaceGlob(name, value string) error {
 	case len(value) > 1024:
 		return fmt.Errorf("argument %q is longer than 1024 bytes", name)
 	case strings.HasPrefix(value, "/"):
-		return fmt.Errorf("argument %q must be relative to the workspace", name)
+		return gateway.Refusef("argument %q must be relative to the workspace", name)
 	case strings.ContainsAny(value, "\x00\n"):
 		return fmt.Errorf("argument %q must be a single line", name)
 	}
 	for _, segment := range strings.Split(value, "/") {
 		if segment == ".." {
-			return fmt.Errorf("argument %q must not contain ..", name)
+			return gateway.Refusef("argument %q must not contain ..", name)
 		}
 	}
 	return nil

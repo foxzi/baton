@@ -296,6 +296,62 @@ func TestCallReportsAHandlerErrorAsData(t *testing.T) {
 	}
 }
 
+// A handler that refuses the arguments on policy grounds - a path outside
+// the workspace, a host outside the allow list - tells the agent so like any
+// other tool error, but the step keeps the refusal so the engine can fail it
+// with class policy whatever the agent does next (section 13).
+func TestCallReportsAPolicyRefusalAsAViolation(t *testing.T) {
+	var log bytes.Buffer
+	g := start(t, Options{})
+	session := open(t, g, StepOptions{
+		Tools: []Tool{{
+			Name: "read",
+			Handler: func(context.Context, json.RawMessage) (any, error) {
+				return nil, Refusef("path %q is denied", ".git/config")
+			},
+		}},
+		Audit: &log,
+	})
+	client := connect(t, session)
+
+	res := call(t, client, "read", `{}`)
+	if !res.IsError {
+		t.Error("a policy refusal did not come back as a tool error")
+	}
+	if !strings.Contains(res.Text, "is denied") {
+		t.Errorf("text = %q, want the refusal's message", res.Text)
+	}
+	if got := session.PolicyViolation(); !strings.Contains(got, "is denied") {
+		t.Errorf("PolicyViolation() = %q, want the refusal remembered", got)
+	}
+
+	lines := auditLines(t, &log)
+	if len(lines) != 1 {
+		t.Fatalf("audit has %d lines, want one", len(lines))
+	}
+	if lines[0].Status != statusDenied {
+		t.Errorf("status = %q, want %q", lines[0].Status, statusDenied)
+	}
+}
+
+// A plain handler error is not a policy matter: the agent hears it and can
+// try again, and the step is not marked as having broken its policy.
+func TestCallKeepsAPlainHandlerErrorOutOfTheViolation(t *testing.T) {
+	g := start(t, Options{})
+	session := open(t, g, StepOptions{Tools: []Tool{{
+		Name: "broken",
+		Handler: func(context.Context, json.RawMessage) (any, error) {
+			return nil, fmt.Errorf("no such file")
+		},
+	}}})
+	client := connect(t, session)
+
+	call(t, client, "broken", `{}`)
+	if got := session.PolicyViolation(); got != "" {
+		t.Errorf("PolicyViolation() = %q, want a plain handler error not to count", got)
+	}
+}
+
 func TestCallReportsAnUnencodableAnswer(t *testing.T) {
 	g := start(t, Options{})
 	session := open(t, g, StepOptions{Tools: []Tool{{

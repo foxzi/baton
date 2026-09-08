@@ -544,7 +544,7 @@ func (f *FS) resolvePath(name, cleaned string) (string, error) {
 		return "", fmt.Errorf("fs: %s: %w", cleaned, err)
 	}
 	if resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator)) {
-		return "", fmt.Errorf("argument %q leaves the workspace", name)
+		return "", gateway.Refusef("argument %q leaves the workspace", name)
 	}
 	return candidate, nil
 }

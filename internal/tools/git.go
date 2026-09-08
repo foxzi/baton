@@ -391,7 +391,7 @@ func checkRevision(name, value string) error {
 	case strings.HasPrefix(value, "-"):
 		// A value starting with - would be read as an option, not a
 		// revision, by every one of these git subcommands.
-		return fmt.Errorf("argument %q looks like an option, not a revision", name)
+		return gateway.Refusef("argument %q looks like an option, not a revision", name)
 	case strings.Contains(value, "//"):
 		return fmt.Errorf("argument %q must not contain //", name)
 	case strings.ContainsAny(value, "\x00\n "):

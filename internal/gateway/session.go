@@ -77,13 +77,23 @@ func (s *Session) Calls() int {
 	return s.calls
 }
 
-// PolicyViolation reports the first call the step refused because the tool
-// was not declared for it, or the empty string. An engine turns it into a
-// policy error whatever the agent process did afterwards (section 13).
+// PolicyViolation reports the first call the step refused on policy grounds:
+// a tool the step does not have, or a handler that refused the arguments as
+// outside what the step may touch. An engine turns it into a policy error
+// whatever the agent process did afterwards (section 13).
 func (s *Session) PolicyViolation() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.violation
+}
+
+// refuse remembers the first policy refusal of the step.
+func (s *Session) refuse(message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.violation == "" {
+		s.violation = message
+	}
 }
 
 // Result returns the submitted result, if the agent submitted one.
@@ -121,10 +131,15 @@ func (s *Session) call(ctx context.Context, tool Tool, args json.RawMessage) *mc
 
 	value, err := tool.Handler(ctx, args)
 	if err != nil {
+		status := statusError
+		if isPolicy(err) {
+			status = statusDenied
+			s.refuse(err.Error())
+		}
 		s.audit.write(auditLine{
 			Tool:       tool.Name,
 			Args:       args,
-			Status:     statusError,
+			Status:     status,
 			Error:      err.Error(),
 			DurationMS: since(started),
 		})

@@ -266,11 +266,7 @@ func (s *Session) refuseUndeclared(next mcp.MethodHandler) mcp.MethodHandler {
 			Status: statusDenied,
 			Error:  message,
 		})
-		s.mu.Lock()
-		if s.violation == "" {
-			s.violation = message
-		}
-		s.mu.Unlock()
+		s.refuse(message)
 		return errorResult(message), nil
 	}
 }

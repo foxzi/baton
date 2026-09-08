@@ -741,9 +741,9 @@ calls:
 
 // 12. A step whose policy names a different host than the one it tries to
 // fetch never reaches the server: the fetch tool refuses the call before any
-// request is made, and the fake script's stop_on_error ends the run without
-// a submit_result, which the runner reports the way it always does when an
-// agent finishes without one (section 3.6).
+// request is made. The refusal is a policy one, so the step fails with class
+// policy and the audit line says denied, whatever the agent does next
+// (section 13).
 func TestAgent_FetchToolDeniedHostNeverReached(t *testing.T) {
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -784,19 +784,19 @@ calls:
 	if result.Status != runstore.StatusFailed {
 		t.Fatalf("Status = %q, want %q", result.Status, runstore.StatusFailed)
 	}
-	if result.Error == nil || result.Error.Class != ClassSchema {
-		t.Fatalf("error = %#v, want class %s", result.Error, ClassSchema)
+	if result.Error == nil || result.Error.Class != ClassPolicy {
+		t.Fatalf("error = %#v, want class %s", result.Error, ClassPolicy)
 	}
-	if !strings.Contains(result.Error.Message, "submit_result") {
-		t.Fatalf("message = %q, want it to mention submit_result", result.Error.Message)
+	if !strings.Contains(result.Error.Message, "allow list") {
+		t.Fatalf("message = %q, want it to mention the allow list", result.Error.Message)
 	}
 
 	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
 	if !strings.Contains(audit, `"tool":"fetch"`) {
 		t.Fatalf("the fetch call is not in the audit log:\n%s", audit)
 	}
-	if !strings.Contains(audit, `"status":"error"`) {
-		t.Fatalf("the fetch call is not audited as an error:\n%s", audit)
+	if !strings.Contains(audit, `"status":"denied"`) {
+		t.Fatalf("the fetch call is not audited as denied:\n%s", audit)
 	}
 	if !strings.Contains(audit, "allow list") {
 		t.Fatalf("the audit entry does not mention the allow list refusal:\n%s", audit)
@@ -890,6 +890,64 @@ calls:
 	}
 	if strings.Contains(audit, `"status":"error"`) {
 		t.Errorf("a git call was audited as an error:\n%s", audit)
+	}
+}
+
+// A file tool that refuses a path outside the workspace fails the step with
+// class policy, even though the agent went on and submitted a result: a step
+// that reached past its boundary broke its policy whatever it did afterwards
+// (section 13).
+func TestAgent_FileToolEscapeIsAPolicyFailure(t *testing.T) {
+	yamlText := `
+version: 1
+name: agent-fs-escape
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      profile: fix
+      result: result.json
+`
+	script := `
+calls:
+  - tool: fs.read
+    args: { path: "../outside.txt" }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`
+	parent := t.TempDir()
+	if err := os.WriteFile(filepath.Join(parent, "outside.txt"), []byte("secret\n"), 0o644); err != nil {
+		t.Fatalf("write outside.txt: %v", err)
+	}
+	workspace := filepath.Join(parent, "repo")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("create the workspace: %v", err)
+	}
+
+	eng, store, dir := newTestEngine(t, yamlText, func(o *Options) {
+		o.Workspace = workspace
+	})
+	writeAgentFiles(t, dir, agentSchema, script)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusFailed {
+		t.Fatalf("Status = %q, want %q", result.Status, runstore.StatusFailed)
+	}
+	if result.Error == nil || result.Error.Class != ClassPolicy {
+		t.Fatalf("error = %#v, want class %s", result.Error, ClassPolicy)
+	}
+
+	audit := readFile(t, filepath.Join(store.Dir(), "steps", "review", "tool-calls.jsonl"))
+	if !strings.Contains(audit, `"status":"denied"`) {
+		t.Errorf("the refused read is not audited as denied:\n%s", audit)
+	}
+	if strings.Contains(audit, "secret") {
+		t.Errorf("the file outside the workspace was read:\n%s", audit)
 	}
 }
 

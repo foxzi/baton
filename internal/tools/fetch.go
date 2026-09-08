@@ -184,7 +184,7 @@ func (f *Fetch) checkURL(raw string) (*url.URL, error) {
 	switch target.Scheme {
 	case "http", "https":
 	default:
-		return nil, fmt.Errorf("fetch: %s is not an http or https URL", raw)
+		return nil, gateway.Refusef("fetch: %s is not an http or https URL", raw)
 	}
 	if target.Host == "" {
 		return nil, fmt.Errorf("fetch: %s has no host", raw)
@@ -192,7 +192,7 @@ func (f *Fetch) checkURL(raw string) (*url.URL, error) {
 	if target.User != nil {
 		// Credentials in a URL would be sent to the host and written to the
 		// audit log; a public page does not need them.
-		return nil, fmt.Errorf("fetch: %s must not carry credentials", target.Redacted())
+		return nil, gateway.Refusef("fetch: %s must not carry credentials", target.Redacted())
 	}
 	if err := f.allowed(target.Host); err != nil {
 		return nil, err
@@ -209,7 +209,7 @@ func (f *Fetch) checkRedirect(request *http.Request, via []*http.Request) error 
 	switch request.URL.Scheme {
 	case "http", "https":
 	default:
-		return fmt.Errorf("fetch: redirect to %s is not http or https", request.URL)
+		return gateway.Refusef("fetch: redirect to %s is not http or https", request.URL)
 	}
 	return f.allowed(request.URL.Host)
 }
@@ -231,7 +231,7 @@ func (f *Fetch) allowed(host string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("fetch: %s is not in the allow list (%s)", name, strings.Join(f.allow, ", "))
+	return gateway.Refusef("fetch: %s is not in the allow list (%s)", name, strings.Join(f.allow, ", "))
 }
 
 // description tells the agent which hosts it can reach, so that it does not
