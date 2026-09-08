@@ -289,14 +289,23 @@ func buildPositionalParam(p *v3.Parameter, method string) (paramLine, error) {
 	// the pack validator requires a pattern for anything that lands in the
 	// path or the query regardless of enum, so a schema enum only adds an
 	// extra enum constraint alongside the pattern, it never replaces it.
+	isEnum := len(schema.Enum) > 0 && primaryType(schema.Type) == "string"
 	pattern, todo, err := paramPattern(primaryType(schema.Type))
 	if err != nil {
 		return paramLine{}, fmt.Errorf("%s: %w", p.Name, err)
 	}
+	// an enum states the whole value set, so its pattern needs no narrowing
+	// by hand: it is built from the values themselves.
+	if isEnum {
+		if alt := enumPattern(schema.Enum); alt != "" {
+			pattern, todo = alt, ""
+		}
+	}
 	line.attrs = append(line.attrs, "pattern: "+quote(pattern))
-	if len(schema.Enum) > 0 && primaryType(schema.Type) == "string" {
+	if isEnum {
 		line.attrs = append(line.attrs, "enum: ["+strings.Join(enumValues(schema.Enum), ", ")+"]")
-	} else if todo != "" {
+	}
+	if todo != "" {
 		line.comment = todo
 	}
 
@@ -309,7 +318,10 @@ func buildPositionalParam(p *v3.Parameter, method string) (paramLine, error) {
 	if def := renderDefault(schema.Default); def != "" {
 		line.attrs = append(line.attrs, "default: "+def)
 	}
-	if actualIn == packs.InPath && primaryType(schema.Type) == "string" {
+	// a free-form string may carry a slash, which would split the path, so
+	// the author has to decide; an enum-derived pattern already spells out
+	// every value the argument can take.
+	if actualIn == packs.InPath && primaryType(schema.Type) == "string" && todo != "" {
 		line.attrs = append(line.attrs, "encode: path")
 		if line.comment != "" {
 			line.comment += "; "

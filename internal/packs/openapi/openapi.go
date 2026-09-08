@@ -348,6 +348,23 @@ func paramPattern(t string) (pattern, todo string, err error) {
 	}
 }
 
+// enumPattern builds a pattern that admits exactly the values of a string
+// enum. It returns "" when a value is not a plain scalar, leaving the
+// type-derived pattern in place.
+func enumPattern(nodes []*yamlv4.Node) string {
+	alts := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		if n == nil || n.Kind != yamlv4.ScalarNode || n.Value == "" {
+			return ""
+		}
+		alts = append(alts, regexp.QuoteMeta(n.Value))
+	}
+	if len(alts) == 0 {
+		return ""
+	}
+	return "^(" + strings.Join(alts, "|") + ")$"
+}
+
 // renderDefault renders the default value of a schema as a YAML scalar,
 // preserving whatever type the document declared it with: an unquoted
 // !!bool/!!int/!!float value renders as-is, anything else (usually !!str)

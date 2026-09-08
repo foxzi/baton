@@ -336,3 +336,136 @@ func TestImportExplicitNameOverridesTitleSlug(t *testing.T) {
 		t.Errorf("pack name = %q, want custom-name", pack.Pack)
 	}
 }
+
+func TestImportEnumParamPatternFromValues(t *testing.T) {
+	spec := `
+openapi: 3.0.3
+info: { title: Demo, version: "1" }
+paths:
+  /issues/{status}:
+    get:
+      operationId: listIssues
+      parameters:
+        - name: status
+          in: path
+          required: true
+          schema: { type: string, enum: [opened, closed, merged] }
+        - name: state
+          in: query
+          required: false
+          schema: { type: string, enum: [opened, closed, merged] }
+      responses:
+        "200": { description: ok }
+`
+	_, out := parsePack(t, spec, Options{Ops: []string{"listIssues"}})
+
+	stateLine := lineContaining(t, out, "state:")
+	if !strings.Contains(stateLine, "pattern: ^(opened|closed|merged)$") {
+		t.Errorf("state param line = %q, want the enum-derived pattern", stateLine)
+	}
+	if !strings.Contains(stateLine, "enum: [opened, closed, merged]") {
+		t.Errorf("state param line = %q, want the enum values", stateLine)
+	}
+	if strings.Contains(stateLine, "TODO: narrow the pattern") {
+		t.Errorf("state param line = %q, an enum-derived pattern needs no narrowing", stateLine)
+	}
+
+	statusLine := lineContaining(t, out, "status:")
+	if strings.Contains(statusLine, "encode: path") {
+		t.Errorf("status param line = %q, a string enum in the path has no slash to worry about", statusLine)
+	}
+}
+
+// lineContaining returns the first line of out that contains needle, or
+// fails the test if there is none.
+func lineContaining(t testing.TB, out, needle string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, needle) {
+			return line
+		}
+	}
+	t.Fatalf("no line contains %q, got:\n%s", needle, out)
+	return ""
+}
+
+func TestImportAPIKeyAuthHeader(t *testing.T) {
+	spec := `
+openapi: 3.0.3
+info: { title: Demo, version: "1" }
+components:
+  securitySchemes:
+    apiKeyAuth: { type: apiKey, in: header, name: PRIVATE-TOKEN }
+security:
+  - apiKeyAuth: []
+paths:
+  /things:
+    get:
+      operationId: listThings
+      responses:
+        "200": { description: ok }
+`
+	pack, _ := parsePack(t, spec, Options{Ops: []string{"listThings"}})
+	if pack.Auth == nil || pack.Auth.Kind != packs.AuthHeader || pack.Auth.Name != "PRIVATE-TOKEN" {
+		t.Errorf("auth = %+v, want header PRIVATE-TOKEN", pack.Auth)
+	}
+}
+
+func TestImportAPIKeyAuthQuery(t *testing.T) {
+	spec := `
+openapi: 3.0.3
+info: { title: Demo, version: "1" }
+components:
+  securitySchemes:
+    apiKeyAuth: { type: apiKey, in: query, name: private_token }
+security:
+  - apiKeyAuth: []
+paths:
+  /things:
+    get:
+      operationId: listThings
+      responses:
+        "200": { description: ok }
+`
+	pack, _ := parsePack(t, spec, Options{Ops: []string{"listThings"}})
+	if pack.Auth == nil || pack.Auth.Kind != packs.AuthQuery || pack.Auth.Name != "private_token" {
+		t.Errorf("auth = %+v, want query private_token", pack.Auth)
+	}
+}
+
+func TestImportOpenAPI31Document(t *testing.T) {
+	spec := `
+openapi: 3.1.0
+info: { title: Demo, version: "1" }
+paths:
+  /things:
+    post:
+      operationId: createThing
+      parameters:
+        - name: label
+          in: query
+          required: false
+          schema: { type: [string, "null"] }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: [string, "null"]
+      responses:
+        "201": { description: created }
+`
+	pack, _ := parsePack(t, spec, Options{Ops: []string{"createThing"}})
+	op, err := pack.Op("create_thing")
+	if err != nil {
+		t.Fatalf("Op(create_thing): %v", err)
+	}
+	if got := op.Params["label"]; got == nil || got.Pattern != `^[\w./-]+$` {
+		t.Errorf("create_thing.params.label = %+v, want the string pattern, null ignored", got)
+	}
+	if got := op.Params["note"]; got == nil {
+		t.Errorf("create_thing.params.note = %+v, want the body field present", got)
+	}
+}
