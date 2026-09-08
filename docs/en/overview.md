@@ -120,8 +120,8 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 
 ## Technology
 
-Go, a single static binary. Dependencies: a YAML parser, expr-lang for expressions, gojq for transforms in packs, a JSON Schema validator, the Go SDK for MCP, model provider SDKs (Anthropic, OpenAI, OpenAI-compatible including OpenRouter). No external services and no databases. Integrations with services live in a separate packs repository.
+Go, a single static binary. Dependencies: a YAML parser, expr-lang for expressions, gojq for transforms in packs, a JSON Schema validator, the Go SDK for MCP, model provider SDKs (Anthropic, OpenAI, OpenAI-compatible including OpenRouter), a Markdown renderer for `md2html`/`md2text` and an OpenAPI parser for `baton apis import`. No external services and no databases. Integrations with services live in a separate packs repository.
 
 ## Status
 
-Design complete, the technical specification for the first version is a separate document.
+The technical specification for the first version is a separate document ([spec.md](spec.md)), and the implementation follows its milestones. Working: the core, the HTTP layer with packs, the model providers and `llm` steps, `foreach`, the cache, `resume`, notifications, `agent` steps with the MCP gateway and the tool profiles, and the interface registry with the `baton apis` commands. Outstanding: execution of `until` and `switch`, third-party MCP servers, the separate `baton-apis` packs repository and the release builds. The [roadmap in the README](../../README.md#status) tracks the state milestone by milestone.

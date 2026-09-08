@@ -144,16 +144,20 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 **Runnable.** Scenarios built from `run`, `assert`, `http`, `llm`, `foreach` and `notify` steps execute end to end: `baton run`, `resume`, `runs`, `validate`, `schema`. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema, and a notification, cached so that a repeated run of the same week spends no tokens. `agent` steps run too, with the `fake` engine and the Claude Code adapter: the runner prepares the workspace, serves the step's `commands` as tools through the MCP gateway and takes the result from `submit_result`. The gateway also serves the file, api, git, fetch and state tools of the step's profile; an engine that brings its own file tools, as Claude Code does, is not served the gateway's.
 
+**Packs are a layer of their own.** A pack loads from a local directory or from a git source pinned by version and checksum, into a local cache. An operation that declares `implements` is checked against the interface registry — argument names, required-ness and the shape of the transformed example — and a scenario's `apis` entry may declare `interface: forge/v1`, in which case the pack it selects is checked for the interface's operations when it loads. `baton apis import` bootstraps a pack from an OpenAPI 3 document, `apis validate` replays every recorded `examples/<op>.json` through the envelope and the transform, and `apis call` calls one operation of a scenario's `apis` entry against the real service. What is missing is the `baton-apis` repository itself: this repository ships only the `gitlab` pack, and `telegram` still notifies through the built-in channel rather than a `notify/v1` pack.
+
+**Not there yet: loops, branches and releases.** `until` and `switch` steps parse and validate but are not executed yet; `fallback`, `dedupe_key`, `fetch`, `state` and cancellation on SIGINT/SIGTERM do work. Third-party MCP servers cannot be attached to a step yet, and a reference to a step skipped by a branch is not caught statically. Release builds through goreleaser, the schema reference generated from the JSON Schema and the triage example scenario are still outstanding.
+
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
 | Milestone | Scope | State |
 |---|---|---|
 | M1 | Core: parsing, validation, secrets, expressions, templates, `run`, `assert`, run directory, HTTP layer with auth schemes and pagination, local packs | done |
 | M2 | Providers (Anthropic, OpenAI, OpenAI-compatible/OpenRouter), `llm` steps, structured output, `foreach`, cache, resume, `on_failure`, reports | done |
-| M3 | `fake` engine, Claude Code adapter, MCP gateway, `submit_result`, `commands`, profiles, audit log | in progress |
+| M3 | `fake` engine, Claude Code adapter, MCP gateway, `submit_result`, `commands`, profiles, audit log | done |
 | M3.5 | Packs from git with pinning and checksums, the `forge/v1`/`tracker/v1`/`notify/v1` interface registry, `baton apis` commands | in progress |
-| M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | not started |
-| M5 | Documentation, example scenarios, goreleaser builds for linux/amd64 and linux/arm64 | not started |
+| M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | in progress |
+| M5 | Documentation, example scenarios, goreleaser builds for linux/amd64 and linux/arm64 | in progress |
 
 ## Building
 
