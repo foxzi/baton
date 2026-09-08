@@ -33,6 +33,11 @@ func (d Diagnostic) String() string {
 type Result struct {
 	Errors   []Diagnostic
 	Warnings []Diagnostic
+
+	// scope is the step whose expressions are being validated and refs the
+	// step references found in them, resolved once every id is known.
+	scope *stepScope
+	refs  []stepRef
 }
 
 // OK reports whether the scenario is free of errors. Warnings do not fail
@@ -92,9 +97,12 @@ func Validate(scn *Scenario) Result {
 
 	declared := map[string]bool{}
 	validateSteps(scn, scn.Steps, "steps", declared, &res)
-	// on_failure runs after the scenario failed and has its own id namespace.
-	validateSteps(scn, scn.OnFailure, "on_failure", map[string]bool{}, &res)
+	// on_failure runs after the scenario failed and has its own id namespace,
+	// but every step of the run is in scope there.
+	validateSteps(scn, scn.OnFailure, "on_failure", stepIDs(scn.Steps), &res)
 	validateSwitches(scn, &res)
+	resolveRefs(&res, conditionalSteps(scn))
+	res.scope, res.refs = nil, nil
 
 	return res
 }
@@ -156,10 +164,17 @@ func validateSteps(scn *Scenario, steps []Step, prefix string, declared map[stri
 	for i := range steps {
 		step := &steps[i]
 		path := fmt.Sprintf("%s[%d]", prefix, i)
+		res.enterStep(&stepScope{
+			path:        path,
+			earlier:     cloneIDs(declared),
+			conditional: strings.TrimSpace(step.When) != "",
+			ordered:     prefix == "steps",
+		})
 		validateStepID(step, path, declared, res)
 		validateStepBody(scn, step, path, res)
 		validateStepControl(step, path, declared, res)
 		validateExpr(path+".when", step.When, step.Line, res)
+		res.enterStep(nil)
 	}
 }
 
@@ -844,6 +859,7 @@ func validateExpr(path, source string, line int, res *Result) {
 	if _, err := expr.CompileBool(source); err != nil {
 		res.errorf(path, line, "%s", err)
 	}
+	collectRefs(res, path, source, line, false)
 }
 
 // validateTemplate checks specification section 4, checks 4 and 7: text must
@@ -855,6 +871,7 @@ func validateTemplate(path, text string, line int, res *Result) {
 	if err := tmpl.Check(path, text); err != nil {
 		res.errorf(path, line, "%s", err)
 	}
+	collectRefs(res, path, text, line, true)
 }
 
 // sortedKeys returns map keys in a stable order so that diagnostics do not

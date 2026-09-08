@@ -793,6 +793,9 @@ steps:
 version: 1
 name: valid
 steps:
+  - id: diff
+    run:
+      argv: ["git", "diff"]
   - id: classify
     llm:
       model: anthropic/claude-haiku-4-5
