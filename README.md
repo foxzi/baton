@@ -142,14 +142,14 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 ## Status
 
-**Design complete, implementation just started.** The repository currently holds the specification and a build skeleton — the CLI only answers `version` and `help`. Nothing in the scenario format above executes yet.
+**Runnable.** Scenarios built from `run`, `assert`, `http`, `llm`, `foreach` and `notify` steps execute end to end: `baton run`, `resume`, `runs`, `validate`, `schema`. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema, and a notification, cached so that a repeated run of the same week spends no tokens. Agentic steps (`agent`, the MCP gateway, `commands`) are not implemented yet.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
 | Milestone | Scope | State |
 |---|---|---|
-| M1 | Core: parsing, validation, secrets, expressions, templates, `run`, `assert`, run directory, HTTP layer with auth schemes and pagination, local packs | not started |
-| M2 | Providers (Anthropic, OpenAI, OpenAI-compatible/OpenRouter), `llm` steps, structured output, `foreach`, cache, resume, `on_failure`, reports | not started |
+| M1 | Core: parsing, validation, secrets, expressions, templates, `run`, `assert`, run directory, HTTP layer with auth schemes and pagination, local packs | done |
+| M2 | Providers (Anthropic, OpenAI, OpenAI-compatible/OpenRouter), `llm` steps, structured output, `foreach`, cache, resume, `on_failure`, reports | done |
 | M3 | `fake` engine, Claude Code adapter, MCP gateway, `submit_result`, `commands`, profiles, audit log | not started |
 | M3.5 | Packs from git with pinning and checksums, the `forge/v1`/`tracker/v1`/`notify/v1` interface registry, `baton apis` commands | not started |
 | M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | not started |
@@ -165,6 +165,18 @@ make test       # go test ./...
 make race       # go test -race ./...
 make all        # fmt, vet, test, build
 ```
+
+## Running
+
+```sh
+baton validate examples/weekly-report.yaml
+baton run examples/weekly-report.yaml \
+    -i 'projects=["acme/web", "acme/api"]' -i since=2026-01-01
+```
+
+The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` or `./baton.yaml`, or wherever `--config` points. Secrets are read from the environment or from files at the moment a step needs them; they never reach the run directory, the cache or a model prompt.
+
+Every run writes `runs/<id>/` with `run.json`, `events.jsonl` and the outputs of each step. `baton runs list`, `baton runs show <id>` and `baton runs logs <id>` read it back, `baton resume <id>` continues a failed run from the step that failed. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached step results.
 
 ## Technology
 
