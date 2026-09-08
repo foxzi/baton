@@ -1,0 +1,22 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*os.File).Close
+        - (*os.File).Write
+        - (io.ReadCloser).Close
+        - os.Remove
+        - os.RemoveAll
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+  exclusions:
+    rules:
+      # Cleanup on the way out is best effort: there is nothing left to do
+      # with the error, and the call that mattered has already reported one.
+      - linters: [errcheck]
+        source: "^\\s*defer "
+      - linters: [errcheck]
+        path: _test\.go

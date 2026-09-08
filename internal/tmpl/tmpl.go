@@ -276,7 +276,7 @@ func isEmpty(value any) bool {
 	switch v.Kind() {
 	case reflect.String, reflect.Slice, reflect.Map, reflect.Array:
 		return v.Len() == 0
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		return v.IsNil() || isEmpty(v.Elem().Interface())
 	case reflect.Bool:
 		return !v.Bool()
@@ -391,11 +391,11 @@ func scan(v reflect.Value, visited map[uintptr]bool, depth int) error {
 	}
 
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		if v.IsNil() {
 			return nil
 		}
-		if v.Kind() == reflect.Ptr {
+		if v.Kind() == reflect.Pointer {
 			if visited[v.Pointer()] {
 				return nil
 			}
@@ -445,7 +445,7 @@ func fieldHoldsSecret(t reflect.Type, depth int) bool {
 		return true
 	}
 	switch t.Kind() {
-	case reflect.Ptr, reflect.Slice, reflect.Array:
+	case reflect.Pointer, reflect.Slice, reflect.Array:
 		return fieldHoldsSecret(t.Elem(), depth+1)
 	case reflect.Map:
 		return fieldHoldsSecret(t.Key(), depth+1) || fieldHoldsSecret(t.Elem(), depth+1)
