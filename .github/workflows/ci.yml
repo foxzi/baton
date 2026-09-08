@@ -31,6 +31,26 @@ jobs:
       - name: test
         run: go test -race ./...
 
+  # Catches a broken release config before a tag reaches release.yml.
+  release-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: check
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: build --snapshot --clean --single-target
+
   lint:
     runs-on: ubuntu-latest
     steps:
