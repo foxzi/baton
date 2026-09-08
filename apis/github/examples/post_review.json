@@ -1,0 +1,11 @@
+{
+  "id": 987654321,
+  "node_id": "PRR_kwDOExample7654321",
+  "user": { "login": "asmirnova", "id": 42 },
+  "body": "Looks solid overall, a couple of inline notes.",
+  "state": "COMMENTED",
+  "html_url": "https://github.com/example/project/pull/42#pullrequestreview-987654321",
+  "pull_request_url": "https://api.github.com/repos/example/project/pulls/42",
+  "submitted_at": "2024-05-14T09:20:11Z",
+  "commit_id": "9f8e7d6c5b4a9f8e7d6c5b4a9f8e7d6c5b4a9f8e"
+}

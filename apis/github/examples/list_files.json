@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    "filename": "internal/httpx/paginate.go",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 1,
+    "changes": 5,
+    "blob_url": "https://github.com/example/project/blob/9f8e7d6c5b4a9f8e7d6c5b4a9f8e7d6c5b4a9f8e/internal/httpx/paginate.go",
+    "raw_url": "https://github.com/example/project/raw/9f8e7d6c5b4a9f8e7d6c5b4a9f8e/internal/httpx/paginate.go",
+    "contents_url": "https://api.github.com/repos/example/project/contents/internal/httpx/paginate.go?ref=9f8e7d6c5b4a9f8e7d6c5b4a9f8e7d6c5b4a9f8e",
+    "patch": "@@ -18,7 +18,7 @@\n-\tfor page := 1; page < strategy.Pages(); page++ {\n+\tfor page := 1; page <= strategy.Pages(); page++ {\n"
+  },
+  {
+    "sha": "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+    "filename": "internal/httpx/testdata/link_header.txt",
+    "status": "removed",
+    "additions": 0,
+    "deletions": 2,
+    "changes": 2,
+    "blob_url": "https://github.com/example/project/blob/1b2c3d4e5f60718293a4b5c6d7e8f90123456789/internal/httpx/testdata/link_header.txt",
+    "raw_url": "https://github.com/example/project/raw/1b2c3d4e5f60718293a4b5c6d7e8f90123456789/internal/httpx/testdata/link_header.txt",
+    "contents_url": "https://api.github.com/repos/example/project/contents/internal/httpx/testdata/link_header.txt?ref=1b2c3d4e5f60718293a4b5c6d7e8f90123456789",
+    "patch": "@@ -1,2 +0,0 @@\n-Link: <https://gitlab.example.com/api/v4/projects/7/merge_requests?page=2>; rel=\"next\"\n"
+  }
+]

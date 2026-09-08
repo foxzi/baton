@@ -1,0 +1,13 @@
+{
+  "name": "paginate.go",
+  "path": "internal/httpx/paginate.go",
+  "sha": "9a1c0f5d6e7b8a9c0d1e2f3a4b5c6d7e8f901234",
+  "size": 62,
+  "url": "https://api.github.com/repos/example/project/contents/internal/httpx/paginate.go?ref=main",
+  "html_url": "https://github.com/example/project/blob/main/internal/httpx/paginate.go",
+  "git_url": "https://api.github.com/repos/example/project/git/blobs/9a1c0f5d6e7b8a9c0d1e2f3a4b5c6d7e8f901234",
+  "download_url": "https://raw.githubusercontent.com/example/project/main/internal/httpx/paginate.go",
+  "type": "file",
+  "encoding": "base64",
+  "content": "cGFja2FnZSBodHRweAoKLy8gcGFnZUxpbWl0IGNhcHMgYSB3YWxrLgpjb25z\ndCBwYWdlTGltaXQgPSAyMAo="
+}
