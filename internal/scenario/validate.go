@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/foxzi/baton/internal/expr"
+	"github.com/foxzi/baton/internal/ifaces"
 	"github.com/foxzi/baton/internal/tmpl"
 	"gopkg.in/yaml.v3"
 )
@@ -297,6 +298,14 @@ func validateAPIs(scn *Scenario, res *Result) {
 		}
 		for _, field := range sortedKeys(api.Config) {
 			validateTemplate(path+".config."+field, api.Config[field], api.Line, res)
+		}
+		// The pack itself only loads at run time, so this can only check
+		// that the interface name exists in the registry; whether the pack
+		// actually implements it is checked in internal/engine.
+		if api.Interface != "" {
+			if _, ok := ifaces.Get(api.Interface); !ok {
+				res.errorf(path+".interface", api.Line, "unknown interface %q: known interfaces are %s", api.Interface, strings.Join(ifaces.Names(), ", "))
+			}
 		}
 	}
 }

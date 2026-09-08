@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/foxzi/baton/internal/runstore"
@@ -494,5 +495,81 @@ steps:
 	}
 	if result.Error == nil || result.Error.Class != ClassConfig {
 		t.Fatalf("Error = %+v, want class %q", result.Error, ClassConfig)
+	}
+}
+
+// forgeGetChangePack implements only forge/v1.get_change, not the rest of
+// the forge/v1 interface (list_files, get_file, post_comment, post_review).
+const forgeGetChangePack = `pack: gitlab
+version: 1
+config:
+  base_url: {}
+ops:
+  get_change:
+    get: /projects/{project}/merge_requests/{id}/changes
+    readonly: true
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      id: { pattern: '^\d+$' }
+    transform: |
+      { id: .iid, title, files: [] }
+    implements: forge/v1.get_change
+`
+
+// forgeGetChangeExample is the recorded response CheckImplements replays to
+// check the transform against forge/v1.get_change's result schema.
+const forgeGetChangeExample = `{"iid": 1, "title": "demo"}`
+
+// 10. An apis entry that declares interface: forge/v1 fails to load, as a
+// config error, when its pack implements only part of the interface (spec
+// section 3.4, 7.4.5).
+func TestRun_HTTPOp_InterfaceNotImplemented(t *testing.T) {
+	yamlText := `
+version: 1
+name: op-interface
+apis:
+  gitlab:
+    pack: gitlab
+    from: ./apis/
+    interface: forge/v1
+    config:
+      base_url: "http://example.invalid"
+steps:
+  - id: one
+    http:
+      op: gitlab.get_change
+      args:
+        project: "demo"
+        id: "1"
+`
+	var failMessage string
+	eng, _, dir := newTestEngine(t, yamlText, func(o *Options) {
+		o.Observer = func(e Event) {
+			if e.Type == "step_failed" {
+				failMessage = e.Message
+			}
+		}
+	})
+	writePack(t, dir, "gitlab", forgeGetChangePack)
+	examplesDir := filepath.Join(dir, "apis", "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", examplesDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(examplesDir, "get_change.json"), []byte(forgeGetChangeExample), 0o644); err != nil {
+		t.Fatalf("write example: %v", err)
+	}
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusFailed {
+		t.Fatalf("Status = %q, want failed", result.Status)
+	}
+	if result.Error == nil || result.Error.Class != ClassConfig {
+		t.Fatalf("Error = %+v, want class %q", result.Error, ClassConfig)
+	}
+	if !strings.Contains(failMessage, "does not implement forge/v1") {
+		t.Errorf("step_failed message = %q, want it to mention %q", failMessage, "does not implement forge/v1")
 	}
 }

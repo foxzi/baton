@@ -954,6 +954,41 @@ steps:
 `,
 			wantErr: "steps[0].message",
 		},
+		{
+			name: "apis interface unknown",
+			yaml: `
+version: 1
+name: valid
+apis:
+  forge:
+    pack: gitlab
+    from: ../apis/
+    interface: forge/v9
+steps:
+  - id: s
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: `apis.forge.interface: unknown interface "forge/v9"`,
+		},
+		{
+			name: "apis interface known",
+			yaml: `
+version: 1
+name: valid
+apis:
+  forge:
+    pack: gitlab
+    from: ../apis/
+    interface: forge/v1
+steps:
+  - id: s
+    run:
+      argv: ["echo", "hi"]
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
 	}
 
 	for _, tc := range cases {

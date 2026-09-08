@@ -273,6 +273,11 @@ func (e *Engine) api(name, authOverride string) (*httpx.API, *Error) {
 	if err != nil {
 		return nil, wrapf(ClassConfig, err, "apis.%s", name)
 	}
+	if entry.Interface != "" {
+		if err := pack.CheckInterface(entry.Interface); err != nil {
+			return nil, wrapf(ClassConfig, err, "apis.%s.interface", name)
+		}
+	}
 	config := make(map[string]string, len(entry.Config))
 	for _, field := range sortedKeys(entry.Config) {
 		value, stepErr := e.render(fmt.Sprintf("apis.%s.config.%s", name, field), entry.Config[field])
