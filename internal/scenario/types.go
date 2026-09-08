@@ -2,9 +2,9 @@
 //
 // The format is specified in docs/ru/spec.md, section 3, and the validation
 // rules in section 4. The llm and foreach step bodies have typed models with
-// full validation. Step kinds the runner does not execute yet (agent, until,
-// switch, notify) are still parsed into a raw node so that a scenario using
-// them loads and reports structural problems; their bodies gain typed models
+// full validation. Step kinds the runner does not execute yet (until, switch,
+// notify) are still parsed into a raw node so that a scenario using them
+// loads and reports structural problems; their bodies gain typed models
 // together with the code that runs them.
 package scenario
 
@@ -30,9 +30,9 @@ type Scenario struct {
 	// (spec section 7.4.1).
 	APIs map[string]API `yaml:"apis"`
 
-	// Commands is accepted but not interpreted yet; it belongs to the agent
-	// gateway (spec section 7.5).
-	Commands *yaml.Node `yaml:"commands"`
+	// Commands are the commands agent steps may ask the runner to execute
+	// (spec section 7.5).
+	Commands map[string]Command `yaml:"commands"`
 
 	// Path is the file the scenario was read from. Prompt, schema and
 	// template paths in the scenario resolve relative to its directory.
@@ -108,12 +108,12 @@ type Step struct {
 	HTTP    *HTTPStep    `yaml:"http"`
 	Assert  *AssertStep  `yaml:"assert"`
 	LLM     *LLMStep     `yaml:"llm"`
+	Agent   *AgentStep   `yaml:"agent"`
 	Foreach *ForeachStep `yaml:"foreach"`
 
 	// Bodies of step kinds the runner does not execute yet. These are kept
 	// as raw nodes; yaml.v3 only decodes into a yaml.Node value, never into
 	// a *yaml.Node, so presence is reported by IsZero rather than by nil.
-	Agent   yaml.Node `yaml:"agent"`
 	Until   yaml.Node `yaml:"until"`
 	Switch  string    `yaml:"switch"`
 	Cases   yaml.Node `yaml:"cases"`
@@ -159,7 +159,7 @@ func (s *Step) Kinds() []Kind {
 	if s.LLM != nil {
 		kinds = append(kinds, KindLLM)
 	}
-	if !s.Agent.IsZero() {
+	if s.Agent != nil {
 		kinds = append(kinds, KindAgent)
 	}
 	if s.Foreach != nil {

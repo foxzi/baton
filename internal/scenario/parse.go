@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -227,6 +228,39 @@ func (f *ForeachStep) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+// UnmarshalYAML decodes an agent body. The strict-field check of the decoder
+// does not reach inside a step, so it is done here; unlike the other bodies
+// the agent body nests blocks several levels deep, so the check walks the
+// type rather than a flat list of field names.
+func (a *AgentStep) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkFields(node, reflect.TypeFor[AgentStep](), "agent"); err != nil {
+		return err
+	}
+	type plain AgentStep
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*a = AgentStep(decoded)
+	return nil
+}
+
+// UnmarshalYAML decodes a commands entry and remembers where it was
+// declared.
+func (c *Command) UnmarshalYAML(node *yaml.Node) error {
+	if err := checkFields(node, reflect.TypeFor[Command](), "commands entry"); err != nil {
+		return err
+	}
+	type plain Command
+	var decoded plain
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*c = Command(decoded)
+	c.Line = node.Line
+	return nil
+}
+
 // checkKeys rejects mapping keys outside allowed, reporting every offender.
 func checkKeys(node *yaml.Node, allowed map[string]bool, what string) error {
 	if node.Kind != yaml.MappingNode {
@@ -240,4 +274,80 @@ func checkKeys(node *yaml.Node, allowed map[string]bool, what string) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// yamlUnmarshaler is the type of a value that decodes itself, and so decides
+// for itself what its fields are.
+var yamlUnmarshaler = reflect.TypeFor[yaml.Unmarshaler]()
+
+// checkFields rejects mapping keys that typ has no field for, at any depth
+// below node.
+func checkFields(node *yaml.Node, typ reflect.Type, what string) error {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+
+	var errs []error
+	switch typ.Kind() {
+	case reflect.Struct:
+		if node.Kind != yaml.MappingNode {
+			return fmt.Errorf("line %d: %s must be a mapping", node.Line, what)
+		}
+		fields := yamlFields(typ)
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key, value := node.Content[i], node.Content[i+1]
+			field, ok := fields[key.Value]
+			if !ok {
+				errs = append(errs, fmt.Errorf("line %d: unknown %s field %q", key.Line, what, key.Value))
+				continue
+			}
+			errs = append(errs, checkNested(value, field, key.Value))
+		}
+	case reflect.Map:
+		if node.Kind != yaml.MappingNode {
+			return fmt.Errorf("line %d: %s must be a mapping", node.Line, what)
+		}
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key, value := node.Content[i], node.Content[i+1]
+			errs = append(errs, checkNested(value, typ.Elem(), what+" "+key.Value))
+		}
+	case reflect.Slice:
+		if node.Kind != yaml.SequenceNode {
+			return fmt.Errorf("line %d: %s must be a list", node.Line, what)
+		}
+		for _, item := range node.Content {
+			errs = append(errs, checkNested(item, typ.Elem(), what+" entry"))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// checkNested is checkFields below the top level: types that decode
+// themselves stop the walk, since they are checked by their own
+// UnmarshalYAML, as do scalars and raw nodes.
+func checkNested(node *yaml.Node, typ reflect.Type, what string) error {
+	probe := typ
+	for probe.Kind() == reflect.Pointer {
+		probe = probe.Elem()
+	}
+	if reflect.PointerTo(probe).Implements(yamlUnmarshaler) {
+		return nil
+	}
+	return checkFields(node, typ, what)
+}
+
+// yamlFields maps the yaml names of a struct's fields to their types,
+// skipping the ones the format does not accept.
+func yamlFields(typ reflect.Type) map[string]reflect.Type {
+	fields := make(map[string]reflect.Type)
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		name, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+		switch name {
+		case "", "-":
+			continue
+		}
+		fields[name] = field.Type
+	}
+	return fields
 }

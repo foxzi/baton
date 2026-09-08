@@ -84,6 +84,7 @@ func Validate(scn *Scenario) Result {
 	validateInputs(scn, &res)
 	validateSecrets(scn, &res)
 	validateAPIs(scn, &res)
+	validateCommands(scn, &res)
 
 	if len(scn.Steps) == 0 {
 		res.errorf("steps", 0, "must declare at least one step")
@@ -204,6 +205,8 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		validateTemplate(path+".assert.message", step.Assert.Message, step.Line, res)
 	case KindLLM:
 		validateLLM(scn, step, path+".llm", res)
+	case KindAgent:
+		validateAgent(scn, step, path+".agent", res)
 	case KindForeach:
 		validateForeach(scn, step, path+".foreach", res)
 	case KindUntil:
@@ -250,18 +253,7 @@ func validateRun(scn *Scenario, step *Step, path string, res *Result) {
 	}
 	validateTemplate(path+".stdin", run.Stdin, step.Line, res)
 	validateTemplate(path+".cwd", run.Cwd, step.Line, res)
-	for _, name := range sortedKeys(run.Env) {
-		entry := run.Env[name]
-		if entry.Secret != "" {
-			if scn.Secrets[entry.Secret].From == "" {
-				res.errorf(path+".env."+name, step.Line, "undeclared secret %q", entry.Secret)
-			}
-			continue
-		}
-		// Only the literal form is a template; a secret reference never
-		// reaches one (spec section 4, check 7).
-		validateTemplate(path+".env."+name, entry.Value, step.Line, res)
-	}
+	validateEnv(scn, run.Env, path+".env", step.Line, res)
 	// Specification section 9.4: a command that may have side effects is not
 	// retried automatically unless the run is idempotent.
 	if !run.Readonly && step.DedupeKey == "" && step.Retry != nil {
@@ -462,6 +454,235 @@ func validateLLM(scn *Scenario, step *Step, path string, res *Result) {
 	}
 	if !structuredModes[llm.StructuredMode] {
 		res.errorf(path+".structured_mode", step.Line, "unknown value %q, want native, tool or prompt", llm.StructuredMode)
+	}
+}
+
+// engines are the agent engine implementations (spec section 8).
+var engines = map[string]bool{
+	"claude-code": true, "fake": true,
+}
+
+// profiles are the accepted tool profiles (spec section 7.2).
+var profiles = map[Profile]bool{
+	ProfileUnset: true, ProfileReview: true, ProfileFix: true, ProfileResearch: true,
+}
+
+// fsWrites are the accepted fs.write values (spec section 7.3).
+var fsWrites = map[FSWrite]bool{
+	FSWriteUnset: true, FSWriteNone: true, FSWriteWorkspace: true,
+}
+
+// execModes are the accepted exec.mode values (spec section 7.3).
+var execModes = map[ExecMode]bool{
+	ExecModeUnset: true, ExecModeNone: true, ExecModeCommands: true,
+}
+
+// stateAccesses are the accepted state values (spec section 7.3).
+var stateAccesses = map[StateAccess]bool{
+	StateUnset: true, StateNone: true, StateRead: true, StateReadWrite: true,
+}
+
+// validateAgent checks an agent body (spec section 3.6). Whether the
+// operations in tools.apis exist and are readonly is decided when the packs
+// load (section 4, check 13).
+func validateAgent(scn *Scenario, step *Step, path string, res *Result) {
+	agent := step.Agent
+
+	switch {
+	case strings.TrimSpace(agent.Engine) == "":
+		res.errorf(path+".engine", step.Line, "must name an engine")
+	case !engines[agent.Engine]:
+		res.errorf(path+".engine", step.Line, "unknown engine %q, want claude-code or fake", agent.Engine)
+	}
+
+	// The fake engine replays a behaviour file; a real engine has nothing to
+	// replay (spec section 8.4).
+	switch {
+	case agent.Engine == "fake" && strings.TrimSpace(agent.Script) == "":
+		res.errorf(path+".script", step.Line, "engine: fake needs a behaviour script")
+	case agent.Engine != "fake" && agent.Script != "":
+		res.errorf(path+".script", step.Line, "script applies to engine: fake only")
+	}
+
+	if strings.TrimSpace(agent.Prompt) == "" {
+		res.errorf(path+".prompt", step.Line, "must not be empty")
+	}
+	// A step ends successfully only through submit_result, which needs a
+	// schema to validate against (spec section 3.6).
+	if strings.TrimSpace(agent.Result) == "" {
+		res.errorf(path+".result", step.Line, "must name the schema submit_result validates against")
+	}
+
+	validateTemplate(path+".prompt", agent.Prompt, step.Line, res)
+	validateTemplate(path+".system", agent.System, step.Line, res)
+	for _, name := range sortedKeys(agent.With) {
+		validateTemplate(path+".with."+name, agent.With[name], step.Line, res)
+	}
+
+	if !profiles[agent.Profile] {
+		res.errorf(path+".profile", step.Line, "unknown profile %q, want review, fix or research", agent.Profile)
+	}
+	if agent.MaxTurns < 0 {
+		res.errorf(path+".max_turns", step.Line, "must not be negative")
+	}
+	if agent.BudgetUSD < 0 {
+		res.errorf(path+".budget_usd", step.Line, "must not be negative")
+	}
+	for i, skill := range agent.Skills {
+		if strings.TrimSpace(skill) == "" {
+			res.errorf(fmt.Sprintf("%s.skills[%d]", path, i), step.Line, "must not be empty")
+		}
+	}
+	validateEnv(scn, agent.Env, path+".env", step.Line, res)
+
+	if agent.Tools != nil {
+		validateTools(scn, agent.Tools, path+".tools", step.Line, res)
+	}
+	if agent.Limits != nil {
+		if agent.Limits.MaxToolCalls < 0 {
+			res.errorf(path+".limits.max_tool_calls", step.Line, "must not be negative")
+		}
+		if agent.Limits.MaxResultBytes < 0 {
+			res.errorf(path+".limits.max_result_bytes", step.Line, "must not be negative")
+		}
+	}
+}
+
+// validateTools checks the tool overrides of an agent step (spec section
+// 7.3).
+func validateTools(scn *Scenario, tools *Tools, path string, line int, res *Result) {
+	if fs := tools.FS; fs != nil {
+		if !fsWrites[fs.Write] {
+			res.errorf(path+".fs.write", line, "unknown value %q, want none or workspace", fs.Write)
+		}
+		for i, pattern := range fs.Deny {
+			if strings.TrimSpace(pattern) == "" {
+				res.errorf(fmt.Sprintf("%s.fs.deny[%d]", path, i), line, "must not be empty")
+			}
+		}
+	}
+
+	if exec := tools.Exec; exec != nil {
+		if !execModes[exec.Mode] {
+			res.errorf(path+".exec.mode", line, "unknown value %q, want none or commands", exec.Mode)
+		}
+		if exec.Mode == ExecModeNone && len(exec.Commands) > 0 {
+			res.warnf(path+".exec.commands", line, "ignored unless mode is commands")
+		}
+		for i, name := range exec.Commands {
+			if _, ok := scn.Commands[name]; !ok {
+				res.errorf(fmt.Sprintf("%s.exec.commands[%d]", path, i), line, "undeclared command %q", name)
+			}
+		}
+	}
+
+	for i, op := range tools.APIs {
+		opPath := fmt.Sprintf("%s.apis[%d]", path, i)
+		if !opPattern.MatchString(op) {
+			res.errorf(opPath, line, "%q must be <api>.<op>", op)
+			continue
+		}
+		api, _, _ := strings.Cut(op, ".")
+		if _, ok := scn.APIs[api]; !ok {
+			res.errorf(opPath, line, "undeclared api %q", api)
+		}
+	}
+
+	if fetch := tools.Fetch; fetch != nil {
+		// Fetch without an allow list would be the whole internet.
+		if len(fetch.Allow) == 0 {
+			res.errorf(path+".fetch.allow", line, "must list the allowed hosts")
+		}
+		for i, host := range fetch.Allow {
+			if strings.TrimSpace(host) == "" {
+				res.errorf(fmt.Sprintf("%s.fetch.allow[%d]", path, i), line, "must not be empty")
+			}
+		}
+		if fetch.MaxBytes < 0 {
+			res.errorf(path+".fetch.max_bytes", line, "must not be negative")
+		}
+		if fetch.MaxCalls < 0 {
+			res.errorf(path+".fetch.max_calls", line, "must not be negative")
+		}
+	}
+
+	for i, name := range tools.MCP {
+		if strings.TrimSpace(name) == "" {
+			res.errorf(fmt.Sprintf("%s.mcp[%d]", path, i), line, "must not be empty")
+		}
+	}
+
+	if !stateAccesses[tools.State] {
+		res.errorf(path+".state", line, "unknown value %q, want none, read or read-write", tools.State)
+	}
+}
+
+// validateCommands checks the commands agent steps may ask for (spec section
+// 7.5).
+func validateCommands(scn *Scenario, res *Result) {
+	for _, name := range sortedKeys(scn.Commands) {
+		command := scn.Commands[name]
+		path := "commands." + name
+		if !idPattern.MatchString(name) {
+			res.errorf(path, command.Line, "%q must match %s", name, idPattern)
+		}
+		switch {
+		case len(command.Argv) == 0:
+			res.errorf(path+".argv", command.Line, "must not be empty")
+		case strings.TrimSpace(command.Argv[0]) == "":
+			res.errorf(path+".argv[0]", command.Line, "command must not be empty")
+		}
+		for i, arg := range command.Argv {
+			validateTemplate(fmt.Sprintf("%s.argv[%d]", path, i), arg, command.Line, res)
+		}
+		if !parseModes[command.Parse] {
+			res.errorf(path+".parse", command.Line, "unknown mode %q, want text, json or lines", command.Parse)
+		}
+		if command.Timeout < 0 {
+			res.errorf(path+".timeout", command.Line, "must not be negative")
+		}
+		if command.MaxCalls < 0 {
+			res.errorf(path+".max_calls", command.Line, "must not be negative")
+		}
+		validateEnv(scn, command.Env, path+".env", command.Line, res)
+
+		for _, argName := range sortedKeys(command.Args) {
+			arg := command.Args[argName]
+			argPath := path + ".args." + argName
+			// A pattern is the only thing constraining what a model puts in
+			// the argument vector of a process, so it is required.
+			if strings.TrimSpace(arg.Pattern) == "" {
+				res.errorf(argPath+".pattern", command.Line, "must constrain the argument with a pattern")
+				continue
+			}
+			pattern, err := regexp.Compile(arg.Pattern)
+			if err != nil {
+				res.errorf(argPath+".pattern", command.Line, "invalid regular expression: %v", err)
+				continue
+			}
+			if arg.Default != "" && !pattern.MatchString(arg.Default) {
+				res.errorf(argPath+".default", command.Line, "%q does not match the pattern", arg.Default)
+			}
+			if arg.Required && arg.Default != "" {
+				res.warnf(argPath, command.Line, "default is unreachable on a required argument")
+			}
+		}
+	}
+}
+
+// validateEnv checks an environment block: a secret reference must name a
+// declared secret, and only the literal form is a template (spec section 4,
+// check 7).
+func validateEnv(scn *Scenario, env map[string]EnvValue, path string, line int, res *Result) {
+	for _, name := range sortedKeys(env) {
+		entry := env[name]
+		if entry.Secret != "" {
+			if scn.Secrets[entry.Secret].From == "" {
+				res.errorf(path+"."+name, line, "undeclared secret %q", entry.Secret)
+			}
+			continue
+		}
+		validateTemplate(path+"."+name, entry.Value, line, res)
 	}
 }
 

@@ -325,6 +325,70 @@ steps:
     default: { id: d1, run: echo default }
 `,
 	},
+	{
+		name: "agent step with tools, limits and commands gateway",
+		yaml: `
+version: 1
+secrets:
+  tok:
+    from: env
+    key: TOKEN
+apis:
+  forge: { pack: gitlab, from: ./apis/ }
+commands:
+  test:
+    argv: ["go", "test", "./..."]
+    description: Run all tests
+    timeout: 5m
+    readonly: true
+  lint:
+    argv: ["golangci-lint", "run", "{{ .args.path }}"]
+    args:
+      path: { pattern: "^[\\w/.-]+$", default: "./..." }
+    parse: json
+    max_calls: 5
+    env:
+      TOKEN: { secret: tok }
+steps:
+  - id: review
+    agent:
+      engine: claude-code
+      model: claude-sonnet-4-6
+      prompt: prompts/review.md
+      system: You review code.
+      with: { project: "{{ .inputs.project }}" }
+      skills: [./skills/go-review]
+      profile: review
+      tools:
+        fs: { read: true, write: none, deny: [".env*"] }
+        git: { read: true, commit: false }
+        exec: { mode: commands, commands: [test, lint] }
+        apis: [forge.get_change]
+        fetch: { allow: ["pkg.go.dev"], max_bytes: 300k, max_calls: 10 }
+        mcp: [context7]
+        state: read
+      limits: { max_tool_calls: 60, max_result_bytes: 64k }
+      max_turns: 25
+      budget_usd: 2
+      allow_unsafe: false
+      env:
+        TOKEN: { secret: tok }
+      result: schemas/findings.json
+`,
+	},
+	{
+		name: "agent step on the fake engine",
+		yaml: `
+version: 1
+steps:
+  - id: review
+    agent:
+      engine: fake
+      script: testdata/agent-script.yaml
+      prompt: prompts/review.md
+      result: schemas/findings.json
+`,
+	},
 }
 
 // TestSchema_AcceptsValidScenarios checks that the schema accepts one small
@@ -652,6 +716,75 @@ steps:
       on_item_error: bogus
 `,
 		skipReason: `ItemErrorMode is a plain string field; Validate reports the unknown value, not Parse`,
+	},
+	{
+		name: "agent step with an unknown engine",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    agent:
+      engine: autogpt
+      prompt: p
+      result: schemas/x.json
+`,
+		skipReason: `Engine is a plain string field; Validate reports the unknown engine, not Parse`,
+	},
+	{
+		name: "agent step missing result",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    agent:
+      engine: fake
+      script: s.yaml
+      prompt: p
+`,
+		skipReason: `AgentStep has no requiredness check in the decoder; Validate reports the missing result`,
+	},
+	{
+		name: "unknown field inside agent tools",
+		yaml: `
+version: 1
+steps:
+  - id: s
+    agent:
+      engine: fake
+      script: s.yaml
+      prompt: p
+      result: schemas/x.json
+      tools:
+        shell: { mode: none }
+`,
+		matchParser: true,
+	},
+	{
+		name: "commands entry without argv",
+		yaml: `
+version: 1
+commands:
+  test:
+    description: Run all tests
+steps:
+  - id: s
+    run: echo hi
+`,
+		skipReason: `Command has no requiredness check in the decoder; Validate reports the empty argv`,
+	},
+	{
+		name: "unknown field in a commands entry",
+		yaml: `
+version: 1
+commands:
+  test:
+    argv: ["go", "test"]
+    shell: true
+steps:
+  - id: s
+    run: echo hi
+`,
+		matchParser: true,
 	},
 }
 
