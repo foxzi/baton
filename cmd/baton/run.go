@@ -17,6 +17,7 @@ import (
 	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/engine"
 	"github.com/foxzi/baton/internal/exitcode"
+	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
 	"github.com/foxzi/baton/internal/secrets"
@@ -95,7 +96,54 @@ func runCmd(args []string) int {
 		return exitcode.Config
 	}
 
-	path := positional[0]
+	fileInputs, err := readInputFile(inputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+
+	return execute(runRequest{
+		scenarioPath: positional[0],
+		inputPairs:   inputs,
+		inputs:       fileInputs,
+		runID:        runID,
+		runsDir:      runsDir,
+		workspace:    workspace,
+		configs:      configs,
+		cacheDir:     cacheDir,
+		noCache:      noCache,
+		dryRun:       dryRun,
+		asJSON:       asJSON,
+		verbose:      verbose,
+	})
+}
+
+// runRequest is one execution of a scenario, as `baton run` and
+// `baton resume` both need it.
+type runRequest struct {
+	scenarioPath string
+	// inputPairs are -i key=value arguments; inputs is a typed set, from
+	// --input-file or from the run.json of a resumed run.
+	inputPairs []string
+	inputs     map[string]any
+	runID      string
+	runsDir    string
+	workspace  string
+	configs    []string
+	cacheDir   string
+	noCache    bool
+	dryRun     bool
+	asJSON     bool
+	verbose    bool
+	// resume replays the steps a previous run already finished
+	// (section 10.4).
+	resume   map[string]expr.Step
+	resumeOf string
+}
+
+// execute validates the scenario, prepares the run directory and runs it.
+func execute(req runRequest) int {
+	path := req.scenarioPath
 	scn, err := scenario.Load(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
@@ -114,18 +162,13 @@ func runCmd(args []string) int {
 		return exitcode.Config
 	}
 
-	fileInputs, err := readInputFile(inputFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
-		return exitcode.Config
-	}
-	bound, err := scenario.BindInputs(scn.Inputs, inputs, fileInputs)
+	bound, err := scenario.BindInputs(scn.Inputs, req.inputPairs, req.inputs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config
 	}
 
-	cfg, err := config.Load(configs...)
+	cfg, err := config.Load(req.configs...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config
@@ -151,21 +194,24 @@ func runCmd(args []string) int {
 	}
 	secretStore = secretStore.WithHidden(secretValues(providerKeys)...)
 
-	if dryRun {
+	if req.dryRun {
 		printPlan(scn, bound, secretStore)
 		return exitcode.OK
 	}
 
+	runsDir := req.runsDir
 	if runsDir == "" {
 		runsDir = os.Getenv("BATON_RUNS_DIR")
 	}
 	if runsDir == "" {
 		runsDir = filepath.Join(baseDir, "runs")
 	}
+	runID := req.runID
 	if runID == "" {
 		runID = runstore.NewID(time.Now())
 	}
 	// The cache lives next to the runs directory (section 10.3).
+	cacheDir := req.cacheDir
 	if cacheDir == "" {
 		cacheDir = filepath.Join(filepath.Dir(filepath.Clean(runsDir)), "cache")
 	}
@@ -183,11 +229,13 @@ func runCmd(args []string) int {
 		Secrets:      secretStore,
 		Store:        store,
 		Cache:        cache.Open(cacheDir),
-		NoCache:      noCache,
-		Workspace:    workspace,
+		NoCache:      req.noCache,
+		Resume:       req.resume,
+		ResumeOf:     req.resumeOf,
+		Workspace:    req.workspace,
 		Config:       cfg,
 		ProviderKeys: providerKeys,
-		Observer:     observer(asJSON, verbose),
+		Observer:     observer(req.asJSON, req.verbose),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)

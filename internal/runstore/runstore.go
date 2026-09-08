@@ -47,23 +47,27 @@ type StepState struct {
 	Attempts     int        `json:"attempts,omitempty"`
 	FallbackUsed bool       `json:"fallback_used,omitempty"`
 	CacheHit     bool       `json:"cache_hit,omitempty"`
+	Resumed      bool       `json:"resumed,omitempty"`
 	Error        *RunError  `json:"error,omitempty"`
 }
 
 // RunState is the content of run.json (docs/ru/spec.md, section 10.2).
 type RunState struct {
-	SchemaVersion int                   `json:"schema_version"`
-	ID            string                `json:"id"`
-	Name          string                `json:"name"`
-	Status        string                `json:"status"`
-	StartedAt     time.Time             `json:"started_at"`
-	FinishedAt    *time.Time            `json:"finished_at,omitempty"`
-	Inputs        map[string]any        `json:"inputs,omitempty"`
-	Steps         map[string]*StepState `json:"steps,omitempty"`
-	CostUSD       *float64              `json:"cost_usd"`
-	FailedStep    string                `json:"failed_step,omitempty"`
-	Error         *RunError             `json:"error,omitempty"`
-	ResumeOf      string                `json:"resume_of,omitempty"`
+	SchemaVersion int            `json:"schema_version"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Status        string         `json:"status"`
+	StartedAt     time.Time      `json:"started_at"`
+	FinishedAt    *time.Time     `json:"finished_at,omitempty"`
+	Inputs        map[string]any `json:"inputs,omitempty"`
+	// Scenario is the absolute path of the scenario file, so that a resume
+	// can find it again (section 10.4).
+	Scenario   string                `json:"scenario,omitempty"`
+	Steps      map[string]*StepState `json:"steps,omitempty"`
+	CostUSD    *float64              `json:"cost_usd"`
+	FailedStep string                `json:"failed_step,omitempty"`
+	Error      *RunError             `json:"error,omitempty"`
+	ResumeOf   string                `json:"resume_of,omitempty"`
 }
 
 // NewID returns a run id of the form YYYYMMDD-HHMMSS-<4 hex>

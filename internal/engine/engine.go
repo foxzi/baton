@@ -52,6 +52,13 @@ type Options struct {
 	// Cache holds step results between runs (section 10.3). It may be nil,
 	// in which case nothing is cached.
 	Cache *cache.Cache
+	// Resume holds the outputs of the steps a previous run already finished,
+	// by step path (section 10.4). Those steps are replayed instead of
+	// executed; ResumeOf names the run they come from.
+	Resume map[string]expr.Step
+	// ResumeOf is the id of the run this one continues, recorded in
+	// run.json (section 10.4).
+	ResumeOf string
 	// NoCache disables reading from the cache; writing continues, so that
 	// the next run can reuse the fresh results (section 10.3).
 	NoCache bool
@@ -165,7 +172,9 @@ func (e *Engine) Run(ctx context.Context) (*Result, error) {
 		Status:        runstore.StatusRunning,
 		StartedAt:     e.startedAt,
 		Inputs:        e.opts.Inputs,
+		Scenario:      scenarioPath(scn.Path),
 		Steps:         map[string]*runstore.StepState{},
+		ResumeOf:      e.opts.ResumeOf,
 	}
 	if err := e.opts.Store.WriteRun(e.state); err != nil {
 		return nil, err
@@ -237,6 +246,10 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 	if step.ID == "" {
 		e.fail(path, errorf(ClassConfig, "step without id"))
 		return true
+	}
+
+	if e.resumeStep(step, path) {
+		return false
 	}
 
 	run, err := e.shouldRun(step)

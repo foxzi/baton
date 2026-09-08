@@ -133,19 +133,18 @@ func (e *Engine) cacheGet(step *scenario.Step, path string, input any, files map
 		return key, expr.Step{}, false
 	}
 
-	e.replayStepFiles(path, entry)
+	e.replayStepFiles(path, entry.Kind, "cached", entry.Output)
 	e.markCacheHit(path)
 	e.emit(Event{Type: "cache_hit", Step: step.ID, Fields: map[string]any{"key": key}})
 	return key, entry.Output.step(), true
 }
 
 // replayStepFiles recreates the files a step would have written, so that a
-// replayed run directory looks like a real one. Only the fields the cached
-// step kind actually produced are written, and output.json carries the
-// cached flag to make the replay visible.
-func (e *Engine) replayStepFiles(path string, entry cacheEntry) {
-	out := entry.Output
-	output := map[string]any{"status": out.Status, "cached": true}
+// replayed run directory looks like a real one. Only the fields the step kind
+// actually produced are written, and output.json carries the marker flag
+// (cached or resumed) to make the replay visible.
+func (e *Engine) replayStepFiles(path, kind, marker string, out cachedOutput) {
+	output := map[string]any{"status": out.Status, marker: true}
 	if out.Result != nil {
 		output["result"] = out.Result
 	}
@@ -161,7 +160,7 @@ func (e *Engine) replayStepFiles(path string, entry cacheEntry) {
 	if out.Body != nil {
 		output["body"] = out.Body
 	}
-	if entry.Kind == string(scenario.KindRun) {
+	if kind == string(scenario.KindRun) {
 		output["exit_code"] = out.ExitCode
 		e.writeStepFile(path, "stdout.log", []byte(out.Stdout))
 		e.writeStepFile(path, "stderr.log", []byte(out.Stderr))

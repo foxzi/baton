@@ -142,6 +142,9 @@ func runsShowCmd(args []string) int {
 			if step.CacheHit {
 				line += " cached"
 			}
+			if step.Resumed {
+				line += " resumed"
+			}
 			if step.FallbackUsed {
 				line += " fallback"
 			}
