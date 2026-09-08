@@ -493,3 +493,21 @@ func TestPrice(t *testing.T) {
 		t.Errorf("Price() ok = true, want false for unknown model")
 	}
 }
+
+// TestValidateChannelPackUnknownAPI checks that a channel may only send
+// through an apis entry the configuration itself declares: a scenario's own
+// apis are not visible to a channel (section 12).
+func TestValidateChannelPackUnknownAPI(t *testing.T) {
+	cfg := &Config{Notify: map[string]Channel{
+		"x": {API: "telegram", Target: "-100123"},
+	}}
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "not declared in apis") {
+		t.Errorf("Validate() error = %v, want mention of not declared in apis", err)
+	}
+
+	cfg.APIs = map[string]scenario.API{"telegram": {Pack: "telegram", From: "./apis/"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil once the entry exists", err)
+	}
+}

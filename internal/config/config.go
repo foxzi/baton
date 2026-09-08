@@ -296,7 +296,7 @@ func (c *Config) Validate() error {
 	for _, name := range sortedKeys(c.Notify) {
 		ch := c.Notify[name]
 		path := fmt.Sprintf("notify.%s", name)
-		errs = append(errs, validateChannel(path, ch)...)
+		errs = append(errs, validateChannel(path, ch, c.APIs)...)
 		if ch.URL != nil {
 			errs = append(errs, validateSecretRef(path+".url", *ch.URL)...)
 		}
@@ -353,7 +353,7 @@ func validateProvider(path string, p Provider) []error {
 	return errs
 }
 
-func validateChannel(path string, ch Channel) []error {
+func validateChannel(path string, ch Channel, apis map[string]scenario.API) []error {
 	var errs []error
 
 	builtinForm := ch.Kind != ""
@@ -375,6 +375,8 @@ func validateChannel(path string, ch Channel) []error {
 	case packForm:
 		if ch.API == "" {
 			errs = append(errs, fmt.Errorf("%s: requires api", path))
+		} else if _, ok := apis[ch.API]; !ok {
+			errs = append(errs, fmt.Errorf("%s.api: %q is not declared in apis", path, ch.API))
 		}
 		if ch.Target == "" {
 			errs = append(errs, fmt.Errorf("%s: requires target", path))

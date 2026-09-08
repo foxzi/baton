@@ -3,9 +3,10 @@
 //
 // Two channel kinds are built in: webhook, which posts {"text": …} to a URL
 // read from a secret, and stdout, which writes the message to a writer the
-// caller supplies. A channel declared as a pack operation (notify/v1) is
-// recognised but not delivered yet; Resolve reports it as a configuration
-// error so a scenario does not silently lose its notification.
+// caller supplies. A channel may instead name an api pack implementing
+// notify/v1 and a target: such a channel carries no secret of its own — the
+// apis entry authorises — and is delivered by the caller's PackFunc, since
+// only the engine can call a pack operation (sections 7.4.5 and 12).
 package notify
 
 import (
@@ -28,7 +29,19 @@ type Channel struct {
 	Name string
 	Kind string
 	URL  values.Secret
+
+	// API, Target and Auth describe a channel backed by a notify/v1 pack:
+	// the name of an apis entry, the address to send to, and an optional
+	// secret name overriding the one the entry authorises with.
+	API    string
+	Target string
+	Auth   string
 }
+
+// KindPack is the Kind given to a channel backed by a pack operation. The
+// configuration leaves kind: empty for that form — the two built-in kinds
+// are the only ones a user writes — so the name only exists here.
+const KindPack = "pack"
 
 // Resolve reads the secrets of one configured channel. Relative file paths
 // are resolved against baseDir, as everywhere else.
@@ -46,7 +59,16 @@ func Resolve(name string, ch config.Channel, baseDir string) (Channel, error) {
 		}
 		return Channel{Name: name, Kind: ch.Kind, URL: url}, nil
 	default:
-		return Channel{}, fmt.Errorf("notify.%s: channels backed by an api pack are not implemented yet", name)
+		if ch.API == "" || ch.Target == "" {
+			return Channel{}, fmt.Errorf("notify.%s: must declare kind: webhook with url, kind: stdout, or api and target", name)
+		}
+		return Channel{
+			Name:   name,
+			Kind:   KindPack,
+			API:    ch.API,
+			Target: ch.Target,
+			Auth:   ch.Secret,
+		}, nil
 	}
 }
 
@@ -73,11 +95,18 @@ func ResolveAll(channels map[string]config.Channel, baseDir string) (map[string]
 	return resolved, problems
 }
 
-// Sender delivers messages. Both fields are optional: HTTP defaults to a
-// client without its own timeout, Out to io.Discard.
+// PackFunc delivers a message through the send operation of a notify/v1
+// pack. The notify package cannot do that itself — a pack call needs the
+// engine's api bindings — so the engine supplies one.
+type PackFunc func(ctx context.Context, ch Channel, text string) error
+
+// Sender delivers messages. All fields are optional: HTTP defaults to a
+// client without its own timeout, Out to io.Discard, and Pack to a function
+// that reports the channel as undeliverable.
 type Sender struct {
 	HTTP *httpx.Client
 	Out  io.Writer
+	Pack PackFunc
 }
 
 // Send delivers one message. The returned error is a *httpx.Error for a
@@ -93,6 +122,11 @@ func (s Sender) Send(ctx context.Context, ch Channel, text string) error {
 		return err
 	case config.ChannelKindWebhook:
 		return s.sendWebhook(ctx, ch, text)
+	case KindPack:
+		if s.Pack == nil {
+			return fmt.Errorf("notify.%s: no way to call api %q from here", ch.Name, ch.API)
+		}
+		return s.Pack(ctx, ch, text)
 	default:
 		return fmt.Errorf("notify.%s: unknown kind %q", ch.Name, ch.Kind)
 	}

@@ -72,10 +72,45 @@ func TestResolveWebhookMissingSecretFails(t *testing.T) {
 	}
 }
 
-func TestResolvePackChannelIsNotImplemented(t *testing.T) {
-	_, err := Resolve("telegram", config.Channel{API: "telegram", Target: "-100"}, "")
-	if err == nil {
-		t.Fatal("Resolve accepted a pack channel")
+func TestResolvePackChannel(t *testing.T) {
+	channel, err := Resolve("telegram", config.Channel{API: "telegram", Target: "-100", Secret: "tg_bot"}, "")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if channel.Kind != KindPack {
+		t.Errorf("Kind = %q, want %q", channel.Kind, KindPack)
+	}
+	if channel.API != "telegram" || channel.Target != "-100" || channel.Auth != "tg_bot" {
+		t.Errorf("channel = %+v, want the api, target and secret of the config", channel)
+	}
+}
+
+func TestResolveIncompletePackChannelFails(t *testing.T) {
+	if _, err := Resolve("telegram", config.Channel{API: "telegram"}, ""); err == nil {
+		t.Fatal("Resolve accepted a pack channel without a target")
+	}
+}
+
+func TestSendPackChannelUsesPackFunc(t *testing.T) {
+	var got Channel
+	var gotText string
+	sender := Sender{Pack: func(_ context.Context, ch Channel, text string) error {
+		got, gotText = ch, text
+		return nil
+	}}
+	channel := Channel{Name: "telegram", Kind: KindPack, API: "telegram", Target: "-100"}
+	if err := sender.Send(context.Background(), channel, "hi"); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if got.Target != "-100" || gotText != "hi" {
+		t.Errorf("Pack called with (%+v, %q)", got, gotText)
+	}
+}
+
+func TestSendPackChannelWithoutPackFuncFails(t *testing.T) {
+	channel := Channel{Name: "telegram", Kind: KindPack, API: "telegram", Target: "-100"}
+	if err := (Sender{}).Send(context.Background(), channel, "hi"); err == nil {
+		t.Fatal("Send delivered a pack channel without a PackFunc")
 	}
 }
 
