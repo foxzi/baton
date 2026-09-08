@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/foxzi/baton/internal/agent"
 	"github.com/foxzi/baton/internal/cache"
 	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/expr"
@@ -120,8 +121,11 @@ type Engine struct {
 	// reach concurrently.
 	mu        *sync.Mutex
 	providers map[string]provider.Provider
-	cost      *costLedger
-	steps     map[string]expr.Step
+	// agents is the machinery agent steps share: the gateway, the engines
+	// and the prepared workspace (section 3.6).
+	agents *agentRuntime
+	cost   *costLedger
+	steps  map[string]expr.Step
 	// hits records step paths served from the cache, so that runStep can
 	// flag them in run.json.
 	hits map[string]bool
@@ -167,6 +171,7 @@ func New(opts Options) (*Engine, error) {
 		hits:      map[string]bool{},
 		apis:      map[string]*httpx.API{},
 		providers: map[string]provider.Provider{},
+		agents:    &agentRuntime{engines: map[string]agent.Engine{}},
 	}, nil
 }
 
@@ -194,6 +199,7 @@ func (e *Engine) Run(ctx context.Context) (*Result, error) {
 
 	runCtx, cancel := e.budgetContext(ctx)
 	defer cancel()
+	defer e.closeAgents()
 
 	for i := range scn.Steps {
 		step := &scn.Steps[i]
@@ -411,6 +417,8 @@ func (e *Engine) execute(ctx context.Context, step *scenario.Step, path string) 
 		return e.execHTTP(stepCtx, step, path)
 	case scenario.KindLLM:
 		return e.execLLM(stepCtx, step, path)
+	case scenario.KindAgent:
+		return e.execAgent(stepCtx, step, path)
 	case scenario.KindAssert:
 		return e.execAssert(step)
 	case scenario.KindForeach:
@@ -455,10 +463,7 @@ func (e *Engine) withVars(vars map[string]any) *Engine {
 
 // stepContext applies the step timeout, falling back to defaults.timeout.
 func (e *Engine) stepContext(ctx context.Context, step *scenario.Step) (context.Context, context.CancelFunc) {
-	limit := step.Timeout.Duration()
-	if limit <= 0 {
-		limit = e.opts.Scenario.Defaults.Timeout.Duration()
-	}
+	limit := e.stepLimit(step)
 	if limit > 0 {
 		return context.WithTimeout(ctx, limit)
 	}

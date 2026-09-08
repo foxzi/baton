@@ -200,27 +200,45 @@ func (e *Engine) resolveCwd(stepID, cwd string) (string, *Error) {
 // input.json. Secret values reach the child process and nothing else: they
 // are never rendered, logged or written to the run directory (section 6).
 func (e *Engine) buildEnv(stepID string, declared map[string]scenario.EnvValue) ([]string, []string, *Error) {
+	vals, names, stepErr := e.envMap(stepID, "run.env", declared)
+	if stepErr != nil {
+		return nil, nil, stepErr
+	}
 	env := os.Environ()
+	for _, name := range sortedKeys(vals) {
+		env = append(env, name+"="+vals[name])
+	}
+	return env, names, nil
+}
+
+// envMap resolves declared environment variables to their values, with the
+// names of the secret ones marked for the log. The values must never be
+// written to disk (section 13).
+func (e *Engine) envMap(stepID, field string, declared map[string]scenario.EnvValue) (map[string]string, []string, *Error) {
+	vals := make(map[string]string, len(declared))
 	names := make([]string, 0, len(declared))
 	for _, name := range sortedKeys(declared) {
 		entry := declared[name]
 		if entry.Secret != "" {
+			if e.opts.Secrets == nil {
+				return nil, nil, errorf(ClassConfig, "step %s: %s.%s: unknown secret %q", stepID, field, name, entry.Secret)
+			}
 			secret, ok := e.opts.Secrets.Lookup(entry.Secret)
 			if !ok {
-				return nil, nil, errorf(ClassConfig, "step %s: run.env.%s: unknown secret %q", stepID, name, entry.Secret)
+				return nil, nil, errorf(ClassConfig, "step %s: %s.%s: unknown secret %q", stepID, field, name, entry.Secret)
 			}
-			env = append(env, name+"="+secret.Reveal())
+			vals[name] = secret.Reveal()
 			names = append(names, name+" (secret)")
 			continue
 		}
-		value, err := e.render(fmt.Sprintf("%s.run.env.%s", stepID, name), entry.Value)
-		if err != nil {
-			return nil, nil, err
+		value, stepErr := e.render(fmt.Sprintf("%s.%s.%s", stepID, field, name), entry.Value)
+		if stepErr != nil {
+			return nil, nil, stepErr
 		}
-		env = append(env, name+"="+value)
+		vals[name] = value
 		names = append(names, name)
 	}
-	return env, names, nil
+	return vals, names, nil
 }
 
 // parseOutput turns stdout into the step result (section 3.3).

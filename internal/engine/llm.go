@@ -123,14 +123,14 @@ func (e *Engine) prepareLLM(step *scenario.Step) (*llmCall, *Error) {
 		return nil, wrapf(ClassConfig, err, "step %s: llm.schema", step.ID)
 	}
 
-	data, stepErr := e.llmTemplateData(step)
+	data, stepErr := e.withData(step.ID, "llm", body.With)
 	if stepErr != nil {
 		return nil, stepErr
 	}
-	if call.system, stepErr = e.llmText(step.ID, "system", body.System, data); stepErr != nil {
+	if call.system, stepErr = e.promptText(step.ID, "llm.system", body.System, data); stepErr != nil {
 		return nil, stepErr
 	}
-	if call.prompt, stepErr = e.llmText(step.ID, "prompt", body.Prompt, data); stepErr != nil {
+	if call.prompt, stepErr = e.promptText(step.ID, "llm.prompt", body.Prompt, data); stepErr != nil {
 		return nil, stepErr
 	}
 	if strings.TrimSpace(call.prompt) == "" {
@@ -289,15 +289,15 @@ func (e *Engine) llmSchemaRetries(step *scenario.Step) int {
 	return defaultRetries[ClassSchema].attempts
 }
 
-// llmTemplateData is the template context of a prompt: the usual one plus
-// the rendered with: variables at the top level (section 3.5).
-func (e *Engine) llmTemplateData(step *scenario.Step) (map[string]any, *Error) {
+// withData is the template context of a prompt: the usual one plus the
+// rendered with: variables at the top level (sections 3.5 and 3.6).
+func (e *Engine) withData(stepID, kind string, with map[string]string) (map[string]any, *Error) {
 	data := e.templateData()
-	for _, name := range sortedKeys(step.LLM.With) {
+	for _, name := range sortedKeys(with) {
 		if reservedTemplateKeys[name] {
-			return nil, errorf(ClassConfig, "step %s: llm.with.%s shadows the %s of the template context", step.ID, name, name)
+			return nil, errorf(ClassConfig, "step %s: %s.with.%s shadows the %s of the template context", stepID, kind, name, name)
 		}
-		value, stepErr := e.render(fmt.Sprintf("step %s: llm.with.%s", step.ID, name), step.LLM.With[name])
+		value, stepErr := e.render(fmt.Sprintf("step %s: %s.with.%s", stepID, kind, name), with[name])
 		if stepErr != nil {
 			return nil, stepErr
 		}
@@ -306,14 +306,14 @@ func (e *Engine) llmTemplateData(step *scenario.Step) (map[string]any, *Error) {
 	return data, nil
 }
 
-// llmText renders a prompt that is either a file path or an inline
+// promptText renders a prompt that is either a file path or an inline
 // template. A value that names an existing file is read from it, so a
 // one-line inline prompt is still possible as long as no such file exists.
-func (e *Engine) llmText(stepID, field, value string, data map[string]any) (string, *Error) {
+func (e *Engine) promptText(stepID, field, value string, data map[string]any) (string, *Error) {
 	if value == "" {
 		return "", nil
 	}
-	name := fmt.Sprintf("step %s: llm.%s", stepID, field)
+	name := fmt.Sprintf("step %s: %s", stepID, field)
 	if isPromptFile(e.resolvePath(value)) {
 		out, err := e.renderer.RenderFile(value, data)
 		if err != nil {
