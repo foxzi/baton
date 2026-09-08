@@ -356,7 +356,8 @@
           "$ref": "#/$defs/step"
         },
         "notify": {
-          "type": "object"
+          "description": "Name of a channel of the global configuration; the text comes from message (spec section 9.3).",
+          "type": "string"
         }
       },
       "oneOf": [
