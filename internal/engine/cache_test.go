@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -338,5 +340,70 @@ steps:
 	}
 	if fake.calls != 2 {
 		t.Errorf("provider calls = %d, want 2: the schema edit did not invalidate the entry", fake.calls)
+	}
+}
+
+// 11. Editing the pack invalidates the entry: an operation step must not
+// answer from the cache with a result the pack no longer produces
+// (section 10.3).
+func TestCache_PackContentChangesTheKey(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":7,"name":"demo"}`))
+	}))
+	defer server.Close()
+
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	yamlText := fmt.Sprintf(`
+version: 1
+name: op-cache
+apis:
+  gitlab:
+    pack: gitlab
+    from: ./apis/
+    config:
+      base_url: %q
+steps:
+  - id: one
+    http:
+      op: gitlab.get_project
+      args: { id: "7" }
+`, server.URL)
+	const named = `pack: gitlab
+version: 1
+config:
+  base_url: {}
+ops:
+  get_project:
+    get: /projects/{id}
+    readonly: true
+    params:
+      id: { pattern: '^\d+$' }
+    transform: '.name'
+`
+
+	var results []any
+	for _, pack := range []string{gitlabLikePack, named} {
+		eng, store, dir := newTestEngine(t, yamlText, func(opts *Options) {
+			opts.Cache = cache.Open(cacheDir)
+		})
+		writePack(t, dir, "gitlab", pack)
+		result, err := eng.Run(t.Context())
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if result.Status != "success" {
+			t.Fatalf("status = %s, error = %+v", result.Status, result.Error)
+		}
+		out := readStepJSON(t, filepath.Join(store.Dir(), "steps", "one", "output.json"))
+		results = append(results, out["result"])
+	}
+	if calls != 2 {
+		t.Errorf("server calls = %d, want 2: the pack edit did not invalidate the entry", calls)
+	}
+	if results[1] != "demo" {
+		t.Errorf("second result = %#v, want the transformed name", results[1])
 	}
 }

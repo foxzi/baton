@@ -43,7 +43,7 @@ func (e *Engine) execHTTPOp(ctx context.Context, step *scenario.Step, path strin
 	}
 	e.writeStepJSON(path, "input.json", input)
 
-	cacheKey, cached, hit := e.cacheGet(step, path, input, nil)
+	cacheKey, cached, hit := e.cacheGet(step, path, input, packDigest(api))
 	if hit {
 		return cached, nil
 	}
@@ -102,9 +102,12 @@ func (e *Engine) execHTTPRaw(ctx context.Context, step *scenario.Step, path stri
 
 	// The request body is hashed rather than logged: it may carry a secret
 	// that has no business in input.json.
-	cacheKey, cached, hit := e.cacheGet(step, path, input, map[string]string{
-		"body": hashBytes(request.Body),
-	})
+	files := packDigest(api)
+	if files == nil {
+		files = map[string]string{}
+	}
+	files["body"] = hashBytes(request.Body)
+	cacheKey, cached, hit := e.cacheGet(step, path, input, files)
 	if hit {
 		return cached, nil
 	}
@@ -416,4 +419,14 @@ func headerMap(headers http.Header) map[string]string {
 // recorded, because a header may carry a token.
 func headerNames(headers map[string]string) []string {
 	return sortedKeys(headers)
+}
+
+// packDigest is the pack content as it enters the cache key of a step: a step
+// that calls an operation must not answer from the cache after the pack it
+// calls was edited. A pack loaded from bytes has no digest and adds nothing.
+func packDigest(api *httpx.API) map[string]string {
+	if api == nil || api.Pack == nil || api.Pack.Digest == "" {
+		return nil
+	}
+	return map[string]string{"pack": api.Pack.Digest}
 }

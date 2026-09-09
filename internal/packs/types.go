@@ -35,6 +35,12 @@ type Pack struct {
 
 	// Path is the file the pack was read from, for diagnostics.
 	Path string `yaml:"-"`
+
+	// Digest is the checksum of the content the pack was loaded from. It
+	// goes into the cache key of a step, so that editing a pack does not
+	// leave the steps that call it answering from the cache. It is empty
+	// for a pack parsed straight from bytes.
+	Digest string `yaml:"-"`
 }
 
 // ConfigField declares a setting the scenario may supply in api.config.

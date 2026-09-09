@@ -766,7 +766,7 @@ runs/<id>/
 
 ### 10.3 Cache
 
-Key: `sha256(normalized step definition without id and when + rendered inputs + hashes of prompt/schema/skill files + engine + model + baton version)`. The cache is a `cache/` directory next to `runs/`, its contents are `output.json` and artifacts.
+Key: `sha256(normalized step definition without id and when + rendered inputs + hashes of prompt/schema/skill files + the checksum of the pack an http step calls + engine + model + baton version)`. The cache is a `cache/` directory next to `runs/`, its contents are `output.json` and artifacts.
 
 By default `cache: true` for `llm` and `run` with `readonly: true`; `false` for `http` with mutating methods and `agent` with `fs.write`. `--no-cache` disables reading from the cache, not writing.
 

@@ -281,17 +281,13 @@ func fileDigest(path string) (string, error) {
 
 // checkDigest compares the content of a pack with the pin from the scenario.
 // A git source without a pin is an error; a local directory may go without.
-func checkDigest(location, want string, pinned bool) error {
+func checkDigest(got, location, want string, pinned bool) error {
 	want = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(want)), "sha256:")
 	if want == "" {
 		if pinned {
 			return fmt.Errorf("sha256 is required for a git source")
 		}
 		return nil
-	}
-	got, err := Digest(location)
-	if err != nil {
-		return fmt.Errorf("sha256: %w", err)
 	}
 	if got != want {
 		return fmt.Errorf("sha256 mismatch: %s has %s, the scenario pins %s", location, got, want)

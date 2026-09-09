@@ -29,7 +29,11 @@ func Load(src Source) (*Pack, error) {
 	if nested {
 		location = filepath.Dir(path)
 	}
-	if err := checkDigest(location, src.SHA256, pinned); err != nil {
+	digest, err := Digest(location)
+	if err != nil {
+		return nil, fmt.Errorf("sha256: %w", err)
+	}
+	if err := checkDigest(digest, location, src.SHA256, pinned); err != nil {
 		return nil, err
 	}
 	data, err := os.ReadFile(path)
@@ -46,6 +50,7 @@ func Load(src Source) (*Pack, error) {
 	if err := pack.CheckImplements(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	pack.Digest = digest
 	return pack, nil
 }
 
