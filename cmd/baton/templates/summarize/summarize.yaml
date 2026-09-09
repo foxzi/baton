@@ -1,0 +1,30 @@
+version: 1
+name: summarize
+description: >
+  Summarize a piece of text with a single llm call, checked against a JSON
+  schema. Self-contained: the only thing it needs is a provider API key in
+  the environment (see baton.yaml next to this file).
+
+inputs:
+  text:
+    type: string
+    default: >
+      The new deploy pipeline finally stopped waking us up at night, though
+      the rollback step is still slower than it should be.
+
+defaults:
+  model: __BATON_MODEL__
+  timeout: 60s
+
+budget:
+  usd: 0.05
+  time: 2m
+
+steps:
+  - id: summarize
+    llm:
+      system: You summarize text. Answer with JSON only.
+      prompt: prompts/summarize.md
+      with: { text: "{{ .inputs.text }}" }
+      schema: schemas/summarize.json
+      max_tokens: 300

@@ -20,6 +20,7 @@ Usage:
   baton <command> [arguments]
 
 Commands:
+  init       Write a self-contained scenario template into a directory
   run        Execute a scenario
   validate   Check a scenario file and report every problem
   resume     Continue a failed run at the step that failed
@@ -28,7 +29,7 @@ Commands:
   apis       Generate a pack skeleton from an OpenAPI document
   schema     Print the JSON Schema of the scenario format
   version    Print the build identity
-  help       Print this message
+  help       Print this message, or "help <command>" for one command's usage
 `
 
 // parseFlags parses args allowing flags on either side of the positional
@@ -60,6 +61,8 @@ func run(args []string) int {
 	}
 
 	switch args[0] {
+	case "init":
+		return initCmd(args[1:])
 	case "run":
 		return runCmd(args[1:])
 	case "validate":
@@ -78,10 +81,57 @@ func run(args []string) int {
 		fmt.Println(version.String())
 		return exitcode.OK
 	case "help", "--help", "-h":
-		fmt.Print(usage)
-		return exitcode.OK
+		return helpCmd(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "baton: unknown command %q\n\n%s", args[0], usage)
 		return exitcode.Config
+	}
+}
+
+// helpCmd implements `baton help [command]`. With no argument it prints the
+// top-level usage; with one, the usage of that command, which for apis and
+// runs already documents their subcommands (import/validate/call,
+// list/show/logs) in one block, so a further "help apis import" is not
+// worth a separate case.
+func helpCmd(args []string) int {
+	if len(args) == 0 {
+		fmt.Print(usage)
+		return exitcode.OK
+	}
+	text, ok := commandUsage(args[0])
+	if !ok {
+		fmt.Fprintf(os.Stderr, "baton: unknown command %q\n\n%s", args[0], usage)
+		return exitcode.Config
+	}
+	fmt.Print(text)
+	return exitcode.OK
+}
+
+// commandUsage returns the usage text of one top-level command, the same
+// text that command prints on -h/--help or on a missing/invalid argument.
+func commandUsage(name string) (string, bool) {
+	switch name {
+	case "init":
+		return initUsage, true
+	case "run":
+		return runUsage, true
+	case "validate":
+		return validateUsage, true
+	case "resume":
+		return resumeUsage, true
+	case "runs":
+		return runsUsage, true
+	case "tools":
+		return toolsUsage, true
+	case "apis":
+		return apisUsage, true
+	case "schema":
+		return schemaUsage, true
+	case "version":
+		return "Usage: baton version\n\nPrints the build identity.\n", true
+	case "help":
+		return usage, true
+	default:
+		return "", false
 	}
 }

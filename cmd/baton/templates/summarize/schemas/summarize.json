@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "keywords"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "A two to three sentence summary of the text",
+      "maxLength": 500
+    },
+    "keywords": {
+      "type": "array",
+      "description": "Up to five keywords, lowercased, most important first",
+      "items": { "type": "string", "maxLength": 40 },
+      "minItems": 1,
+      "maxItems": 5
+    }
+  }
+}

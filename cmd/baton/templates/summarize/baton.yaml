@@ -1,0 +1,11 @@
+# Baton global config for this scenario (docs/en/spec.md, section 12).
+# `baton run`/`baton validate` load ./baton.yaml automatically when run from
+# this directory; pass --config /path/to/baton.yaml to use it from anywhere
+# else.
+#
+# Set the key before running:
+#   export __BATON_ENV_KEY__=...
+providers:
+  __BATON_PROVIDER__:
+    kind: __BATON_PROVIDER__
+    api_key: { from: env, key: __BATON_ENV_KEY__ }

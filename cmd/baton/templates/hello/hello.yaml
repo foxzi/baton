@@ -1,0 +1,22 @@
+version: 1
+name: hello
+description: Minimal example scenario that greets and checks the exit code.
+
+inputs:
+  who:
+    type: string
+    default: world
+    # Required for every string input that reaches argv (spec section 4, check 8).
+    pattern: "^[A-Za-z]+$"
+
+steps:
+  - id: greet
+    run:
+      argv: ["echo", "hello", "{{ .inputs.who }}"]
+      readonly: true
+      parse: text
+
+  - id: check_exit
+    needs: [greet]
+    assert:
+      condition: "steps.greet.exit_code == 0"
