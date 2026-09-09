@@ -316,13 +316,13 @@ declares `interface: forge/v1` can be moved between them by changing an input:
 
 | Pack | Interface | Operations |
 |---|---|---|
-| `gitlab` | `forge/v1` | `get_change`, `list_files`, `get_file`, `post_comment`, `list_merge_requests` |
-| `github` | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review`, plus `get_change` without the file list |
-| `gitea` | `forge/v1` | the same as GitHub, except that `list_files` carries no diff text |
-| `jira` | `tracker/v1` | `get_issue`, `search`, `comment` |
-| `jira-server` | `tracker/v1` | `get_issue`, `search`, `search_all`, `search_summary`, `list_boards`, `list_board_issues`; read-only |
-| `telegram` | `notify/v1` | `send`, `send_document`, `get_me` |
-| `slack` | `notify/v1` | `send`, `auth_test` |
+| [`gitlab`](../../apis/gitlab/README.md) | `forge/v1` | `get_change`, `list_files`, `get_file`, `post_comment`, `list_merge_requests` |
+| [`github`](../../apis/github/README.md) | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review`, plus `get_change` without the file list |
+| [`gitea`](../../apis/gitea/README.md) | `forge/v1` | the same as GitHub, except that `list_files` carries no diff text |
+| [`jira`](../../apis/jira/README.md) | `tracker/v1` | `get_issue`, `search`, `comment` |
+| [`jira-server`](../../apis/jira-server/README.md) | `tracker/v1` | `get_issue`, `search`, `search_all`, `search_summary`, `list_boards`, `list_board_issues`; read-only |
+| [`telegram`](../../apis/telegram/README.md) | `notify/v1` | `send`, `send_document`, `get_me` |
+| [`slack`](../../apis/slack/README.md) | `notify/v1` | `send`, `auth_test` |
 
 `baton apis validate apis/*` parses every one of them and replays the recorded
 responses in `apis/<pack>/examples/` through the transforms, which is what the

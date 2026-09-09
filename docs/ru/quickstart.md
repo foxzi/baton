@@ -319,13 +319,13 @@ cost by step:
 
 | Пак | Интерфейс | Операции |
 |---|---|---|
-| `gitlab` | `forge/v1` | `get_change`, `list_files`, `get_file`, `post_comment`, `list_merge_requests` |
-| `github` | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review` и `get_change` без списка файлов |
-| `gitea` | `forge/v1` | то же, что у GitHub, только `list_files` не отдаёт текст диффа |
-| `jira` | `tracker/v1` | `get_issue`, `search`, `comment` |
-| `jira-server` | `tracker/v1` | `get_issue`, `search`, `search_all`, `search_summary`, `list_boards`, `list_board_issues`; только чтение |
-| `telegram` | `notify/v1` | `send`, `send_document`, `get_me` |
-| `slack` | `notify/v1` | `send`, `auth_test` |
+| [`gitlab`](../../apis/gitlab/README.ru.md) | `forge/v1` | `get_change`, `list_files`, `get_file`, `post_comment`, `list_merge_requests` |
+| [`github`](../../apis/github/README.ru.md) | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review` и `get_change` без списка файлов |
+| [`gitea`](../../apis/gitea/README.ru.md) | `forge/v1` | то же, что у GitHub, только `list_files` не отдаёт текст диффа |
+| [`jira`](../../apis/jira/README.ru.md) | `tracker/v1` | `get_issue`, `search`, `comment` |
+| [`jira-server`](../../apis/jira-server/README.ru.md) | `tracker/v1` | `get_issue`, `search`, `search_all`, `search_summary`, `list_boards`, `list_board_issues`; только чтение |
+| [`telegram`](../../apis/telegram/README.ru.md) | `notify/v1` | `send`, `send_document`, `get_me` |
+| [`slack`](../../apis/slack/README.ru.md) | `notify/v1` | `send`, `auth_test` |
 
 `baton apis validate apis/*` разбирает их все и прогоняет записанные ответы из
 `apis/<pack>/examples/` через трансформы — это же делает тестовый набор на
