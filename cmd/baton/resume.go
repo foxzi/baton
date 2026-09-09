@@ -44,7 +44,7 @@ func resumeCmd(args []string) int {
 	flags.BoolVar(&verbose, "v", false, "print every event")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 1 {
 		fmt.Fprint(os.Stderr, resumeUsage)

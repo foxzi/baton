@@ -54,7 +54,7 @@ func toolsCmd(args []string) int {
 	flags.BoolVar(&asJSON, "json", false, "print the tools as JSON")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 1 || stepID == "" {
 		fmt.Fprint(os.Stderr, toolsUsage)

@@ -61,6 +61,10 @@ var initProviderDefaults = map[string]initProviderDefault{
 	"openrouter": {model: "openrouter/openai/gpt-4.1-nano", envKey: "OPENROUTER_API_KEY"},
 }
 
+// initTemplateNames lists the templates init supports, for suggesting a
+// close match on an unknown one.
+var initTemplateNames = []string{"hello", "summarize"}
+
 // initCmd implements `baton init`.
 func initCmd(args []string) int {
 	var (
@@ -76,7 +80,7 @@ func initCmd(args []string) int {
 	flags.StringVar(&model, "model", "", "llm model string (summarize template only)")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 1 {
 		fmt.Fprint(os.Stderr, initUsage)
@@ -86,7 +90,24 @@ func initCmd(args []string) int {
 
 	root := "templates/" + templateName
 	if templateName != "hello" && templateName != "summarize" {
-		fmt.Fprintf(os.Stderr, "baton: unknown template %q, want hello or summarize\n", templateName)
+		fmt.Fprintf(os.Stderr, "%s, want hello or summarize\n", unknownCommandError("template", templateName, initTemplateNames))
+		return exitcode.Config
+	}
+
+	// --provider/--model only mean anything for summarize; passing either
+	// one with hello would otherwise be silently ignored, which looks like
+	// a bug more than a no-op.
+	var explicitProvider, explicitModel bool
+	flags.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "provider":
+			explicitProvider = true
+		case "model":
+			explicitModel = true
+		}
+	})
+	if templateName == "hello" && (explicitProvider || explicitModel) {
+		fmt.Fprint(os.Stderr, "baton: --provider/--model apply only to --template summarize, not hello\n")
 		return exitcode.Config
 	}
 
@@ -123,14 +144,14 @@ func initCmd(args []string) int {
 	scenario := filepath.Join(dir, templateName+".yaml")
 	fmt.Printf("wrote %s template to %s\n", templateName, dir)
 	if templateName == "hello" {
-		fmt.Printf("next: baton run %s\n", scenario)
+		fmt.Printf("next: baton run %s\n", shellQuote(scenario))
 	} else {
 		// baton.yaml is only auto-loaded from the current directory (spec
 		// section 12), never resolved relative to the scenario file. Running
 		// `baton run <dir>/summarize.yaml` from outside dir would silently
 		// miss the provider config just written there, so the suggested
 		// command cds into dir first.
-		fmt.Printf("next: export %s=... then cd %s && baton run %s.yaml\n", envKey, dir, templateName)
+		fmt.Printf("next: export %s=... then cd %s && baton run %s.yaml\n", envKey, shellQuote(dir), templateName)
 	}
 	return exitcode.OK
 }

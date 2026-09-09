@@ -23,6 +23,10 @@ Options:
   --step ID        Show the logs of this step only
 `
 
+// runsSubcommands lists runs's subcommands, for suggesting a close match on
+// an unknown one.
+var runsSubcommands = []string{"list", "show", "logs"}
+
 // runsCmd implements `baton runs` (spec section 11).
 func runsCmd(args []string) int {
 	if len(args) == 0 {
@@ -36,8 +40,11 @@ func runsCmd(args []string) int {
 		return runsShowCmd(args[1:])
 	case "logs":
 		return runsLogsCmd(args[1:])
+	case "-h", "--help", "help":
+		fmt.Print(runsUsage)
+		return exitcode.OK
 	default:
-		fmt.Fprintf(os.Stderr, "baton: unknown runs subcommand %q\n\n%s", args[0], runsUsage)
+		fmt.Fprintf(os.Stderr, "%s\n\n%s", unknownCommandError("runs subcommand", args[0], runsSubcommands), runsUsage)
 		return exitcode.Config
 	}
 }
@@ -65,7 +72,7 @@ func runsListCmd(args []string) int {
 	flags.IntVar(&limit, "n", 20, "number of runs to list")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 0 {
 		fmt.Fprint(os.Stderr, runsUsage)
@@ -99,7 +106,7 @@ func runsShowCmd(args []string) int {
 	flags.StringVar(&runsDir, "runs-dir", "", "run directory root")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 1 {
 		fmt.Fprint(os.Stderr, runsUsage)
@@ -182,7 +189,7 @@ func runsLogsCmd(args []string) int {
 	flags.StringVar(&stepID, "step", "", "step id")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 1 {
 		fmt.Fprint(os.Stderr, runsUsage)

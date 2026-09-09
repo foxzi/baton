@@ -6,6 +6,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -50,6 +51,33 @@ func parseFlags(flags *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
+// flagsExitCode turns a flag.FlagSet parse error into an exit code.
+// -h/--help must exit 0 without performing the command's action; any other
+// parse error (unknown flag, bad value) is a configuration error. The
+// FlagSet's own Usage already printed the text in both cases.
+func flagsExitCode(err error) int {
+	if errors.Is(err, flag.ErrHelp) {
+		return exitcode.OK
+	}
+	return exitcode.Config
+}
+
+// commandNames lists the top-level commands, for suggesting a close match
+// on an unknown one.
+var commandNames = []string{
+	"init", "run", "validate", "resume", "runs", "tools", "apis", "schema", "version", "help",
+}
+
+// unknownCommandError formats the "unknown command" message, with a
+// suggestion when name is close to one of candidates.
+func unknownCommandError(kind, name string, candidates []string) string {
+	msg := fmt.Sprintf("baton: unknown %s %q", kind, name)
+	if hint := suggest(name, candidates); hint != "" {
+		msg += fmt.Sprintf(", did you mean %q?", hint)
+	}
+	return msg
+}
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -83,7 +111,7 @@ func run(args []string) int {
 	case "help", "--help", "-h":
 		return helpCmd(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "baton: unknown command %q\n\n%s", args[0], usage)
+		fmt.Fprintf(os.Stderr, "%s\n\n%s", unknownCommandError("command", args[0], commandNames), usage)
 		return exitcode.Config
 	}
 }
@@ -92,15 +120,20 @@ func run(args []string) int {
 // top-level usage; with one, the usage of that command, which for apis and
 // runs already documents their subcommands (import/validate/call,
 // list/show/logs) in one block, so a further "help apis import" is not
-// worth a separate case.
+// worth a separate case. A second argument is rejected instead of being
+// silently ignored.
 func helpCmd(args []string) int {
 	if len(args) == 0 {
 		fmt.Print(usage)
 		return exitcode.OK
 	}
+	if len(args) > 1 {
+		fmt.Fprintf(os.Stderr, "baton: help takes at most one command name, got %q\n\n%s", args, usage)
+		return exitcode.Config
+	}
 	text, ok := commandUsage(args[0])
 	if !ok {
-		fmt.Fprintf(os.Stderr, "baton: unknown command %q\n\n%s", args[0], usage)
+		fmt.Fprintf(os.Stderr, "%s\n\n%s", unknownCommandError("command", args[0], commandNames), usage)
 		return exitcode.Config
 	}
 	fmt.Print(text)

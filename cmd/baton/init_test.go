@@ -251,14 +251,14 @@ func TestInitCmd_HelpRouting(t *testing.T) {
 		}
 	})
 
-	t.Run("init -h prints usage, exits Config and writes nothing", func(t *testing.T) {
+	t.Run("init -h prints usage, exits OK and writes nothing", func(t *testing.T) {
 		dir := t.TempDir()
 		var code int
 		_, stderr := captureOutput(t, func() {
 			code = run([]string{"init", dir, "-h"})
 		})
-		if code != exitcode.Config {
-			t.Fatalf("exit code = %d, want %d", code, exitcode.Config)
+		if code != exitcode.OK {
+			t.Fatalf("exit code = %d, want %d", code, exitcode.OK)
 		}
 		if !strings.Contains(stderr, initUsage) {
 			t.Fatalf("stderr = %q, want it to contain the init usage text", stderr)

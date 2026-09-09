@@ -51,6 +51,10 @@ resolve them. -a k=v sets a string argument; -a k:=<json> sets an argument
 parsed as JSON, for numbers, booleans, lists and objects.
 `
 
+// apisSubcommands lists apis's subcommands, for suggesting a close match on
+// an unknown one.
+var apisSubcommands = []string{"import", "validate", "call"}
+
 // apisCmd implements `baton apis` (spec section 7.4.7).
 func apisCmd(args []string) int {
 	if len(args) == 0 {
@@ -64,8 +68,11 @@ func apisCmd(args []string) int {
 		return apisValidateCmd(args[1:])
 	case "call":
 		return apisCallCmd(args[1:])
+	case "-h", "--help", "help":
+		fmt.Print(apisUsage)
+		return exitcode.OK
 	default:
-		fmt.Fprintf(os.Stderr, "baton: unknown apis subcommand %q\n\n%s", args[0], apisUsage)
+		fmt.Fprintf(os.Stderr, "%s\n\n%s", unknownCommandError("apis subcommand", args[0], apisSubcommands), apisUsage)
 		return exitcode.Config
 	}
 }
@@ -83,7 +90,7 @@ func apisImportCmd(args []string) int {
 
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 0 {
 		fmt.Fprint(os.Stderr, apisUsage)
@@ -155,7 +162,7 @@ func apisValidateCmd(args []string) int {
 
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) == 0 {
 		fmt.Fprint(os.Stderr, apisUsage)
@@ -323,7 +330,7 @@ func apisCallCmd(args []string) int {
 
 	positional, err := parseFlags(flags, args)
 	if err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if len(positional) != 2 {
 		fmt.Fprint(os.Stderr, apisUsage)

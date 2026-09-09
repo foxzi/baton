@@ -22,7 +22,7 @@ func validateCmd(args []string) int {
 	flags.SetOutput(os.Stderr)
 	flags.Usage = func() { fmt.Fprint(os.Stderr, validateUsage) }
 	if err := flags.Parse(args); err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if flags.NArg() != 1 {
 		fmt.Fprint(os.Stderr, validateUsage)

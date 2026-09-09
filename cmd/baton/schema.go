@@ -30,7 +30,7 @@ func schemaCmd(args []string) int {
 	flags.Usage = func() { fmt.Fprint(os.Stderr, schemaUsage) }
 	markdown := flags.String("markdown", "", "print a Markdown reference in this language")
 	if err := flags.Parse(args); err != nil {
-		return exitcode.Config
+		return flagsExitCode(err)
 	}
 	if flags.NArg() != 0 {
 		fmt.Fprint(os.Stderr, schemaUsage)
