@@ -514,7 +514,7 @@ func validateLLM(scn *Scenario, step *Step, path string, res *Result) {
 
 // engines are the agent engine implementations (spec section 8).
 var engines = map[string]bool{
-	"claude-code": true, "fake": true,
+	"claude-code": true, "codex": true, "fake": true,
 }
 
 // profiles are the accepted tool profiles (spec section 7.2).
@@ -547,7 +547,7 @@ func validateAgent(scn *Scenario, step *Step, path string, res *Result) {
 	case strings.TrimSpace(agent.Engine) == "":
 		res.errorf(path+".engine", step.Line, "must name an engine")
 	case !engines[agent.Engine]:
-		res.errorf(path+".engine", step.Line, "unknown engine %q, want claude-code or fake", agent.Engine)
+		res.errorf(path+".engine", step.Line, "unknown engine %q, want claude-code, codex or fake", agent.Engine)
 	}
 
 	// The fake engine replays a behaviour file; a real engine has nothing to
