@@ -16,7 +16,7 @@ Goal: a working binary that can (a) run MR code review from CI on GitLab and Git
 - The gateway as an MCP server, tools from packs, `commands`, `fetch`, `state`, `submit_result`
 - The `baton apis import` command — generating a pack stub from OpenAPI
 - A separate `baton-apis` repository with starter packs: `gitlab`, `github`, `gitea` (`forge/v1`), `jira` (`tracker/v1`), `telegram`, `slack` (`notify/v1`)
-- Engines: `claude-code` for `agent:`; providers `anthropic`, `openai`, `openrouter`, and any OpenAI-compatible endpoint for `llm:`; `fake` for tests
+- Engines: `claude-code` and `codex` for `agent:`; providers `anthropic`, `openai`, `openrouter`, and any OpenAI-compatible endpoint for `llm:`; `fake` for tests
 - Error classes, retry, `on_error`, `fallback`, `on_failure`, exit codes
 - Run directory, cache, `resume`, tool audit log, secret redaction
 - Per-step and per-run budgets
@@ -27,7 +27,7 @@ Goal: a working binary that can (a) run MR code review from CI on GitLab and Git
 - Docker sandbox and `exec.mode: shell` mode
 - `baton serve`, webhooks, built-in scheduling
 - The `gate` step waiting for a human
-- The `codex` engine and other CLI agents
+- CLI agents other than `claude-code` and `codex`
 - Secret providers `vault`, `sops`, `1password`
 - Parallel execution of independent DAG branches (parallelism only inside `foreach`)
 - Packs for Outline, Confluence, MediaWiki and others — the format supports them (section 7.4.6), the packs themselves are written as needed outside the v1 plan
@@ -623,7 +623,9 @@ type AgentResult struct {
 }
 ```
 
-### 8.2 `claude-code`
+### 8.2 CLI engines
+
+#### `claude-code`
 
 - Runs `claude -p` in non-interactive mode, `--output-format json` to get usage and cost, `--max-turns`
 - The gateway's MCP config is passed via a temporary `--mcp-config` file
@@ -633,6 +635,17 @@ type AgentResult struct {
 - Process environment: empty, plus `PATH`, `HOME` (a temporary directory), the provider key, the declared `env`
 - Termination: on `submit_result` — SIGTERM, after 10 s SIGKILL; on timeout — the same; on context cancellation — the same
 - Cost is taken from the JSON output; if absent — estimated from tokens and the price table in the config
+
+#### `codex`
+
+- Runs `codex exec --json` in non-interactive mode. The prompt arrives on stdin, which keeps a long prompt out of the process table; a `system` prompt is prepended to it as a separate block, since this CLI has no flag for one
+- The gateway is an MCP server in a `config.toml` written into the run's own `CODEX_HOME`. The bearer token is passed by name (`bearer_token_env_var = "BATON_GATEWAY_TOKEN"`), never written into the file
+- Built-in tools: the shell cannot be turned off the way `claude-code`'s `Bash` can, so the sandbox holds the step's policy instead — `sandbox_mode = "read-only"`, or `workspace-write` with `network_access = false` and the workspace as the only writable root when `fs.write: workspace`. `web_search` is off, `approval_policy = "never"` so that a step never waits for a human, and `shell_environment_policy.inherit = "core"` keeps the step's secrets out of the commands the agent spawns
+- Path deny-lists inside the workspace are not enforced by this engine, and `skills` are refused as unsupported
+- The flag set moves between releases, so the adapter reads `codex exec --help` and passes only what the installation has: `--ephemeral`, `--ignore-rules`, `--color never`, `--model`. `--ignore-user-config` is deliberately not passed — it would drop the run's own `config.toml` along with the gateway. The version is checked at startup and an unknown major is refused
+- Process environment: empty, plus `PATH`, `HOME` and `CODEX_HOME` (the same temporary directory, so no user configuration or cached credential reaches the run), and the declared `env`. The provider credential therefore has to be named in the step's `env`
+- Termination: as with `claude-code` — SIGTERM, SIGKILL after 10 s
+- `max_turns` and `budget_usd` have no flag or config key in this CLI: the step is bounded by the gateway's `max_tool_calls` and by its timeout. The CLI reports no cost, so `cost_usd` stays null; tokens are summed over the `turn.completed` events
 
 ### 8.3 Providers for `llm:`
 

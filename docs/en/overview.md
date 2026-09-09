@@ -57,6 +57,7 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 ### Agent tools
 
 - Filesystem: `fs.read`, `fs.glob`, `fs.grep`, `fs.write` for an engine without file tools of its own; reads always allowed, writes only inside the workspace, path deny-lists
+- The `codex` engine keeps the step inside its policy with the CLI's own sandbox (`read-only`, or `workspace-write` without network access), since its shell tool cannot be turned off
 - The `claude-code` engine uses its own built-in file tools: the gateway serves it no `fs.*`, and the deny-lists together with the ban on `Bash`/`WebFetch`/`Task` go into the CLI's own `settings.json` and `--disallowedTools`
 - Git: `status`, `log`, `diff`, `blame`, `show`, local `commit`; network operations unavailable
 - Commands: declared argv commands with argument validation, timeouts and call limits

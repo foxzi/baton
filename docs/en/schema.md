@@ -174,7 +174,7 @@ Hands a prompt to an agent engine that works via tool calls until it submits a r
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `engine` | `claude-code`, `fake` | yes |  |
+| `engine` | `claude-code`, `codex`, `fake` | yes |  |
 | `model` | string | no |  |
 | `prompt` | [template](#template) | yes |  |
 | `system` | [template](#template) | no |  |

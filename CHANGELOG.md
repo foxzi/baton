@@ -10,6 +10,10 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ### Added
 
+- The `codex` engine for `agent:` steps: the OpenAI Codex CLI is driven through
+  `codex exec --json`, reaches the gateway as an MCP server in a `config.toml`
+  of its own, and is held inside the step's policy by the CLI's sandbox, since
+  its shell tool cannot be turned off. `skills` are not supported by it.
 - `create_issue` in the `jira` pack, so a scenario can open an issue through
   `tracker/v1` and not only read.
 - A pack parameter can address a nested field of the request body by naming

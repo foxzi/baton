@@ -174,7 +174,7 @@
 
 | Поле | Тип | Обязательное | Описание |
 |---|---|---|---|
-| `engine` | `claude-code`, `fake` | да |  |
+| `engine` | `claude-code`, `codex`, `fake` | да |  |
 | `model` | string | нет |  |
 | `prompt` | [template](#template) | да |  |
 | `system` | [template](#template) | нет |  |
