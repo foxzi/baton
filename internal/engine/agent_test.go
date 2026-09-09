@@ -324,7 +324,7 @@ func TestAgent_ConfigErrors(t *testing.T) {
 		{
 			name: "unknown engine",
 			step: `
-      engine: codex
+      engine: no-such-engine
       prompt: work
       result: result.json
 `,

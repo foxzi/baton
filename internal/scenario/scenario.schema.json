@@ -489,6 +489,7 @@
         "engine": {
           "enum": [
             "claude-code",
+            "codex",
             "fake"
           ]
         },

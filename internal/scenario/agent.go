@@ -3,8 +3,8 @@ package scenario
 // AgentStep hands a prompt to an agent engine and waits for it to submit a
 // result through the gateway (spec section 3.6).
 type AgentStep struct {
-	// Engine names the engine implementation: claude-code, or fake in tests
-	// (spec sections 8.2 and 8.4).
+	// Engine names the engine implementation: claude-code or codex, or fake
+	// in tests (spec sections 8.2 and 8.4).
 	Engine string `yaml:"engine"`
 
 	// Model is the engine's own model name, not the <provider>/<model> of an

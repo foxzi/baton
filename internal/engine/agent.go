@@ -13,6 +13,7 @@ import (
 
 	"github.com/foxzi/baton/internal/agent"
 	"github.com/foxzi/baton/internal/agent/claudecode"
+	"github.com/foxzi/baton/internal/agent/codex"
 	"github.com/foxzi/baton/internal/agent/fake"
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/gateway"
@@ -556,6 +557,8 @@ func (e *Engine) agentEngine(ctx context.Context, step *scenario.Step, call *age
 		engine, err = fake.New(e.resolvePath(call.script))
 	case "claude-code":
 		engine, err = claudecode.New(ctx, claudecode.Options{})
+	case "codex":
+		engine, err = codex.New(ctx, codex.Options{})
 	default:
 		return nil, errorf(ClassConfig, "step %s: unknown agent engine %q", step.ID, call.engine)
 	}
