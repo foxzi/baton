@@ -9,6 +9,7 @@ package jsonschema
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -75,16 +76,47 @@ func (s *Schema) Validate(instance any) error {
 
 // ValidateJSON decodes raw JSON and validates it, returning the decoded
 // value. It uses the library's own unmarshaller (json.Number under the
-// hood) so numeric keywords such as multipleOf behave correctly.
+// hood) so numeric keywords such as multipleOf behave correctly, then
+// normalises the numbers of the value it hands back.
 func (s *Schema) ValidateJSON(data []byte) (any, error) {
 	v, err := js.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("jsonschema: not valid JSON: %w", err)
 	}
 	if err := s.Validate(v); err != nil {
-		return v, err
+		return normalizeNumbers(v), err
 	}
-	return v, nil
+	return normalizeNumbers(v), nil
+}
+
+// normalizeNumbers replaces every json.Number of a decoded value with a
+// float64. Validation wants json.Number, a caller does not: a json.Number
+// reaching a template or an expression compares against no number literal
+// at all ("incompatible types for comparison"), because its underlying kind
+// is string. float64 rather than int64 for integers on purpose: a result
+// read back from the cache went through JSON, where every number is a
+// float64, and a value whose type depends on a cache hit is unusable in a
+// template.
+func normalizeNumbers(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for key, item := range t {
+			t[key] = normalizeNumbers(item)
+		}
+	case []any:
+		for i, item := range t {
+			t[i] = normalizeNumbers(item)
+		}
+	case json.Number:
+		f, err := t.Float64()
+		if err != nil {
+			// A number no float64 can hold: leaving the text is closer to
+			// the document than an approximation of it.
+			return t.String()
+		}
+		return f
+	}
+	return v
 }
 
 // flatten turns a validation error tree into a short single-line message:

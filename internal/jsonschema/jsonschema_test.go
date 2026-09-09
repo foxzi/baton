@@ -172,3 +172,40 @@ func TestJSONPointer(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateJSONNormalizesNumbers(t *testing.T) {
+	sch, err := Compile("test.json", []byte(`{
+		"type": "object",
+		"properties": {
+			"score": {"type": "integer"},
+			"ratio": {"type": "number"},
+			"nested": {"type": "array", "items": {"type": "object"}}
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	value, err := sch.ValidateJSON([]byte(`{"score": 7, "ratio": 0.5, "nested": [{"n": 3}]}`))
+	if err != nil {
+		t.Fatalf("ValidateJSON: %v", err)
+	}
+
+	obj, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("value is %T, want map", value)
+	}
+	// A float64 is what makes {{ if le .score 3.0 }} work in a template: a
+	// json.Number compares against no number literal at all, and a cache
+	// hit would hand back a float64 anyway.
+	if got, want := obj["score"], float64(7); got != want {
+		t.Errorf("score is %v (%T), want %v", got, got, want)
+	}
+	if got, want := obj["ratio"], 0.5; got != want {
+		t.Errorf("ratio is %v (%T), want %v", got, got, want)
+	}
+	nested := obj["nested"].([]any)[0].(map[string]any)
+	if got, want := nested["n"], float64(3); got != want {
+		t.Errorf("nested n is %v (%T), want %v", got, got, want)
+	}
+}
