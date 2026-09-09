@@ -52,6 +52,8 @@ $ baton run myworkflow/hello.yaml -i who=Baton
 [check_exit] step_finished: success (264.371µs)
 run 20260909-003107-0bfb: success in 6ms
 run directory: myworkflow/runs/20260909-003107-0bfb
+details: baton runs show 20260909-003107-0bfb --runs-dir myworkflow/runs
+logs:    baton runs logs 20260909-003107-0bfb --runs-dir myworkflow/runs
 ```
 
 Шаблону `hello` (по умолчанию) не нужен ни ключ API, ни сеть. Команда проверяет
@@ -64,10 +66,13 @@ baton: refusing to overwrite 1 existing file:
   myworkflow/hello.yaml
 ```
 
-`baton init myworkflow --template summarize` записывает сценарий с одним шагом
-`llm` и `baton.yaml`, уже настроенный на провайдера — самый короткий путь к
-настоящему вызову модели, разобранный в [разделе 6](#6-подключение-модели).
-`baton help init` (или `baton init -h`) документирует оба шаблона и все опции;
+`baton init myworkflow --template summarize` записывает сценарий из двух шагов
+— вызов `llm`, проверенный по JSON-схеме, затем шаг `file`, который сохраняет
+результат — плюс `baton.yaml`, уже настроенный на провайдера — самый короткий
+путь к настоящему вызову модели, разобранный в [разделе 6](#6-подключение-модели).
+Текст для суммаризации и путь вывода — это входы сценария, их можно
+переопределить через `-i text=... -i out=...` в любом прогоне. `baton help
+init` (или `baton init -h`) документирует оба шаблона и все опции;
 `-h`/`--help` никогда не пишут файлы — ни у этой команды, ни у любой другой.
 
 ## 3. Запуск простейшего сценария
@@ -127,6 +132,8 @@ $ baton run examples/hello.yaml -i who=Baton
 [check_exit] step_finished: success (264.371µs)
 run 20260909-003107-0bfb: success in 6ms
 run directory: examples/runs/20260909-003107-0bfb
+details: baton runs show 20260909-003107-0bfb --runs-dir examples/runs
+logs:    baton runs logs 20260909-003107-0bfb --runs-dir examples/runs
 ```
 
 Ограничение на вход проверяется прежде, чем что-либо выполнится:
@@ -197,6 +204,31 @@ $ baton runs logs 20260909-003107-0bfb
 hello world
 ```
 
+Итоговая строка, которую `run` и `resume` печатают в конце, при необходимости
+обрастает ещё тремя строками: `cost:`, как только шаг реально оценил стоимость
+токенов, `artifacts:` со списком всех путей, которые действительно записала
+операция `write`/`append` шага `file`, и — только если прогон упал — готовая
+к вставке команда `resume:`. Возьмём `greet` выше и добавим второй шаг,
+`file: { write: report.txt, content: "{{ .steps.greet.result }}" }`:
+
+```console
+$ baton run scn.yaml --workspace "$(pwd)"
+[greet] step_started
+[greet] step_finished: success (4.083852ms)
+[report] step_started
+[report] step_finished: success (660.358µs)
+run 20260909-175057-863f: success in 7ms
+artifacts:
+  /tmp/artifact-demo/report.txt
+run directory: runs/20260909-175057-863f
+details: baton runs show 20260909-175057-863f --runs-dir runs
+logs:    baton runs logs 20260909-175057-863f --runs-dir runs
+```
+
+`details:`/`logs:` печатаются всегда, а `--runs-dir` расписан явно, потому что
+собственное значение по умолчанию для этого флага в CLI зависит от текущего
+каталога, который не обязан быть тем же, что использовал сам прогон.
+
 ## 5. Падение — это отдельный код выхода
 
 Замените assert на `steps.greet.exit_code == 42`, и прогон упадёт именно там,
@@ -208,7 +240,10 @@ $ baton run examples/hello.yaml
 [check_exit] step_failed: assert: assert failed: steps.greet.exit_code == 42
 run 20260909-003207-93f9: failed in 6ms
 failed step check_exit: assert: assert failed: steps.greet.exit_code == 42
+resume: baton resume 20260909-003207-93f9 --runs-dir examples/runs
 run directory: examples/runs/20260909-003207-93f9
+details: baton runs show 20260909-003207-93f9 --runs-dir examples/runs
+logs:    baton runs logs 20260909-003207-93f9 --runs-dir examples/runs
 $ echo $?
 2
 ```
@@ -231,22 +266,60 @@ CI различает случаи без разбора логов:
 
 Сценарий называет модель как `<provider>/<model>`; где живёт этот провайдер и
 каким ключом он пользуется — дело глобальной конфигурации, а не сценария.
-Baton читает `~/.config/baton/config.yaml`, затем `./baton.yaml`, более
-поздние значения побеждают; `--config FILE` и `BATON_CONFIG` переопределяют
-поиск.
+Baton сначала читает `~/.config/baton/config.yaml` (или
+`$XDG_CONFIG_HOME/baton/config.yaml`), затем `./baton.yaml` в текущем
+каталоге, объединяя оба файла — значения из локального побеждают;
+`--config FILE` (можно повторять, для `run`, `apis` и `tools`) или
+`BATON_CONFIG` полностью заменяют этот поиск указанным файлом (или файлами).
 
 Самый быстрый способ увидеть это в деле целиком — `baton init myworkflow
 --template summarize`: команда сразу пишет `baton.yaml` ниже, уже заполненный
 для одного провайдера, плюс сценарий и схему, так что остаётся задать только
-ключ:
+ключ. Перед тем как его задать, `baton doctor` проверяет всё, что не требует
+сети, — сам сценарий, какой файл конфигурации он нашёл, и на месте ли
+провайдер и переменная его ключа:
 
 ```console
 $ baton init myworkflow --template summarize --provider openrouter
 wrote summarize template to myworkflow
 next: export OPENROUTER_API_KEY=... then cd myworkflow && baton run summarize.yaml
 
+$ cd myworkflow && baton doctor summarize.yaml
+scenario: summarize.yaml
+  OK load
+  OK validate
+config:
+  MISSING /home/you/.config/baton/config.yaml
+  FOUND baton.yaml
+step summarize (llm):
+  OK model: openrouter/openai/gpt-4.1-nano (from defaults.model)
+  FAIL provider openrouter: kind openrouter, OPENROUTER_API_KEY is not set
+  OK system: inline template (no file at You summarize text. Answer with JSON only.)
+  OK prompt: file prompts/summarize.md
+  OK schema: schemas/summarize.json
+
+not checked: api key validity, network reachability of any provider or pack, notify channel delivery.
+$ echo $?
+3
+
 $ export OPENROUTER_API_KEY=...
-$ cd myworkflow && baton run summarize.yaml
+$ baton run summarize.yaml
+```
+
+`doctor` никогда не делает сетевой вызов, поэтому чистый отчёт — не
+доказательство, что ключ валиден или что провайдер доступен, это подтверждает
+только `baton run`. Строка `MISSING .../config.yaml` называет
+`os.UserConfigDir()` на машине, где это выполнялось; здесь это `/home/you/...`,
+чтобы не печатать настоящее имя пользователя, — у вас будет другое.
+
+Прогоните как есть, и собственный текст шаблона по умолчанию суммируется в
+`summary.json` в текущем каталоге — это делает шаг `file` шаблона; передайте
+свой текст и другой путь вывода через `-i`:
+
+```console
+$ baton run summarize.yaml -i text="The migration finished ahead of schedule." -i out=notes.json
+$ cat notes.json
+{"keywords":["migration","schedule"],"summary":"The migration finished early."}
 ```
 
 `baton.yaml` подхватывается только из текущего каталога (см. выше), а не

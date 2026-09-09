@@ -141,7 +141,7 @@ baton init myworkflow
 baton run myworkflow/hello.yaml
 ```
 
-That template needs no API key and no network — it only echoes a greeting and checks the exit code, to prove the binary and the run directory work. `baton init myworkflow --template summarize` writes a one-step `llm` scenario plus a `baton.yaml` wired to one provider (OpenRouter by default; `--provider anthropic|openai` picks another), for the first run that does call a model. `baton help init` documents both templates and every option.
+That template needs no API key and no network — it only echoes a greeting and checks the exit code, to prove the binary and the run directory work. `baton init myworkflow --template summarize` writes a two-step scenario — an `llm` call checked against a JSON schema, then a `file` step that saves the result — plus a `baton.yaml` wired to one provider (OpenRouter by default; `--provider anthropic|openai` picks another), for the first run that does call a model. The text to summarize and the output path are scenario inputs, overridable with `-i text=... -i out=...` on any run. Before setting the key, `baton doctor myworkflow/summarize.yaml` checks the scenario and the environment without any network call — it does not verify that the key itself is valid. `baton help init` documents both templates and every option.
 
 ## Building
 
@@ -185,7 +185,9 @@ export OPENROUTER_API_KEY=...
 baton run examples/llm-smoke.yaml
 ```
 
-The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` or `./baton.yaml`, or wherever `--config` points. Secrets are read from the environment or from files at the moment a step needs them.
+The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` (or `$XDG_CONFIG_HOME/baton/config.yaml`) checked first, then `./baton.yaml` in the current directory, or wherever `--config`/`BATON_CONFIG` points. Secrets are read from the environment or from files at the moment a step needs them.
+
+`baton doctor <scenario.yaml>` checks a scenario and its environment without running a single step: it loads and validates the scenario, lists which configuration file it would use, and for every `llm` step's model (resolved through the scenario's and then the configuration's `defaults.model`, same as a real run) confirms the provider is declared and its api key environment variable is set — never reading the value. It never makes a network call, so it does not confirm the key is actually valid or that any host is reachable; that first confirmation still needs a real `baton run`.
 
 `baton help` lists every command; `baton help <command>` (or `<command> -h`/`--help`) prints that command's own usage and never has a side effect — `baton init -h` prints the template list and exits without writing a file.
 

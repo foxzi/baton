@@ -52,6 +52,8 @@ $ baton run myworkflow/hello.yaml -i who=Baton
 [check_exit] step_finished: success (264.371µs)
 run 20260909-003107-0bfb: success in 6ms
 run directory: myworkflow/runs/20260909-003107-0bfb
+details: baton runs show 20260909-003107-0bfb --runs-dir myworkflow/runs
+logs:    baton runs logs 20260909-003107-0bfb --runs-dir myworkflow/runs
 ```
 
 The `hello` template (the default) needs no API key and no network. It checks
@@ -64,11 +66,14 @@ baton: refusing to overwrite 1 existing file:
   myworkflow/hello.yaml
 ```
 
-`baton init myworkflow --template summarize` writes a one-step `llm` scenario
-plus a `baton.yaml` already pointed at a provider — the shortest path to a
-real model call, covered in [section 6](#6-add-a-model). `baton help init` (or
-`baton init -h`) documents both templates and every option; `-h`/`--help`
-never write a file, on this command or any other.
+`baton init myworkflow --template summarize` writes a two-step scenario — an
+`llm` call checked against a JSON schema, then a `file` step that saves the
+result — plus a `baton.yaml` already pointed at a provider — the shortest
+path to a real model call, covered in [section 6](#6-add-a-model). The text
+to summarize and the output path are scenario inputs, overridable with
+`-i text=... -i out=...` on any run. `baton help init` (or `baton init -h`)
+documents both templates and every option; `-h`/`--help` never write a file,
+on this command or any other.
 
 ## 3. Run the smallest scenario
 
@@ -126,6 +131,8 @@ $ baton run examples/hello.yaml -i who=Baton
 [check_exit] step_finished: success (264.371µs)
 run 20260909-003107-0bfb: success in 6ms
 run directory: examples/runs/20260909-003107-0bfb
+details: baton runs show 20260909-003107-0bfb --runs-dir examples/runs
+logs:    baton runs logs 20260909-003107-0bfb --runs-dir examples/runs
 ```
 
 The input constraint is enforced before anything executes:
@@ -195,6 +202,31 @@ $ baton runs logs 20260909-003107-0bfb
 hello world
 ```
 
+The summary line `run` and `resume` print at the end grows three more lines
+when they apply: `cost:` once a step actually priced tokens, `artifacts:`
+listing every path a `file` step's `write`/`append` op actually wrote, and —
+only when the run failed — a ready-to-paste `resume:` command. Take `greet`
+above and add a second step, `file: { write: report.txt, content: "{{
+.steps.greet.result }}" }`:
+
+```console
+$ baton run scn.yaml --workspace "$(pwd)"
+[greet] step_started
+[greet] step_finished: success (4.083852ms)
+[report] step_started
+[report] step_finished: success (660.358µs)
+run 20260909-175057-863f: success in 7ms
+artifacts:
+  /tmp/artifact-demo/report.txt
+run directory: runs/20260909-175057-863f
+details: baton runs show 20260909-175057-863f --runs-dir runs
+logs:    baton runs logs 20260909-175057-863f --runs-dir runs
+```
+
+`details:`/`logs:` are always printed, `--runs-dir` spelled out because the
+CLI's own default for that flag depends on the current directory, which need
+not be the one the run actually used.
+
 ## 5. Failure is a distinct exit code
 
 Change the assert to `steps.greet.exit_code == 42` and the run fails where the
@@ -206,7 +238,10 @@ $ baton run examples/hello.yaml
 [check_exit] step_failed: assert: assert failed: steps.greet.exit_code == 42
 run 20260909-003207-93f9: failed in 6ms
 failed step check_exit: assert: assert failed: steps.greet.exit_code == 42
+resume: baton resume 20260909-003207-93f9 --runs-dir examples/runs
 run directory: examples/runs/20260909-003207-93f9
+details: baton runs show 20260909-003207-93f9 --runs-dir examples/runs
+logs:    baton runs logs 20260909-003207-93f9 --runs-dir examples/runs
 $ echo $?
 2
 ```
@@ -229,20 +264,59 @@ the results of the steps that already succeeded.
 
 The scenario names a model as `<provider>/<model>`; where that provider lives
 and which key it uses belongs to the global configuration, not to the scenario.
-Baton reads `~/.config/baton/config.yaml` and then `./baton.yaml`, later values
-winning; `--config FILE` and `BATON_CONFIG` override the search.
+Baton reads `~/.config/baton/config.yaml` (or `$XDG_CONFIG_HOME/baton/config.yaml`)
+first, then `./baton.yaml` in the current directory, merging the two with the
+local file's values winning; `--config FILE` (repeatable, for `run`, `apis` and
+`tools`) or `BATON_CONFIG` replaces that search entirely with the file(s) named.
 
 The fastest way to see this work end to end is `baton init myworkflow
 --template summarize`: it writes the `baton.yaml` below already filled in for
-one provider, plus a scenario and a schema, so only the key is left to set:
+one provider, plus a scenario and a schema, so only the key is left to set.
+Before setting it, `baton doctor` checks everything that does not need the
+network — the scenario, which configuration file it found, and whether the
+provider and its api key variable are in place:
 
 ```console
 $ baton init myworkflow --template summarize --provider openrouter
 wrote summarize template to myworkflow
 next: export OPENROUTER_API_KEY=... then cd myworkflow && baton run summarize.yaml
 
+$ cd myworkflow && baton doctor summarize.yaml
+scenario: summarize.yaml
+  OK load
+  OK validate
+config:
+  MISSING /home/you/.config/baton/config.yaml
+  FOUND baton.yaml
+step summarize (llm):
+  OK model: openrouter/openai/gpt-4.1-nano (from defaults.model)
+  FAIL provider openrouter: kind openrouter, OPENROUTER_API_KEY is not set
+  OK system: inline template (no file at You summarize text. Answer with JSON only.)
+  OK prompt: file prompts/summarize.md
+  OK schema: schemas/summarize.json
+
+not checked: api key validity, network reachability of any provider or pack, notify channel delivery.
+$ echo $?
+3
+
 $ export OPENROUTER_API_KEY=...
-$ cd myworkflow && baton run summarize.yaml
+$ baton run summarize.yaml
+```
+
+`doctor` never makes a network call, so a clean report is not proof the key is
+valid or that the provider is reachable — only `baton run` confirms that. The
+`MISSING .../config.yaml` line names `os.UserConfigDir()` on the machine that
+ran this, `/home/you/...` here to avoid printing an actual username; yours
+will differ.
+
+Run it as-is and the template's own default `text` gets summarized into
+`summary.json` in the current directory, from the template's `file` step;
+pass your own text and a different output path with `-i`:
+
+```console
+$ baton run summarize.yaml -i text="The migration finished ahead of schedule." -i out=notes.json
+$ cat notes.json
+{"keywords":["migration","schedule"],"summary":"The migration finished early."}
 ```
 
 `baton.yaml` is only auto-loaded from the current directory (see above), not
