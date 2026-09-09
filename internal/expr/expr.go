@@ -49,7 +49,7 @@ type Step struct {
 
 	// The fields below belong to http steps (section 3.4). The status of the
 	// response is http_status, because status already names the status of the
-	// step; see docs/ru/spec-review.md, finding 14.
+	// step (section 5.1).
 	HTTPStatus int               `expr:"http_status"`
 	Headers    map[string]string `expr:"headers"`
 	Body       any               `expr:"body"`

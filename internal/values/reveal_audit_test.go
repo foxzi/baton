@@ -8,9 +8,9 @@ import (
 )
 
 // revealWhitelist are the package directories allowed to read plaintext
-// secrets, per docs/ru/spec.md, section 2, plus internal/provider from
-// docs/ru/spec-review.md, finding 11, and internal/values itself, which
-// defines the type.
+// secrets, per docs/ru/spec.md, section 2 (including internal/provider,
+// which normalizes messages for agent adapters), plus internal/values
+// itself, which defines the type.
 var revealWhitelist = []string{
 	"internal/values",
 	"internal/secrets",

@@ -226,8 +226,7 @@ type RunStep struct {
 	MaxOutputBytes ByteSize            `yaml:"max_output_bytes"`
 
 	// Readonly marks a command without side effects, which makes the step
-	// cacheable and retryable. Spec sections 9.4 and 10.3 rely on the field
-	// while section 3.3 omits it; see docs/ru/spec-review.md, finding 5.
+	// cacheable and retryable (spec sections 3.3, 9.4 and 10.3).
 	Readonly bool `yaml:"readonly"`
 
 	// fromString records that the body was written as a bare command string
