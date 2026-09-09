@@ -6,10 +6,24 @@
 Каждая команда и каждый листинг ниже — реальный вывод версии из этого
 репозитория, а не иллюстрация.
 
-## 1. Сборка
+## 1. Установка
 
-Baton — единственный бинарник без зависимостей времени выполнения. Тегированного
-релиза пока нет, поэтому собирайте из исходников; нужен Go 1.25.7 или новее.
+Baton — единственный бинарник без зависимостей времени выполнения. Возьмите его
+из релиза или соберите из исходников.
+
+На [странице релизов](https://github.com/foxzi/baton/releases) лежат архивы
+`tar.gz` для linux/amd64 и linux/arm64 рядом с `checksums.txt`:
+
+```sh
+tag=v0.1.0
+curl -fsSLO https://github.com/foxzi/baton/releases/download/$tag/baton_${tag#v}_linux_amd64.tar.gz
+curl -fsSLO https://github.com/foxzi/baton/releases/download/$tag/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+tar -xzf baton_${tag#v}_linux_amd64.tar.gz baton
+./baton version
+```
+
+Для сборки из исходников нужен Go 1.25.7 или новее:
 
 ```sh
 git clone https://github.com/foxzi/baton.git

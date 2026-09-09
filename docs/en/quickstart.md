@@ -6,10 +6,24 @@ result against a schema and reports what the run cost.
 Every command and every listing below is the real output of the version in this
 repository, not an illustration.
 
-## 1. Build
+## 1. Install
 
-Baton is a single binary with no runtime dependencies. There is no tagged
-release yet, so build it from source; Go 1.25.7 or newer is required.
+Baton is a single binary with no runtime dependencies. Take it from a release
+or build it from source.
+
+The [releases page](https://github.com/foxzi/baton/releases) carries `tar.gz`
+archives for linux/amd64 and linux/arm64 alongside a `checksums.txt`:
+
+```sh
+tag=v0.1.0
+curl -fsSLO https://github.com/foxzi/baton/releases/download/$tag/baton_${tag#v}_linux_amd64.tar.gz
+curl -fsSLO https://github.com/foxzi/baton/releases/download/$tag/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+tar -xzf baton_${tag#v}_linux_amd64.tar.gz baton
+./baton version
+```
+
+Building from source needs Go 1.25.7 or newer:
 
 ```sh
 git clone https://github.com/foxzi/baton.git

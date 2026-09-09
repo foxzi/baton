@@ -130,9 +130,13 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 | M4 | `until`, `fallback`, `dedupe_key`, `switch`, `fetch`, `state`, third-party MCP, signal handling | done |
 | M5 | Documentation, example scenarios, goreleaser builds for linux/amd64 and linux/arm64 | done |
 
+## Installing
+
+A single static binary, no external services and no database. The [releases](https://github.com/foxzi/baton/releases) carry `tar.gz` archives for linux/amd64 and linux/arm64 with a `checksums.txt` beside them; the [quickstart](docs/en/quickstart.md) shows the download, checksum and unpack in four lines.
+
 ## Building
 
-Go, a single static binary, no external services and no database. Requires Go 1.25.7 or newer.
+Go, no cgo. Requires Go 1.25.7 or newer.
 
 ```sh
 make build      # builds ./baton with version metadata
