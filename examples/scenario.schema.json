@@ -1,0 +1,1154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/foxzi/baton/scenario.schema.json",
+  "title": "baton scenario",
+  "description": "Scenario format of baton v1 (docs/ru/spec.md, section 3). Step kinds the runner does not execute yet are accepted as objects and gain their fields in the milestone that implements them.",
+  "type": "object",
+  "required": [
+    "version",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/input"
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "budget_usd": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "time": {
+          "$ref": "#/$defs/duration"
+        },
+        "tokens": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/secret"
+      }
+    },
+    "apis": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/api"
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/command"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "on_failure": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "$defs": {
+    "duration": {
+      "description": "A Go duration string such as 10m, or a number of seconds.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h)([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))*$"
+        },
+        {
+          "type": "number",
+          "minimum": 0
+        }
+      ]
+    },
+    "size": {
+      "description": "A byte count, optionally with a k, m or g suffix in powers of 1024.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9]+\\s*[kKmMgG]?$"
+        },
+        {
+          "type": "integer",
+          "minimum": 0
+        }
+      ]
+    },
+    "template": {
+      "description": "A string that may contain {{ }} template actions. Templates are text/template and escape nothing: pipe a value through html wherever the output is HTML. A missing key renders as an empty value instead of an error, so guard the fields you rely on with default or an assert step. A path passed to render is resolved against the directory of the scenario file, unlike the paths of a file step, which are resolved against the workspace.",
+      "type": "string"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "string",
+            "int",
+            "number",
+            "bool",
+            "list",
+            "map"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": true,
+        "pattern": {
+          "type": "string",
+          "format": "regex"
+        }
+      }
+    },
+    "secret": {
+      "type": "object",
+      "required": [
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "enum": [
+            "env",
+            "file"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "trim": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "from": {
+                "const": "env"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "then": {
+            "required": [
+              "key"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "from": {
+                "const": "file"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "then": {
+            "required": [
+              "path"
+            ]
+          }
+        }
+      ]
+    },
+    "api": {
+      "description": "An apis entry: a pack, its source, configuration and authorisation (spec section 7.4.1).",
+      "type": "object",
+      "required": [
+        "pack",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "interface": {
+          "type": "string",
+          "pattern": "^[a-z][\\w-]*/v[0-9]+$"
+        },
+        "pack": {
+          "$ref": "#/$defs/template"
+        },
+        "from": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "auth": {
+          "description": "The secret feeding the authorisation scheme of the pack (spec section 7.4.1). A step overrides it with the plain secret name in http.auth.",
+          "type": "object",
+          "required": [
+            "secret"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "secret": {
+              "type": "string"
+            }
+          }
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "step": {
+      "description": "A step-body with the id rule of section 3.2: every step needs one, except a switch, which carries none of its own.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/step-body"
+        },
+        {
+          "if": {
+            "required": [
+              "switch"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "id"
+            ]
+          }
+        }
+      ]
+    },
+    "step-body": {
+      "description": "The fields of a step without the id rule, so that a foreach body (spec section 3.7), which has no id of its own, can reuse it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+        },
+        "when": {
+          "type": "string"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "on_error": {
+          "enum": [
+            "fail",
+            "continue",
+            "fallback"
+          ]
+        },
+        "fallback": {
+          "$ref": "#/$defs/step"
+        },
+        "cache": {
+          "type": "boolean"
+        },
+        "dedupe_key": {
+          "$ref": "#/$defs/template"
+        },
+        "message": {
+          "$ref": "#/$defs/template"
+        },
+        "run": {
+          "$ref": "#/$defs/run"
+        },
+        "http": {
+          "$ref": "#/$defs/http"
+        },
+        "assert": {
+          "$ref": "#/$defs/assert"
+        },
+        "llm": {
+          "$ref": "#/$defs/llm"
+        },
+        "agent": {
+          "$ref": "#/$defs/agent"
+        },
+        "foreach": {
+          "$ref": "#/$defs/foreach"
+        },
+        "until": {
+          "$ref": "#/$defs/until"
+        },
+        "file": {
+          "$ref": "#/$defs/file"
+        },
+        "switch": {
+          "description": "Subject expression of a switch; sugar over when, expanded at load (spec section 3.10).",
+          "type": "string"
+        },
+        "cases": {
+          "description": "One step per value of the switch subject.",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "default": {
+          "description": "Step taken when no case matches.",
+          "$ref": "#/$defs/step"
+        },
+        "notify": {
+          "description": "Name of a channel of the global configuration; the text comes from message (spec section 9.3).",
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "required": [
+            "http"
+          ]
+        },
+        {
+          "required": [
+            "assert"
+          ]
+        },
+        {
+          "required": [
+            "llm"
+          ]
+        },
+        {
+          "required": [
+            "agent"
+          ]
+        },
+        {
+          "required": [
+            "foreach"
+          ]
+        },
+        {
+          "required": [
+            "until"
+          ]
+        },
+        {
+          "required": [
+            "file"
+          ]
+        },
+        {
+          "required": [
+            "switch"
+          ]
+        },
+        {
+          "required": [
+            "notify"
+          ]
+        }
+      ]
+    },
+    "llm": {
+      "description": "Calls a language model provider (spec section 3.5).",
+      "type": "object",
+      "required": [
+        "schema"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "pattern": "^[^/]+/.+$"
+        },
+        "fallback_models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^/]+/.+$"
+          }
+        },
+        "system": {
+          "$ref": "#/$defs/template"
+        },
+        "prompt": {
+          "$ref": "#/$defs/template"
+        },
+        "with": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "schema": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0
+        },
+        "structured_mode": {
+          "enum": [
+            "native",
+            "tool",
+            "prompt"
+          ]
+        }
+      }
+    },
+    "agent": {
+      "description": "Hands a prompt to an agent engine that works via tool calls until it submits a result (spec section 3.6).",
+      "type": "object",
+      "required": [
+        "engine",
+        "prompt",
+        "result"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "enum": [
+            "claude-code",
+            "codex",
+            "fake"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "prompt": {
+          "$ref": "#/$defs/template"
+        },
+        "system": {
+          "$ref": "#/$defs/template"
+        },
+        "with": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "profile": {
+          "enum": [
+            "review",
+            "fix",
+            "research"
+          ]
+        },
+        "tools": {
+          "$ref": "#/$defs/tools"
+        },
+        "limits": {
+          "$ref": "#/$defs/limits"
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "budget_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "allow_unsafe": {
+          "type": "boolean"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/template"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "secret"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "secret": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "inherit_auth": {
+          "description": "Reuse the credentials the CLI stored in the user's home directory instead of an API key from env, so a subscription login works (spec section 8.2); supported by the codex engine only.",
+          "type": "boolean"
+        },
+        "result": {
+          "type": "string"
+        },
+        "script": {
+          "description": "The fake engine's behaviour file (spec section 8.4); rejected for any engine other than fake.",
+          "type": "string"
+        }
+      }
+    },
+    "tools": {
+      "description": "Overrides single fields of the step's profile (spec section 7.3).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "type": "boolean"
+            },
+            "write": {
+              "enum": [
+                "none",
+                "workspace"
+              ]
+            },
+            "deny": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "type": "boolean"
+            },
+            "commit": {
+              "type": "boolean"
+            }
+          }
+        },
+        "exec": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "none",
+                "commands"
+              ]
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "apis": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$"
+          }
+        },
+        "fetch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_bytes": {
+              "$ref": "#/$defs/size"
+            },
+            "max_calls": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "mcp": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "state": {
+          "enum": [
+            "none",
+            "read",
+            "read-write"
+          ]
+        }
+      }
+    },
+    "limits": {
+      "description": "Caps how much an agent step may ask of the gateway (spec section 7.3).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_tool_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_result_bytes": {
+          "$ref": "#/$defs/size"
+        }
+      }
+    },
+    "foreach": {
+      "description": "Runs its body once per item of a list (spec section 3.7).",
+      "type": "object",
+      "required": [
+        "items",
+        "step"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "$ref": "#/$defs/template"
+        },
+        "as": {
+          "type": "string"
+        },
+        "max_parallel": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "on_item_error": {
+          "enum": [
+            "fail",
+            "continue"
+          ]
+        },
+        "min_success": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "step": {
+          "description": "The per-item body; it has no id of its own.",
+          "$ref": "#/$defs/step-body"
+        }
+      }
+    },
+    "until": {
+      "description": "Repeats its body until the condition holds (spec section 3.8).",
+      "type": "object",
+      "required": [
+        "condition",
+        "max_iterations",
+        "step"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "Checked after every iteration, with that iteration in iter.",
+          "type": "string"
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "step": {
+          "description": "The per-iteration body; it has no id of its own.",
+          "$ref": "#/$defs/step-body"
+        }
+      }
+    },
+    "file": {
+      "description": "Reads, writes, appends or lists files inside the workspace. Exactly one of read, write, append and glob is set.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read": {
+          "description": "Workspace-relative path to read.",
+          "$ref": "#/$defs/template"
+        },
+        "write": {
+          "description": "Workspace-relative path to write; replaces the file's content.",
+          "$ref": "#/$defs/template"
+        },
+        "append": {
+          "description": "Workspace-relative path to append to; created if it does not exist.",
+          "$ref": "#/$defs/template"
+        },
+        "glob": {
+          "description": "Pattern matched against workspace-relative paths.",
+          "$ref": "#/$defs/template"
+        },
+        "content": {
+          "description": "Text written by write and append.",
+          "$ref": "#/$defs/template"
+        },
+        "parse": {
+          "description": "Read only: how the file's content becomes the step result.",
+          "enum": [
+            "text",
+            "json",
+            "lines"
+          ]
+        },
+        "max_bytes": {
+          "description": "Read only: largest file the step accepts, 1MiB by default; a bigger file is an error.",
+          "$ref": "#/$defs/size"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "read"
+          ]
+        },
+        {
+          "required": [
+            "write"
+          ]
+        },
+        {
+          "required": [
+            "append"
+          ]
+        },
+        {
+          "required": [
+            "glob"
+          ]
+        }
+      ]
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "transient",
+              "schema",
+              "command",
+              "timeout",
+              "budget",
+              "policy",
+              "config",
+              "assert"
+            ]
+          }
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "backoff": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "run": {
+      "description": "A command executed without a shell (spec section 3.3). The bare string form is split by baton and reported as a warning.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": [
+            "argv"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "argv": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/template"
+              }
+            },
+            "cwd": {
+              "$ref": "#/$defs/template"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/template"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "secret"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "secret": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "stdin": {
+              "$ref": "#/$defs/template"
+            },
+            "parse": {
+              "enum": [
+                "text",
+                "json",
+                "lines"
+              ]
+            },
+            "allow_exit_codes": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "max_output_bytes": {
+              "$ref": "#/$defs/size"
+            },
+            "readonly": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "http": {
+      "description": "An operation of a pack, or a raw request (spec section 3.4).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$"
+        },
+        "args": {
+          "type": "object"
+        },
+        "api": {
+          "type": "string"
+        },
+        "auth": {
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "url": {
+          "$ref": "#/$defs/template"
+        },
+        "path": {
+          "$ref": "#/$defs/template"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/template"
+        },
+        "expect_status": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          }
+        },
+        "parse": {
+          "enum": [
+            "text",
+            "json",
+            "lines"
+          ]
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/size"
+        }
+      },
+      "oneOf": [
+        {
+          "title": "operation form",
+          "required": [
+            "op"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "method"
+                ]
+              },
+              {
+                "required": [
+                  "url"
+                ]
+              },
+              {
+                "required": [
+                  "path"
+                ]
+              },
+              {
+                "required": [
+                  "headers"
+                ]
+              },
+              {
+                "required": [
+                  "query"
+                ]
+              },
+              {
+                "required": [
+                  "body"
+                ]
+              },
+              {
+                "required": [
+                  "api"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "raw form",
+          "anyOf": [
+            {
+              "required": [
+                "api"
+              ]
+            },
+            {
+              "required": [
+                "url"
+              ]
+            }
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "op"
+                ]
+              },
+              {
+                "required": [
+                  "args"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "assert": {
+      "type": "object",
+      "required": [
+        "condition"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "type": "string"
+        },
+        "message": {
+          "$ref": "#/$defs/template"
+        }
+      }
+    },
+    "command": {
+      "description": "A command the runner executes on behalf of an agent, never the agent's own process (spec section 7.5).",
+      "type": "object",
+      "required": [
+        "argv"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/template"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "args": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "pattern"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "format": "regex"
+              },
+              "default": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "parse": {
+          "enum": [
+            "text",
+            "json",
+            "lines"
+          ]
+        },
+        "readonly": {
+          "type": "boolean"
+        },
+        "max_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/template"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "secret"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "secret": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

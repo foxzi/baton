@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/foxzi/baton/internal/exitcode"
+	"github.com/foxzi/baton/internal/scenario"
 )
 
 // initTemplates embeds every file `baton init` can write. Each template
@@ -28,6 +29,15 @@ Writes a self-contained scenario into <directory>: the scenario file plus
 every prompt, schema and config file it needs, ready to run outside this
 repository. Existing files are never overwritten — the command checks every
 target path first and refuses, before writing anything, if one is taken.
+
+Also writes scenario.schema.json, this build's own scenario JSON Schema (the
+same document "baton schema" prints), and points the scenario file at it with
+a "# $schema: ./scenario.schema.json" comment at the top of the file, so
+editors validate and autocomplete it without any network access: VS Code
+(with the YAML extension), Neovim and other yaml-language-server clients
+read that comment directly, and IntelliJ-based IDEs (IntelliJ IDEA, GoLand,
+PyCharm, ...) read the same syntax as their own "$schema" convention. See
+docs/en/editor-setup.md for details.
 
 Options:
   --template NAME    hello (default) or summarize
@@ -67,6 +77,12 @@ var initProviderDefaults = map[string]initProviderDefault{
 // initTemplateNames lists the templates init supports, for suggesting a
 // close match on an unknown one.
 var initTemplateNames = []string{"hello", "summarize"}
+
+// initSchemaFileName is the JSON Schema file `baton init` writes next to
+// every scenario it generates, and the name the "$schema" comment atop the
+// scenario file (see the hello and summarize templates) refers to by
+// relative path.
+const initSchemaFileName = "scenario.schema.json"
 
 // initCmd implements `baton init`.
 func initCmd(args []string) int {
@@ -131,6 +147,18 @@ func initCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config
 	}
+	// scenario.schema.json is not one of the embedded template files (its
+	// content is generated, not copied), but it lands in the same
+	// directory, so it must clear the same "nothing is overwritten"
+	// check before anything is written.
+	schemaTarget := filepath.Join(dir, initSchemaFileName)
+	if _, err := os.Lstat(schemaTarget); err == nil {
+		conflicts = append(conflicts, schemaTarget)
+		sort.Strings(conflicts)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
 	if len(conflicts) > 0 {
 		fmt.Fprintf(os.Stderr, "baton: refusing to overwrite %s:\n", plural(len(conflicts), "existing file"))
 		for _, c := range conflicts {
@@ -143,11 +171,15 @@ func initCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config
 	}
+	if err := initWriteSchemaFile(schemaTarget); err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
 
-	scenario := filepath.Join(dir, templateName+".yaml")
+	scenarioPath := filepath.Join(dir, templateName+".yaml")
 	fmt.Printf("wrote %s template to %s\n", templateName, dir)
 	if templateName == "hello" {
-		fmt.Printf("next: baton run %s\n", shellQuote(scenario))
+		fmt.Printf("next: baton run %s\n", shellQuote(scenarioPath))
 	} else {
 		// baton.yaml is only auto-loaded from the current directory (spec
 		// section 12), never resolved relative to the scenario file. Running
@@ -349,4 +381,25 @@ func initWriteFiles(dir, root string, files []string, replacer *strings.Replacer
 		}
 	}
 	return nil
+}
+
+// initWriteSchemaFile writes this build's own scenario JSON Schema (the
+// same document `baton schema` prints) to target, so the "$schema" comment
+// atop the generated scenario resolves to a local file instead of a URL
+// that may not stay published, reachable or in step with this binary's
+// version of the format. Like initWriteFiles it refuses to replace an
+// existing file: initCmd already checked target's absence as part of the
+// same up-front conflict check, but O_EXCL keeps the guarantee even if the
+// file appeared in the small window since.
+func initWriteSchemaFile(target string) error {
+	out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	_, writeErr := out.Write(scenario.Schema())
+	closeErr := out.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }

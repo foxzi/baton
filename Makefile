@@ -56,6 +56,7 @@ e2e:
 docs:
 	go run $(CMD) schema --markdown en > docs/en/schema.md
 	go run $(CMD) schema --markdown ru > docs/ru/schema.md
+	go run $(CMD) schema > examples/scenario.schema.json
 
 # docs-check fails when the committed reference no longer matches the schema.
 docs-check:
@@ -63,6 +64,8 @@ docs-check:
 		|| { echo 'docs/en/schema.md is stale, run make docs'; exit 1; }
 	@go run $(CMD) schema --markdown ru | diff -u docs/ru/schema.md - \
 		|| { echo 'docs/ru/schema.md is stale, run make docs'; exit 1; }
+	@go run $(CMD) schema | diff -u examples/scenario.schema.json - \
+		|| { echo 'examples/scenario.schema.json is stale, run make docs'; exit 1; }
 
 clean:
 	rm -f $(BINARY)

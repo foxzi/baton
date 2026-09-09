@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/exitcode"
+	"github.com/foxzi/baton/internal/scenario"
 	"gopkg.in/yaml.v3"
 )
 
@@ -195,13 +197,124 @@ func TestInitCmd_ExistingFileNotOverwritten(t *testing.T) {
 		t.Errorf("conflicting file was modified: got %q, want %q", string(got), sentinel)
 	}
 
-	for _, f := range []string{"summarize.yaml", "baton.yaml", filepath.Join("prompts", "summarize.md")} {
+	for _, f := range []string{"summarize.yaml", "baton.yaml", filepath.Join("prompts", "summarize.md"), initSchemaFileName} {
 		if _, err := os.Stat(filepath.Join(dir, f)); !os.IsNotExist(err) {
 			t.Errorf("stat %s: err = %v, want os.IsNotExist (no partial write)", f, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, "prompts")); !os.IsNotExist(err) {
 		t.Errorf("prompts dir was created: err = %v, want os.IsNotExist", err)
+	}
+}
+
+// 5a2. examples/hello.yaml, this repository's copy for docs and other
+// tests, must stay byte-identical to the embedded hello template `baton
+// init` writes (docs/en and docs/ru quickstart.md say so), and
+// examples/scenario.schema.json must stay in step with the schema
+// `baton init` embeds, the same invariant `make docs-check` enforces for
+// the generated markdown. Both drift silently if one side of a future edit
+// is missed; this test catches that in `go test ./...` without a build.
+func TestExamplesHelloStaysInSyncWithTemplate(t *testing.T) {
+	template, err := os.ReadFile("templates/hello/hello.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile(templates/hello/hello.yaml): %v", err)
+	}
+	example, err := os.ReadFile("../../examples/hello.yaml")
+	if err != nil {
+		t.Fatalf("ReadFile(examples/hello.yaml): %v", err)
+	}
+	if !bytes.Equal(template, example) {
+		t.Errorf("examples/hello.yaml does not match cmd/baton/templates/hello/hello.yaml byte for byte")
+	}
+
+	exampleSchema, err := os.ReadFile("../../examples/scenario.schema.json")
+	if err != nil {
+		t.Fatalf("ReadFile(examples/scenario.schema.json): %v", err)
+	}
+	if !bytes.Equal(exampleSchema, scenario.Schema()) {
+		t.Errorf("examples/scenario.schema.json does not match scenario.Schema(); run make docs")
+	}
+}
+
+// 5b. `baton init` writes scenario.schema.json byte-identical to `baton
+// schema`'s own output, for both templates, and the scenario file's first
+// line is the "$schema" comment pointing at it by relative path.
+func TestInitCmd_WritesScenarioSchemaFile(t *testing.T) {
+	for _, tc := range []struct {
+		template     string
+		scenarioName string
+	}{
+		{"hello", "hello.yaml"},
+		{"summarize", "summarize.yaml"},
+	} {
+		t.Run(tc.template, func(t *testing.T) {
+			dir := t.TempDir()
+
+			var code int
+			_, stderr := captureOutput(t, func() {
+				code = run([]string{"init", dir, "--template", tc.template})
+			})
+			if code != exitcode.OK {
+				t.Fatalf("init exit code = %d, want %d, stderr: %s", code, exitcode.OK, stderr)
+			}
+
+			got, err := os.ReadFile(filepath.Join(dir, initSchemaFileName))
+			if err != nil {
+				t.Fatalf("ReadFile(%s): %v", initSchemaFileName, err)
+			}
+			if !bytes.Equal(got, scenario.Schema()) {
+				t.Errorf("%s content does not match scenario.Schema()", initSchemaFileName)
+			}
+
+			scenarioBytes, err := os.ReadFile(filepath.Join(dir, tc.scenarioName))
+			if err != nil {
+				t.Fatalf("ReadFile(%s): %v", tc.scenarioName, err)
+			}
+			wantModeline := "# $schema: ./" + initSchemaFileName
+			firstLine, _, _ := bytes.Cut(scenarioBytes, []byte("\n"))
+			if string(firstLine) != wantModeline {
+				t.Errorf("%s first line = %q, want %q", tc.scenarioName, firstLine, wantModeline)
+			}
+		})
+	}
+}
+
+// 5c. scenario.schema.json is subject to the same up-front, all-or-nothing
+// overwrite check as the template files: a pre-existing file at that path
+// blocks the whole init, is reported among the conflicts and is left
+// untouched, and the scenario file itself is not written either.
+func TestInitCmd_ScenarioSchemaFileNotOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	sentinel := "not a schema"
+	conflictPath := filepath.Join(dir, initSchemaFileName)
+	if err := os.WriteFile(conflictPath, []byte(sentinel), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var code int
+	_, stderr := captureOutput(t, func() {
+		code = run([]string{"init", dir})
+	})
+	if code != exitcode.Config {
+		t.Fatalf("exit code = %d, want %d, stderr: %s", code, exitcode.Config, stderr)
+	}
+	if !strings.Contains(stderr, "refusing to overwrite") {
+		t.Fatalf("stderr = %q, want it to refuse", stderr)
+	}
+	if !strings.Contains(stderr, conflictPath) {
+		t.Fatalf("stderr = %q, want it to name %s", stderr, conflictPath)
+	}
+
+	got, err := os.ReadFile(conflictPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", conflictPath, err)
+	}
+	if string(got) != sentinel {
+		t.Errorf("conflicting file was modified: got %q, want %q", string(got), sentinel)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "hello.yaml")); !os.IsNotExist(err) {
+		t.Errorf("stat hello.yaml: err = %v, want os.IsNotExist (no partial write)", err)
 	}
 }
 

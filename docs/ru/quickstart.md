@@ -62,9 +62,17 @@ logs:    baton runs logs 20260909-003107-0bfb --runs-dir myworkflow/runs
 
 ```console
 $ baton init myworkflow
-baton: refusing to overwrite 1 existing file:
+baton: refusing to overwrite 2 existing files:
   myworkflow/hello.yaml
+  myworkflow/scenario.schema.json
 ```
+
+`init` также записывает `scenario.schema.json` рядом со сценарием — JSON-схему
+формата из этой же сборки — и указывает на неё в `hello.yaml` комментарием
+`yaml-language-server`, так что редакторы, которые его поддерживают,
+проверяют и подсказывают поля офлайн. См. [настройку редактора](editor-setup.md)
+о том, какие редакторы это покрывает и как указать схему для сценария,
+который вы не создавали через `init`.
 
 `baton init myworkflow --template summarize` записывает сценарий из двух шагов
 — вызов `llm`, проверенный по JSON-схеме, затем шаг `file`, который сохраняет
@@ -502,6 +510,8 @@ systemd timer или расписание вашего CI.
 
 - [Справочник схемы сценария](schema.md) — все поля формата, сгенерированные
   из JSON Schema
+- [Настройка редактора](editor-setup.md) — проверка и автодополнение файлов
+  сценария в VS Code, IntelliJ и любом другом клиенте yaml-language-server
 - [Обзор проекта](overview.md) — для чего нужен Baton и почему он устроен
   именно так
 - [Техническое задание на v1](spec.md) — авторитетный технический документ

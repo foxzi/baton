@@ -62,9 +62,17 @@ same directory is safe rather than destructive:
 
 ```console
 $ baton init myworkflow
-baton: refusing to overwrite 1 existing file:
+baton: refusing to overwrite 2 existing files:
   myworkflow/hello.yaml
+  myworkflow/scenario.schema.json
 ```
+
+`init` also writes `scenario.schema.json` next to the scenario — this build's
+own JSON Schema of the format — and points `hello.yaml` at it with a
+`yaml-language-server` modeline comment, so editors that support it validate
+and autocomplete the file offline. See [Editor setup](editor-setup.md) for
+which editors that covers and how to point one at a scenario you did not
+generate with `init`.
 
 `baton init myworkflow --template summarize` writes a two-step scenario — an
 `llm` call checked against a JSON schema, then a `file` step that saves the
@@ -498,5 +506,7 @@ Then read on:
 
 - [Scenario schema reference](schema.md) — every field of the format, generated
   from the JSON Schema
+- [Editor setup](editor-setup.md) — validation and autocomplete for scenario
+  files in VS Code, IntelliJ and any other yaml-language-server client
 - [Project overview](overview.md) — what Baton is for and why it is shaped this way
 - [Specification for v1](spec.md) — the authoritative technical document
