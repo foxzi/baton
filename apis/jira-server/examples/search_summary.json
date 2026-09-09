@@ -1,204 +1,210 @@
-[
-  {
-    "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
-    "id": "86908",
-    "self": "https://jira.example.com/rest/api/2/issue/86908",
-    "key": "DEMO-8661",
-    "fields": {
-      "summary": "Search misses returned orders",
-      "status": {
-        "self": "https://jira.example.com/rest/api/2/status/10032",
-        "description": "",
-        "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
-        "name": "In review",
-        "id": "10032",
-        "statusCategory": {
-          "self": "https://jira.example.com/rest/api/2/statuscategory/4",
-          "id": 4,
-          "key": "indeterminate",
-          "colorName": "inprogress",
-          "name": "In Progress"
-        }
-      },
-      "assignee": {
-        "self": "https://jira.example.com/rest/api/2/user?username=jsmith",
-        "name": "jsmith",
-        "key": "JIRAUSER20101",
-        "emailAddress": "jsmith@example.com",
-        "avatarUrls": {
-          "48x48": "https://jira.example.com/secure/useravatar?ownerId=JIRAUSER20101&avatarId=10902",
-          "24x24": "https://jira.example.com/secure/useravatar?size=small&ownerId=JIRAUSER20101&avatarId=10902",
-          "16x16": "https://jira.example.com/secure/useravatar?size=xsmall&ownerId=JIRAUSER20101&avatarId=10902",
-          "32x32": "https://jira.example.com/secure/useravatar?size=medium&ownerId=JIRAUSER20101&avatarId=10902"
+{
+  "expand": "schema,names",
+  "startAt": 0,
+  "maxResults": 100,
+  "total": 4,
+  "issues": [
+    {
+      "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+      "id": "86908",
+      "self": "https://jira.example.com/rest/api/2/issue/86908",
+      "key": "DEMO-8661",
+      "fields": {
+        "summary": "Search misses returned orders",
+        "status": {
+          "self": "https://jira.example.com/rest/api/2/status/10032",
+          "description": "",
+          "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
+          "name": "In review",
+          "id": "10032",
+          "statusCategory": {
+            "self": "https://jira.example.com/rest/api/2/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "inprogress",
+            "name": "In Progress"
+          }
         },
-        "displayName": "John Smith",
-        "active": true,
-        "timeZone": "Europe/Berlin"
-      },
-      "priority": {
-        "self": "https://jira.example.com/rest/api/2/priority/3",
-        "iconUrl": "https://jira.example.com/images/icons/priorities/major.svg",
-        "name": "Major",
-        "id": "3"
-      },
-      "issuetype": {
-        "self": "https://jira.example.com/rest/api/2/issuetype/1",
-        "id": "1",
-        "description": "A problem which impairs or prevents the functions of the product.",
-        "iconUrl": "https://jira.example.com/images/icons/issuetypes/bug.svg",
-        "name": "Bug",
-        "subtask": false
-      },
-      "created": "2025-08-14T10:12:33.000+0300",
-      "updated": "2025-08-20T15:44:07.000+0300"
-    }
-  },
-  {
-    "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
-    "id": "86911",
-    "self": "https://jira.example.com/rest/api/2/issue/86911",
-    "key": "DEMO-8662",
-    "fields": {
-      "summary": "Enable SSR for the home page carousels",
-      "status": {
-        "self": "https://jira.example.com/rest/api/2/status/10033",
-        "description": "",
-        "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
-        "name": "Open",
-        "id": "10033",
-        "statusCategory": {
-          "self": "https://jira.example.com/rest/api/2/statuscategory/2",
-          "id": 2,
-          "key": "new",
-          "colorName": "default",
-          "name": "To Do"
-        }
-      },
-      "assignee": {
-        "self": "https://jira.example.com/rest/api/2/user?username=mgarcia",
-        "name": "mgarcia",
-        "key": "JIRAUSER20102",
-        "emailAddress": "mgarcia@example.com",
-        "avatarUrls": {
-          "48x48": "https://jira.example.com/secure/useravatar?ownerId=JIRAUSER20102&avatarId=10903",
-          "24x24": "https://jira.example.com/secure/useravatar?size=small&ownerId=JIRAUSER20102&avatarId=10903",
-          "16x16": "https://jira.example.com/secure/useravatar?size=xsmall&ownerId=JIRAUSER20102&avatarId=10903",
-          "32x32": "https://jira.example.com/secure/useravatar?size=medium&ownerId=JIRAUSER20102&avatarId=10903"
+        "assignee": {
+          "self": "https://jira.example.com/rest/api/2/user?username=jsmith",
+          "name": "jsmith",
+          "key": "JIRAUSER20101",
+          "emailAddress": "jsmith@example.com",
+          "avatarUrls": {
+            "48x48": "https://jira.example.com/secure/useravatar?ownerId=JIRAUSER20101&avatarId=10902",
+            "24x24": "https://jira.example.com/secure/useravatar?size=small&ownerId=JIRAUSER20101&avatarId=10902",
+            "16x16": "https://jira.example.com/secure/useravatar?size=xsmall&ownerId=JIRAUSER20101&avatarId=10902",
+            "32x32": "https://jira.example.com/secure/useravatar?size=medium&ownerId=JIRAUSER20101&avatarId=10902"
+          },
+          "displayName": "John Smith",
+          "active": true,
+          "timeZone": "Europe/Berlin"
         },
-        "displayName": "Maria Garcia",
-        "active": true,
-        "timeZone": "Europe/Madrid"
-      },
-      "priority": {
-        "self": "https://jira.example.com/rest/api/2/priority/4",
-        "iconUrl": "https://jira.example.com/images/icons/priorities/minor.svg",
-        "name": "Minor",
-        "id": "4"
-      },
-      "issuetype": {
-        "self": "https://jira.example.com/rest/api/2/issuetype/3",
-        "id": "3",
-        "description": "A task that needs to be done.",
-        "iconUrl": "https://jira.example.com/images/icons/issuetypes/task.svg",
-        "name": "Task",
-        "subtask": false
-      },
-      "created": "2025-08-15T09:03:18.000+0300",
-      "updated": "2025-08-19T11:27:52.000+0300"
-    }
-  },
-  {
-    "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
-    "id": "86915",
-    "self": "https://jira.example.com/rest/api/2/issue/86915",
-    "key": "DEMO-8663",
-    "fields": {
-      "summary": "Add retry logic to the payment webhook consumer",
-      "status": {
-        "self": "https://jira.example.com/rest/api/2/status/10033",
-        "description": "",
-        "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
-        "name": "Open",
-        "id": "10033",
-        "statusCategory": {
-          "self": "https://jira.example.com/rest/api/2/statuscategory/2",
-          "id": 2,
-          "key": "new",
-          "colorName": "default",
-          "name": "To Do"
-        }
-      },
-      "assignee": null,
-      "priority": {
-        "self": "https://jira.example.com/rest/api/2/priority/2",
-        "iconUrl": "https://jira.example.com/images/icons/priorities/critical.svg",
-        "name": "Critical",
-        "id": "2"
-      },
-      "issuetype": {
-        "self": "https://jira.example.com/rest/api/2/issuetype/7",
-        "id": "7",
-        "description": "A user story describing a piece of functionality.",
-        "iconUrl": "https://jira.example.com/images/icons/issuetypes/story.svg",
-        "name": "Story",
-        "subtask": false
-      },
-      "created": "2025-08-16T14:51:40.000+0300",
-      "updated": "2025-08-16T14:51:40.000+0300"
-    }
-  },
-  {
-    "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
-    "id": "86920",
-    "self": "https://jira.example.com/rest/api/2/issue/86920",
-    "key": "DEMO-8664",
-    "fields": {
-      "summary": "Remove deprecated v1 export endpoint",
-      "status": {
-        "self": "https://jira.example.com/rest/api/2/status/6",
-        "description": "The issue is considered finished.",
-        "iconUrl": "https://jira.example.com/images/icons/statuses/closed.png",
-        "name": "Closed",
-        "id": "6",
-        "statusCategory": {
-          "self": "https://jira.example.com/rest/api/2/statuscategory/3",
-          "id": 3,
-          "key": "done",
-          "colorName": "success",
-          "name": "Done"
-        }
-      },
-      "assignee": {
-        "self": "https://jira.example.com/rest/api/2/user?username=akim",
-        "name": "akim",
-        "key": "JIRAUSER20103",
-        "emailAddress": "akim@example.com",
-        "avatarUrls": {
-          "48x48": "https://jira.example.com/secure/useravatar?ownerId=JIRAUSER20103&avatarId=10904",
-          "24x24": "https://jira.example.com/secure/useravatar?size=small&ownerId=JIRAUSER20103&avatarId=10904",
-          "16x16": "https://jira.example.com/secure/useravatar?size=xsmall&ownerId=JIRAUSER20103&avatarId=10904",
-          "32x32": "https://jira.example.com/secure/useravatar?size=medium&ownerId=JIRAUSER20103&avatarId=10904"
+        "priority": {
+          "self": "https://jira.example.com/rest/api/2/priority/3",
+          "iconUrl": "https://jira.example.com/images/icons/priorities/major.svg",
+          "name": "Major",
+          "id": "3"
         },
-        "displayName": "Alex Kim",
-        "active": true,
-        "timeZone": "America/Los_Angeles"
-      },
-      "priority": {
-        "self": "https://jira.example.com/rest/api/2/priority/3",
-        "iconUrl": "https://jira.example.com/images/icons/priorities/major.svg",
-        "name": "Major",
-        "id": "3"
-      },
-      "issuetype": {
-        "self": "https://jira.example.com/rest/api/2/issuetype/1",
-        "id": "1",
-        "description": "A problem which impairs or prevents the functions of the product.",
-        "iconUrl": "https://jira.example.com/images/icons/issuetypes/bug.svg",
-        "name": "Bug",
-        "subtask": false
-      },
-      "created": "2025-07-30T08:20:11.000+0300",
-      "updated": "2025-08-18T17:05:29.000+0300"
+        "issuetype": {
+          "self": "https://jira.example.com/rest/api/2/issuetype/1",
+          "id": "1",
+          "description": "A problem which impairs or prevents the functions of the product.",
+          "iconUrl": "https://jira.example.com/images/icons/issuetypes/bug.svg",
+          "name": "Bug",
+          "subtask": false
+        },
+        "created": "2025-08-14T10:12:33.000+0300",
+        "updated": "2025-08-20T15:44:07.000+0300"
+      }
+    },
+    {
+      "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+      "id": "86911",
+      "self": "https://jira.example.com/rest/api/2/issue/86911",
+      "key": "DEMO-8662",
+      "fields": {
+        "summary": "Enable SSR for the home page carousels",
+        "status": {
+          "self": "https://jira.example.com/rest/api/2/status/10033",
+          "description": "",
+          "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
+          "name": "Open",
+          "id": "10033",
+          "statusCategory": {
+            "self": "https://jira.example.com/rest/api/2/statuscategory/2",
+            "id": 2,
+            "key": "new",
+            "colorName": "default",
+            "name": "To Do"
+          }
+        },
+        "assignee": {
+          "self": "https://jira.example.com/rest/api/2/user?username=mgarcia",
+          "name": "mgarcia",
+          "key": "JIRAUSER20102",
+          "emailAddress": "mgarcia@example.com",
+          "avatarUrls": {
+            "48x48": "https://jira.example.com/secure/useravatar?ownerId=JIRAUSER20102&avatarId=10903",
+            "24x24": "https://jira.example.com/secure/useravatar?size=small&ownerId=JIRAUSER20102&avatarId=10903",
+            "16x16": "https://jira.example.com/secure/useravatar?size=xsmall&ownerId=JIRAUSER20102&avatarId=10903",
+            "32x32": "https://jira.example.com/secure/useravatar?size=medium&ownerId=JIRAUSER20102&avatarId=10903"
+          },
+          "displayName": "Maria Garcia",
+          "active": true,
+          "timeZone": "Europe/Madrid"
+        },
+        "priority": {
+          "self": "https://jira.example.com/rest/api/2/priority/4",
+          "iconUrl": "https://jira.example.com/images/icons/priorities/minor.svg",
+          "name": "Minor",
+          "id": "4"
+        },
+        "issuetype": {
+          "self": "https://jira.example.com/rest/api/2/issuetype/3",
+          "id": "3",
+          "description": "A task that needs to be done.",
+          "iconUrl": "https://jira.example.com/images/icons/issuetypes/task.svg",
+          "name": "Task",
+          "subtask": false
+        },
+        "created": "2025-08-15T09:03:18.000+0300",
+        "updated": "2025-08-19T11:27:52.000+0300"
+      }
+    },
+    {
+      "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+      "id": "86915",
+      "self": "https://jira.example.com/rest/api/2/issue/86915",
+      "key": "DEMO-8663",
+      "fields": {
+        "summary": "Add retry logic to the payment webhook consumer",
+        "status": {
+          "self": "https://jira.example.com/rest/api/2/status/10033",
+          "description": "",
+          "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
+          "name": "Open",
+          "id": "10033",
+          "statusCategory": {
+            "self": "https://jira.example.com/rest/api/2/statuscategory/2",
+            "id": 2,
+            "key": "new",
+            "colorName": "default",
+            "name": "To Do"
+          }
+        },
+        "assignee": null,
+        "priority": {
+          "self": "https://jira.example.com/rest/api/2/priority/2",
+          "iconUrl": "https://jira.example.com/images/icons/priorities/critical.svg",
+          "name": "Critical",
+          "id": "2"
+        },
+        "issuetype": {
+          "self": "https://jira.example.com/rest/api/2/issuetype/7",
+          "id": "7",
+          "description": "A user story describing a piece of functionality.",
+          "iconUrl": "https://jira.example.com/images/icons/issuetypes/story.svg",
+          "name": "Story",
+          "subtask": false
+        },
+        "created": "2025-08-16T14:51:40.000+0300",
+        "updated": "2025-08-16T14:51:40.000+0300"
+      }
+    },
+    {
+      "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+      "id": "86920",
+      "self": "https://jira.example.com/rest/api/2/issue/86920",
+      "key": "DEMO-8664",
+      "fields": {
+        "summary": "Remove deprecated v1 export endpoint",
+        "status": {
+          "self": "https://jira.example.com/rest/api/2/status/6",
+          "description": "The issue is considered finished.",
+          "iconUrl": "https://jira.example.com/images/icons/statuses/closed.png",
+          "name": "Closed",
+          "id": "6",
+          "statusCategory": {
+            "self": "https://jira.example.com/rest/api/2/statuscategory/3",
+            "id": 3,
+            "key": "done",
+            "colorName": "success",
+            "name": "Done"
+          }
+        },
+        "assignee": {
+          "self": "https://jira.example.com/rest/api/2/user?username=akim",
+          "name": "akim",
+          "key": "JIRAUSER20103",
+          "emailAddress": "akim@example.com",
+          "avatarUrls": {
+            "48x48": "https://jira.example.com/secure/useravatar?ownerId=JIRAUSER20103&avatarId=10904",
+            "24x24": "https://jira.example.com/secure/useravatar?size=small&ownerId=JIRAUSER20103&avatarId=10904",
+            "16x16": "https://jira.example.com/secure/useravatar?size=xsmall&ownerId=JIRAUSER20103&avatarId=10904",
+            "32x32": "https://jira.example.com/secure/useravatar?size=medium&ownerId=JIRAUSER20103&avatarId=10904"
+          },
+          "displayName": "Alex Kim",
+          "active": true,
+          "timeZone": "America/Los_Angeles"
+        },
+        "priority": {
+          "self": "https://jira.example.com/rest/api/2/priority/3",
+          "iconUrl": "https://jira.example.com/images/icons/priorities/major.svg",
+          "name": "Major",
+          "id": "3"
+        },
+        "issuetype": {
+          "self": "https://jira.example.com/rest/api/2/issuetype/1",
+          "id": "1",
+          "description": "A problem which impairs or prevents the functions of the product.",
+          "iconUrl": "https://jira.example.com/images/icons/issuetypes/bug.svg",
+          "name": "Bug",
+          "subtask": false
+        },
+        "created": "2025-07-30T08:20:11.000+0300",
+        "updated": "2025-08-18T17:05:29.000+0300"
+      }
     }
-  }
-]
+  ]
+}

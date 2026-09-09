@@ -295,3 +295,73 @@ func TestCheckInterfaceUnknownName(t *testing.T) {
 		t.Errorf("CheckInterface() error = %q, want mention of the unknown interface", err)
 	}
 }
+
+// trackerSearchPaginatedOps is a paginated search: at runtime its transform
+// sees the items of every page concatenated, so the example is the body of a
+// single page and the check has to walk pagination.items to reach the list.
+const trackerSearchPaginatedOps = `ops:
+  search:
+    get: /search
+    paginate: true
+    pagination:
+      style: offset
+      param: startAt
+      limit_param: maxResults
+      in: query
+      items: .issues
+      size: 50
+    params:
+      query: { name: jql, pattern: '^[\s\S]+$' }
+      limit: { pattern: '^\d+$', in: query, default: '50' }
+    transform: '[ .[] | { key, title: .fields.summary } ]'
+    implements: tracker/v1.search
+`
+
+const trackerSearchPage = `{
+	"startAt": 0,
+	"maxResults": 50,
+	"total": 1,
+	"issues": [ { "key": "K-1", "fields": { "summary": "Speed things up" } } ]
+}`
+
+func TestCheckImplementsPaginatedExampleIsOnePage(t *testing.T) {
+	dir := t.TempDir()
+	pack := writeForgePack(t, dir, "demo", trackerSearchPaginatedOps)
+	writeExample(t, dir, "search", trackerSearchPage)
+
+	if err := pack.CheckImplements(); err != nil {
+		t.Fatalf("CheckImplements() error = %v", err)
+	}
+}
+
+func TestCheckImplementsPaginatedItemsPathDoesNotMatch(t *testing.T) {
+	dir := t.TempDir()
+	pack := writeForgePack(t, dir, "demo", trackerSearchPaginatedOps)
+	// The recorded page names its list "values", not "issues", which is
+	// exactly the mistake the walk would hit on the first request.
+	writeExample(t, dir, "search", `{ "startAt": 0, "values": [ { "key": "K-1" } ] }`)
+
+	err := pack.CheckImplements()
+	if err == nil {
+		t.Fatalf("CheckImplements() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "pagination.items") {
+		t.Errorf("CheckImplements() error = %q, want mention of pagination.items", err)
+	}
+}
+
+func TestCheckImplementsPaginatedExampleAlreadyJoined(t *testing.T) {
+	dir := t.TempDir()
+	pack := writeForgePack(t, dir, "demo", trackerSearchPaginatedOps)
+	// A pre-joined array of items, the shape examples used to be recorded
+	// in: pagination.items has nothing to select from it.
+	writeExample(t, dir, "search", `[ { "key": "K-1", "fields": { "summary": "Speed things up" } } ]`)
+
+	err := pack.CheckImplements()
+	if err == nil {
+		t.Fatalf("CheckImplements() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "pagination.items") {
+		t.Errorf("CheckImplements() error = %q, want mention of pagination.items", err)
+	}
+}

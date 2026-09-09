@@ -543,7 +543,7 @@ An interface is a contract made of several operations with a fixed argument and 
 Rules:
 
 - A pack that declares `implements` for an operation is checked at load time: `params` cover the interface arguments, and the transform run on a test response from the pack (`examples/<op>.json`, required for `implements`) produces a result valid against the interface schema. Otherwise — `config`
-- The example check does not emulate pagination: it feeds the transform the contents of `examples/<op>.json` as they are. An operation with `paginate: true` therefore stores its example already joined — an array of the items of every page, not the raw body of a single response
+- The example check emulates pagination: for an operation with `paginate: true` the example is the raw body of a single page, `pagination.items` is applied to it, and the transform is fed that page's items. The example therefore checks both `pagination.items` and the transform
 - A scenario that declares `interface:` checks at validation time that the chosen pack implements all operations of the interface; otherwise — `config` listing the missing ones
 - Interface operations are single calls. If a forge's API cannot batch (GitLab: one discussion per comment), the pack does not implement `post_review`, and the scenario uses `post_comment` in a `foreach`. Validation shows this upfront
 - Besides interface operations a pack may contain its own; they are available as `forge.list_pipelines` only when `pack` is set statically

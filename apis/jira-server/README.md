@@ -247,12 +247,12 @@ issue posts it with a raw http step through this api.
 
 ## A note on the recorded examples
 
-`baton apis validate` replays a transform over its example file without
-walking pagination, so the example of a paginated operation
-(`search_all.json`, `search_summary.json`, `list_boards.json`,
-`list_board_issues.json`) is stored as the array of items already
-concatenated across pages, the same shape the transform receives at run
-time, rather than one raw single-page response body.
+`baton apis validate` replays an example the way a run does: for a
+paginated operation (`search_all.json`, `search_summary.json`,
+`list_boards.json`, `list_board_issues.json`) the file is the raw body of
+one page, `pagination.items` is applied to it, and the transform is fed
+that page's items. Recording a fresh example is therefore a plain
+single-page request against the API — no post-processing.
 
 ## Validating a change
 

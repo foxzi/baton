@@ -220,11 +220,7 @@ func validatePack(path string) (ok bool) {
 			ok = false
 			continue
 		}
-		result, err := pack.Envelope.Unwrapped(body)
-		if err == nil {
-			_, err = op.Transformed(result)
-		}
-		if err != nil {
+		if _, err := pack.ReplayExample(op, body); err != nil {
 			fmt.Fprintf(os.Stderr, "baton: %s: %s: %v\n", packPath, name, err)
 			ok = false
 			continue

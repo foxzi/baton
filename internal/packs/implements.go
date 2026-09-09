@@ -93,10 +93,7 @@ func (p *Pack) checkOpImplements(op *Op) error {
 		return errors.Join(problems...)
 	}
 
-	result, err := p.Envelope.Unwrapped(body)
-	if err == nil {
-		result, err = op.Transformed(result)
-	}
+	result, err := p.ReplayExample(op, body)
 	if err != nil {
 		add("examples/%s.json: %v", op.name, err)
 		return errors.Join(problems...)
@@ -105,6 +102,37 @@ func (p *Pack) checkOpImplements(op *Op) error {
 		add("implements %s: examples/%s.json: the transform result does not match the interface: %v", op.Implements, op.name, err)
 	}
 	return errors.Join(problems...)
+}
+
+// ReplayExample puts a recorded response through the same steps a real call
+// would: the envelope, then the pagination, then the transform. A paginated
+// operation is the reason this is not one line. At runtime its transform sees
+// the items of every page concatenated, never a response body, so the
+// recorded example is the body of a single page and the walk over it is
+// replayed here - one page long, which is enough to catch an items path that
+// does not match the body it is pointed at.
+func (p *Pack) ReplayExample(op *Op, body any) (any, error) {
+	unwrapped, err := p.Envelope.Unwrapped(body)
+	if err != nil {
+		return nil, err
+	}
+	if !op.Paginate {
+		return op.Transformed(unwrapped)
+	}
+
+	strategy := p.PageStrategy(op)
+	if strategy == nil {
+		return nil, fmt.Errorf("paginate is set but no pagination strategy is declared")
+	}
+	items, err := strategy.PageItems(unwrapped)
+	if err != nil {
+		return nil, err
+	}
+	page, ok := items.([]any)
+	if !ok {
+		return nil, fmt.Errorf("the example is replayed as one page of the walk, which must be a list, got %T; record the body of a single page and set pagination.items", items)
+	}
+	return op.Transformed(page)
 }
 
 // sortedParamNames returns the parameter names of an operation, sorted, so
