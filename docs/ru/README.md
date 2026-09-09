@@ -144,6 +144,8 @@ make test       # go test ./...
 make race       # go test -race ./...
 make all        # fmt, vet, test, build
 make docs       # пересобирает docs/{en,ru}/schema.md из схемы сценария
+make validate-apis      # прогоняет записанные примеры каждого пака
+make validate-examples  # проверяет каждый сценарий из examples/
 ```
 
 ## Запуск

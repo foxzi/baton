@@ -11,7 +11,7 @@ LDFLAGS := -s -w \
 	-X $(PKG)/internal/version.Commit=$(COMMIT) \
 	-X $(PKG)/internal/version.Date=$(DATE)
 
-.PHONY: all build test race vet fmt lint tidy clean docs docs-check
+.PHONY: all build test race vet fmt lint tidy clean docs docs-check validate-apis validate-examples
 
 all: fmt vet test build
 
@@ -35,6 +35,16 @@ lint:
 
 tidy:
 	go mod tidy
+
+# validate-apis replays the recorded examples of every pack through its
+# envelope and transforms, the way the contract tests in CI do.
+validate-apis: build
+	./$(BINARY) apis validate apis/*
+
+# validate-examples checks every shipped scenario, so an example cannot go
+# stale against the schema, its packs or its own step references.
+validate-examples: build
+	@set -e; for scenario in examples/*.yaml; do ./$(BINARY) validate $$scenario; done
 
 # docs regenerates the schema reference; edit the schema, never these files.
 docs:
