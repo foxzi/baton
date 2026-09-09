@@ -322,6 +322,9 @@ func (p *Pack) resolveParams(op *Op) []error {
 	// wires maps the name an argument is sent under to the argument that
 	// claimed it, so that two params cannot overwrite each other.
 	wires := make(map[string]string, len(op.Params))
+	// bodyWires is the same for body arguments only, where a dotted name
+	// nests the value and so can also collide with a shorter name.
+	bodyWires := make(map[string]string, len(op.Params))
 
 	for _, name := range names {
 		param := op.Params[name]
@@ -350,6 +353,10 @@ func (p *Pack) resolveParams(op *Op) []error {
 			} else {
 				wires[wire] = name
 			}
+			if param.In == InBody {
+				problems = append(problems, checkBodyWire(prefix, name, wire, bodyWires)...)
+				bodyWires[wire] = name
+			}
 		}
 		if param.Encode != EncodeUnset && param.Encode != EncodePath {
 			problems = append(problems, fmt.Errorf("%s: encode: only path is a value here", prefix))
@@ -376,6 +383,34 @@ func (p *Pack) resolveParams(op *Op) []error {
 	}
 	slices.SortFunc(problems, func(a, b error) int { return strings.Compare(a.Error(), b.Error()) })
 	return problems
+}
+
+// checkBodyWire validates the wire name of a body argument. A dotted name
+// nests the value, so every segment must be a key and no argument may claim
+// a key another argument sends a value under: name: fields and
+// name: fields.summary cannot both be sent.
+func checkBodyWire(prefix, name, wire string, bodyWires map[string]string) []error {
+	var problems []error
+	segments := strings.Split(wire, ".")
+	for _, segment := range segments {
+		if segment == "" {
+			problems = append(problems, fmt.Errorf("%s: name: %q has an empty key", prefix, wire))
+			return problems
+		}
+	}
+	for other, otherName := range bodyWires {
+		if nests(other, wire) || nests(wire, other) {
+			problems = append(problems, fmt.Errorf("%s: name: %q and params.%s (%q) send the same key both as a value and as an object", prefix, wire, otherName, other))
+		}
+	}
+	slices.SortFunc(problems, func(a, b error) int { return strings.Compare(a.Error(), b.Error()) })
+	return problems
+}
+
+// nests reports whether the wire name outer is a prefix of the object path
+// inner, that is whether inner puts a value inside what outer sends.
+func nests(outer, inner string) bool {
+	return strings.HasPrefix(inner, outer+".")
 }
 
 // placement is the default location of an argument: a path placeholder, the

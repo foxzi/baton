@@ -482,6 +482,7 @@ Operation fields:
 - `get | post | put | patch | delete: <path>` or `kind: graphql` with `query` (file or inline); the path contains `{param}` placeholders
 - `readonly` — determines whether the operation is available to the agent. Not derived from the HTTP method: RPC-style APIs (Outline) do reads via `POST`
 - `params.<name>`: `pattern` (required for anything that ends up in the path or query), `max_len`, `enum`, `in: path | query | body | form` (default: a path placeholder → `path`, `GET` → `query`, otherwise `body`), `encode: path` for segments containing `/`, `required` (default true), `default`
+- `params.<name>.name` — the name the argument is sent under when it differs from the name the scenario writes; for a body argument a dotted name nests the value: `name: fields.project.key` sends `{ "fields": { "project": { "key": … } } }`
 - `encode` — body encoding: `json` (default), `form`
 - `paginate: true` — apply the pack's strategy or the operation's own in `pagination`; the result before the transform is a concatenated array of pages
 - `transform` — a jq expression (gojq), applied after the envelope and pagination; the transform must be pure, without `input`/`env`/`$__loc__`

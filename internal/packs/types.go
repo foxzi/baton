@@ -15,6 +15,7 @@ package packs
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/foxzi/baton/internal/units"
 	"github.com/itchyny/gojq"
@@ -309,4 +310,16 @@ func (p *Param) Wire(name string) string {
 		return p.Name
 	}
 	return name
+}
+
+// WirePath is the wire name of a body argument split into object keys: a
+// dotted name nests the value, so name: fields.summary is sent as
+// { "fields": { "summary": … } }. Only the body is nested; elsewhere the
+// wire name is one key and dots in it are literal.
+func (p *Param) WirePath(name string) []string {
+	wire := p.Wire(name)
+	if p.In != InBody {
+		return []string{wire}
+	}
+	return strings.Split(wire, ".")
 }

@@ -1481,3 +1481,126 @@ ops:
 		})
 	}
 }
+
+// nestedBodyYAML is a pack whose create operation sends most of its
+// arguments inside a nested "fields" object, the way Jira wants them.
+const nestedBodyYAML = `
+pack: demo
+version: 1
+ops:
+  create:
+    post: /issue
+    encode: json
+    params:
+      project: { name: fields.project.key, pattern: '^[A-Z][A-Z0-9_]*$' }
+      summary: { name: fields.summary, max_len: 255 }
+      labels:  { name: fields.labels, required: false }
+      notify:  { required: false, default: true }
+`
+
+// TestBindArgsNestsDottedBodyNames checks that a dotted wire name puts the
+// value inside an object instead of sending a key with a dot in it.
+func TestBindArgsNestsDottedBodyNames(t *testing.T) {
+	pack, err := Parse([]byte(nestedBodyYAML), "test.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	op, err := pack.Op("create")
+	if err != nil {
+		t.Fatalf("Op(create) error = %v", err)
+	}
+	bound, err := op.BindArgs(map[string]any{
+		"project": "SCHDEV",
+		"summary": "the build is red",
+		"labels":  []any{"ops"},
+	})
+	if err != nil {
+		t.Fatalf("BindArgs() error = %v", err)
+	}
+	want := map[string]any{
+		"fields": map[string]any{
+			"project": map[string]any{"key": "SCHDEV"},
+			"summary": "the build is red",
+			"labels":  []any{"ops"},
+		},
+		"notify": true,
+	}
+	if !reflect.DeepEqual(bound.Body, want) {
+		t.Errorf("Body = %#v, want %#v", bound.Body, want)
+	}
+}
+
+// TestBindArgsNestedBodyOmitsAbsentArguments checks that an object is only
+// built from the arguments that were actually supplied.
+func TestBindArgsNestedBodyOmitsAbsentArguments(t *testing.T) {
+	pack, err := Parse([]byte(nestedBodyYAML), "test.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	op, err := pack.Op("create")
+	if err != nil {
+		t.Fatalf("Op(create) error = %v", err)
+	}
+	bound, err := op.BindArgs(map[string]any{
+		"project": "SCHDEV",
+		"summary": "the build is red",
+	})
+	if err != nil {
+		t.Fatalf("BindArgs() error = %v", err)
+	}
+	fields, ok := bound.Body["fields"].(map[string]any)
+	if !ok {
+		t.Fatalf("Body[fields] = %#v, want an object", bound.Body["fields"])
+	}
+	if _, present := fields["labels"]; present {
+		t.Errorf("fields = %#v, want no labels", fields)
+	}
+}
+
+// TestNestedBodyNameRejected covers the wire names a nested body refuses: a
+// key that another argument already sends a value under, and an empty key.
+func TestNestedBodyNameRejected(t *testing.T) {
+	cases := map[string]struct {
+		yaml string
+		want string
+	}{
+		"value and object": {
+			yaml: `
+pack: demo
+version: 1
+ops:
+  create:
+    post: /issue
+    encode: json
+    params:
+      fields:  { name: fields, in: body }
+      summary: { name: fields.summary, in: body }
+`,
+			want: "both as a value and as an object",
+		},
+		"empty key": {
+			yaml: `
+pack: demo
+version: 1
+ops:
+  create:
+    post: /issue
+    encode: json
+    params:
+      summary: { name: fields..summary, in: body }
+`,
+			want: "empty key",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse([]byte(tc.yaml), "test.yaml")
+			if err == nil {
+				t.Fatalf("Parse() error = nil, want error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("Parse() error = %q, want mention of %q", err, tc.want)
+			}
+		})
+	}
+}

@@ -88,13 +88,37 @@ func (o *Op) BindArgs(args map[string]any) (*BoundArgs, error) {
 				bound.Form[param.Wire(name)] = text
 			}
 		default:
-			bound.Body[param.Wire(name)] = value
+			if err := setBody(bound.Body, param.WirePath(name), value); err != nil {
+				problems = append(problems, fmt.Errorf("args.%s: %w", name, err))
+			}
 		}
 	}
 	if err := errors.Join(problems...); err != nil {
 		return nil, err
 	}
 	return bound, nil
+}
+
+// setBody puts a value into the request body under a path of object keys.
+// The intermediate objects are created as needed; a key already taken by a
+// value that is not an object is a pack error the validator catches, so it
+// only fails here as a guard.
+func setBody(body map[string]any, path []string, value any) error {
+	object := body
+	for _, key := range path[:len(path)-1] {
+		switch nested := object[key].(type) {
+		case nil:
+			created := map[string]any{}
+			object[key] = created
+			object = created
+		case map[string]any:
+			object = nested
+		default:
+			return fmt.Errorf("%s is sent both as a value and as an object", strings.Join(path, "."))
+		}
+	}
+	object[path[len(path)-1]] = value
+	return nil
 }
 
 // ErrConstraint marks an argument that broke a params constraint. Section
