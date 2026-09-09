@@ -148,6 +148,16 @@ make validate-apis      # replays every pack's recorded examples
 make validate-examples  # validates every scenario in examples/
 ```
 
+The live tests are off by default: they call real providers and a real agent,
+which costs money. `make e2e` turns both on; each subtest skips itself when
+its key is missing, so one key is enough to check one backend.
+
+| Variable | What it turns on |
+|---|---|
+| `BATON_E2E_PROVIDERS=1` | One structured completion per provider whose key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`) is set |
+| `BATON_E2E=1` | One run of `cmd/baton/testdata/e2e/agent.yaml` against the installed `claude` CLI; needs `ANTHROPIC_API_KEY` |
+| `BATON_E2E_<PROVIDER>_MODEL` | Overrides the model a provider is checked with |
+
 ## Running
 
 Starting from scratch? The [quickstart](docs/en/quickstart.md) walks through a

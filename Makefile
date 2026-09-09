@@ -11,7 +11,7 @@ LDFLAGS := -s -w \
 	-X $(PKG)/internal/version.Commit=$(COMMIT) \
 	-X $(PKG)/internal/version.Date=$(DATE)
 
-.PHONY: all build test race vet fmt lint tidy clean docs docs-check validate-apis validate-examples
+.PHONY: all build test race vet fmt lint tidy clean docs docs-check validate-apis validate-examples e2e
 
 all: fmt vet test build
 
@@ -45,6 +45,12 @@ validate-apis: build
 # stale against the schema, its packs or its own step references.
 validate-examples: build
 	@set -e; for scenario in examples/*.yaml; do ./$(BINARY) validate $$scenario; done
+
+# e2e runs the live tests: one completion per provider whose key is in the
+# environment, and one real claude-code run. They cost money and reach the
+# network, so nothing but this target turns them on.
+e2e:
+	BATON_E2E=1 BATON_E2E_PROVIDERS=1 go test ./cmd/baton -run TestE2E -count=1 -v
 
 # docs regenerates the schema reference; edit the schema, never these files.
 docs:

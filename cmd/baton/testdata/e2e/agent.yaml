@@ -1,0 +1,35 @@
+version: 1
+name: e2e-agent
+description: >
+  The smallest scenario that drives a real agent CLI: the agent reads one
+  file from its workspace, answers the question in it and ends the step
+  through submit_result. It is what the fake engine cannot check - that the
+  installed CLI still takes the flags the adapter passes, still talks to the
+  gateway over MCP and still finds the tools the profile opened.
+
+secrets:
+  anthropic:
+    from: env
+    key: ANTHROPIC_API_KEY
+
+budget:
+  usd: 0.50
+  time: 5m
+
+steps:
+  - id: answer
+    agent:
+      engine: claude-code
+      model: claude-haiku-4-5-20251001
+      prompt: |
+        The file question.txt in your working directory holds one question.
+        Read it and answer it with a single word, then report the answer
+        through submit_result.
+      # review is the read-only profile: the agent may read the workspace and
+      # nothing else (spec section 7.2).
+      profile: review
+      max_turns: 8
+      budget_usd: 0.40
+      env:
+        ANTHROPIC_API_KEY: { secret: anthropic }
+      result: schemas/e2e-agent.json
