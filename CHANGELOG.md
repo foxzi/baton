@@ -39,6 +39,8 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 - `ValidateJSON` decodes numbers as `float64`, which fixes false type errors
   on integer fields.
 - `list_board_issues` in `jira-server` keeps the `description` field.
+- A secret renders as `***` under the numeric formatting verbs too: `%d` used
+  to fall through to the struct fields and print the plaintext.
 
 ## [0.1.0] - 2026-09-09
 

@@ -2,6 +2,8 @@
 // (docs/ru/spec.md, section 5.3).
 package values
 
+import "fmt"
+
 // Redacted is what a secret renders as everywhere except the few packages
 // allowed to read its contents.
 const Redacted = "***"
@@ -31,11 +33,20 @@ func (s Secret) Name() string { return s.name }
 // IsZero reports whether the secret holds no value.
 func (s Secret) IsZero() bool { return s.value == "" }
 
-// String implements fmt.Stringer and covers the %s, %q, %v and %x verbs.
+// String implements fmt.Stringer for callers that render the value without
+// fmt, such as a direct .String() call.
 func (s Secret) String() string { return Redacted }
 
-// GoString covers the %#v verb.
-func (s Secret) GoString() string { return Redacted }
+// Format covers every verb, including the ones fmt does not route through
+// String: %d and %#v would otherwise fall back to printing the struct fields.
+func (s Secret) Format(f fmt.State, verb rune) {
+	switch verb {
+	case 'q':
+		fmt.Fprintf(f, "%q", Redacted)
+	default:
+		fmt.Fprint(f, Redacted)
+	}
+}
 
 // MarshalText covers encoding.TextMarshaler and, through it, most encoders.
 func (s Secret) MarshalText() ([]byte, error) { return []byte(Redacted), nil }
