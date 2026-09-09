@@ -8,6 +8,22 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-09
+
+### Added
+
+- A Docker image (multi-stage build on `debian:bookworm-slim`) with
+  `ca-certificates`, `git`, `bash`, `jq`, `grep`, `ripgrep`, `curl`,
+  `bzip2`, `zip`/`unzip`, `tar` and `gzip`, running as a non-root user;
+  `compose.yaml` runs it under an arbitrary host UID/GID and gives it a
+  writable `HOME` for that UID.
+- CI that builds and smoke-tests the image on every pull request and push
+  to `main`, and publishes `linux/amd64`+`linux/arm64` images to
+  `ghcr.io/foxzi/baton` on `v*` tags, tagged with the semver parts of the
+  tag plus `latest` for a stable release.
+- Docker docs in English and Russian (`docs/en/docker.md`,
+  `docs/ru/docker.md`).
+
 ## [0.2.0] - 2026-09-09
 
 ### Added
@@ -110,6 +126,7 @@ agent gateway.
 - **Release.** goreleaser builds static binaries for linux/amd64 and
   linux/arm64 with checksums, published by pushing a `v*` tag.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/foxzi/baton/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/foxzi/baton/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/foxzi/baton/releases/tag/v0.1.0

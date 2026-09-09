@@ -8,6 +8,22 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-09
+
+### Добавлено
+
+- Docker-образ (многоэтапная сборка на `debian:bookworm-slim`) с пакетами
+  `ca-certificates`, `git`, `bash`, `jq`, `grep`, `ripgrep`, `curl`,
+  `bzip2`, `zip`/`unzip`, `tar` и `gzip`, запускается от непривилегированного
+  пользователя; `compose.yaml` запускает его с произвольным UID/GID хоста и
+  даёт этому пользователю доступную для записи `HOME`.
+- CI, который собирает и прогоняет дымовой тест образа на каждый pull
+  request и push в `main`, а на теги `v*` публикует образы
+  `linux/amd64`+`linux/arm64` в `ghcr.io/foxzi/baton` с тегами по частям
+  semver и `latest` для стабильного релиза.
+- Документация по Docker на английском и русском (`docs/en/docker.md`,
+  `docs/ru/docker.md`).
+
 ## [0.2.0] - 2026-09-09
 
 ### Добавлено
@@ -111,6 +127,7 @@
 - **Релиз.** goreleaser собирает статические бинарники для linux/amd64 и
   linux/arm64 с контрольными суммами, публикация — пушем тега `v*`.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/foxzi/baton/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/foxzi/baton/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/foxzi/baton/releases/tag/v0.1.0
