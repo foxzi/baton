@@ -41,7 +41,7 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 | `run` | Execute a command or script without a shell (argv), capturing stdout/stderr and the exit code |
 | `http` | Call an API pack operation (`forge.post_comment`) or a raw HTTP request, credentials from the secret store |
 | `llm` | A single model call through Anthropic, OpenAI, OpenRouter or any OpenAI-compatible API, with a mandatory result JSON schema, a fallback model chain and optional tools |
-| `agent` | Spawn a CLI agent (Claude Code in v1) with skills, tools and MCP servers |
+| `agent` | Spawn a CLI agent (Claude Code or Codex) with skills, tools and MCP servers |
 | `foreach` | Parallel processing of a list with control over the degree of parallelism and partial success |
 | `until` | A bounded loop with an exit condition (e.g. "keep fixing until the tests pass") |
 | `file` | Read, write, append or list workspace files (`read`, `write`, `append`, `glob`), paths and patterns confined to the workspace |

@@ -35,10 +35,47 @@ make build          # writes ./baton with version metadata
 Put the binary somewhere on your `PATH` if you like — the rest of this page
 assumes plain `baton`.
 
-## 2. Run the smallest scenario
+## 2. First run: `baton init`
 
-A scenario is a YAML file. `examples/hello.yaml` is the whole format in
-seventeen lines: one command and one check.
+`baton init` writes a runnable scenario into a directory of your choice —
+no checkout of this repository needed:
+
+```console
+$ baton init myworkflow
+wrote hello template to myworkflow
+next: baton run myworkflow/hello.yaml
+
+$ baton run myworkflow/hello.yaml -i who=Baton
+[greet] step_started
+[greet] step_finished: success (3.983783ms)
+[check_exit] step_started
+[check_exit] step_finished: success (264.371µs)
+run 20260909-003107-0bfb: success in 6ms
+run directory: myworkflow/runs/20260909-003107-0bfb
+```
+
+The `hello` template (the default) needs no API key and no network. It checks
+every target path before writing anything, so running it again against the
+same directory is safe rather than destructive:
+
+```console
+$ baton init myworkflow
+baton: refusing to overwrite 1 existing file:
+  myworkflow/hello.yaml
+```
+
+`baton init myworkflow --template summarize` writes a one-step `llm` scenario
+plus a `baton.yaml` already pointed at a provider — the shortest path to a
+real model call, covered in [section 6](#6-add-a-model). `baton help init` (or
+`baton init -h`) documents both templates and every option; `-h`/`--help`
+never write a file, on this command or any other.
+
+## 3. Run the smallest scenario
+
+`myworkflow/hello.yaml`, the file `baton init` just wrote, is the whole format
+in seventeen lines: one command and one check. It is also `examples/hello.yaml`
+in this repository, byte for byte, if you cloned it instead.
+
 
 ```yaml
 version: 1
@@ -111,7 +148,7 @@ plan:
   2. check_exit (assert)
 ```
 
-## 3. What a run leaves behind
+## 4. What a run leaves behind
 
 Every run is a directory. By default it is `runs/` next to the scenario;
 `--runs-dir` puts it elsewhere.
@@ -158,7 +195,7 @@ $ baton runs logs 20260909-003107-0bfb
 hello world
 ```
 
-## 4. Failure is a distinct exit code
+## 5. Failure is a distinct exit code
 
 Change the assert to `steps.greet.exit_code == 42` and the run fails where the
 check is, not somewhere downstream:
@@ -188,14 +225,33 @@ CI can tell the cases apart without parsing logs:
 `baton resume <run-id>` continues a failed run at the step that failed, reusing
 the results of the steps that already succeeded.
 
-## 5. Add a model
+## 6. Add a model
 
 The scenario names a model as `<provider>/<model>`; where that provider lives
 and which key it uses belongs to the global configuration, not to the scenario.
 Baton reads `~/.config/baton/config.yaml` and then `./baton.yaml`, later values
 winning; `--config FILE` and `BATON_CONFIG` override the search.
 
-Create `baton.yaml` next to the scenario:
+The fastest way to see this work end to end is `baton init myworkflow
+--template summarize`: it writes the `baton.yaml` below already filled in for
+one provider, plus a scenario and a schema, so only the key is left to set:
+
+```console
+$ baton init myworkflow --template summarize --provider openrouter
+wrote summarize template to myworkflow
+next: export OPENROUTER_API_KEY=... then cd myworkflow && baton run summarize.yaml
+
+$ export OPENROUTER_API_KEY=...
+$ cd myworkflow && baton run summarize.yaml
+```
+
+`baton.yaml` is only auto-loaded from the current directory (see above), not
+resolved relative to the scenario file, so `cd myworkflow` first; running
+`baton run myworkflow/summarize.yaml` from the parent directory would miss it
+and fail with "unknown provider".
+
+To build the same configuration by hand, create `baton.yaml` next to the
+scenario:
 
 ```yaml
 providers:
@@ -215,6 +271,7 @@ pricing:
     input_per_mtok: 0.1
     output_per_mtok: 0.4
 ```
+
 
 Keys are never written into the scenario, the run directory or the cache, and
 interpolating one into a prompt is a validation error rather than a leak. They
@@ -308,7 +365,7 @@ with the exact figures in `cost.json` (`total_usd: 0.000034` for the run above).
 A scenario's `budget:` section caps dollars, tokens and wall time; exhausting it
 stops the run with exit code 4 and still runs `on_failure`.
 
-## 6. Where to go next
+## 7. Where to go next
 
 The other examples in `examples/` are working scenarios the test suite runs, in
 rough order of complexity:

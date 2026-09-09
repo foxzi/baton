@@ -11,7 +11,7 @@ Tasks shaped like *collect data with a script → hand it to a model for interpr
 - **Scenarios are YAML in git.** Typed inputs with defaults and patterns, steps with explicit dependencies, `when:` conditions in expr-lang, static reference checking — `baton validate` reports every problem before anything runs, and `--dry-run` prints the plan.
 - **Nine step types.** `run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `assert` — see [the table below](#step-types).
 - **Model calls with a contract.** Anthropic, OpenAI and any OpenAI-compatible endpoint (OpenRouter included). Every `llm` step returns JSON validated against a schema, with a fallback model chain and the structured-output mode negotiated per provider.
-- **Coding agents as one step.** Claude Code in v1, driven through a built-in MCP gateway: the runner prepares the workspace, serves exactly the tools the step's profile allows and takes the answer from `submit_result`.
+- **Coding agents as one step.** Claude Code or Codex, driven through a built-in MCP gateway: the runner prepares the workspace, serves exactly the tools the step's profile allows and takes the answer from `submit_result`.
 - **Capability instead of access.** No shell, no `curl`, no ambient network. An agent gets declared argv commands with validated arguments, workspace-scoped file writes with path deny-lists, git history and local commits, `fetch` on a domain allowlist, read-only pack operations, cross-run `state` and proxied third-party MCP servers. The `review`, `fix` and `research` profiles pick the set.
 - **API packs instead of built-in integrations.** The HTTP layer knows auth schemes (bearer, header, query, basic, token exchange), pagination and gojq transforms; services are YAML packs loaded from a directory or from git, pinned by version and checksum. Packs implement `forge/v1`, `tracker/v1` and `notify/v1`, so swapping GitLab for GitHub is an input rather than a rewrite.
 - **Packs are debuggable.** `baton apis import` bootstraps a pack from an OpenAPI 3 document, `apis validate` replays every recorded example through the envelope and the transform, `apis call` runs a single operation against the real service.
@@ -90,7 +90,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 | `run` | Execute a command via argv without a shell, capturing stdout/stderr and the exit code |
 | `http` | Call an API pack operation (`forge.post_comment`) or make a raw request, credentials from the secret store |
 | `llm` | A single model call through Anthropic, OpenAI, OpenRouter or any OpenAI-compatible API, with a mandatory result schema, a fallback model chain and optional tools |
-| `agent` | Spawn a CLI agent (Claude Code in v1) with skills, tools and MCP servers |
+| `agent` | Spawn a CLI agent (Claude Code or Codex) with skills, tools and MCP servers |
 | `foreach` | Process a list in parallel, with a parallelism cap and partial-success control |
 | `until` | A bounded loop with an exit condition, e.g. "keep fixing until the tests pass" |
 | `file` | Reading, writing and listing files in the workspace |
@@ -117,7 +117,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 **Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until`, `file` and `switch` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
 
-**Outstanding.** The pack set in `apis/` covers `gitlab`, `github`, `gitea`, `jira` (Cloud), `jira-server` (Server/Data Center), `telegram` and `slack`; any other service still needs a pack of its own. Neither GitLab nor Jira implements its interface in full: GitLab has no `post_review` endpoint that takes a batch of line comments, and Jira nests the fields of a new issue under `fields`, which a pack body cannot express.
+**Outstanding.** The pack set in `apis/` covers `gitlab`, `github`, `gitea`, `jira` (Cloud), `jira-server` (Server/Data Center), `telegram` and `slack`; any other service still needs a pack of its own. GitLab does not implement its interface in full: it has no `post_review` endpoint that takes a batch of line comments.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
@@ -133,6 +133,15 @@ Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 ## Installing
 
 A single static binary, no external services and no database. The [releases](https://github.com/foxzi/baton/releases) carry `tar.gz` archives for linux/amd64 and linux/arm64 with a `checksums.txt` beside them; the [quickstart](docs/en/quickstart.md) shows the download, checksum and unpack in four lines.
+
+Once the binary is on your PATH, `baton init` writes a runnable scenario without touching this repository:
+
+```sh
+baton init myworkflow
+baton run myworkflow/hello.yaml
+```
+
+That template needs no API key and no network — it only echoes a greeting and checks the exit code, to prove the binary and the run directory work. `baton init myworkflow --template summarize` writes a one-step `llm` scenario plus a `baton.yaml` wired to one provider (OpenRouter by default; `--provider anthropic|openai` picks another), for the first run that does call a model. `baton help init` documents both templates and every option.
 
 ## Building
 
@@ -177,6 +186,8 @@ baton run examples/llm-smoke.yaml
 ```
 
 The provider, the notification channels and the pricing table live in the global configuration, `~/.config/baton/config.yaml` or `./baton.yaml`, or wherever `--config` points. Secrets are read from the environment or from files at the moment a step needs them.
+
+`baton help` lists every command; `baton help <command>` (or `<command> -h`/`--help`) prints that command's own usage and never has a side effect — `baton init -h` prints the template list and exits without writing a file.
 
 Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>` and `runs logs <id>`; `baton resume <id>` continues a failed run. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached results, and `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given without running anything. `baton apis import|validate|call` generates a pack from an OpenAPI 3 document, replays its recorded examples, and calls one operation through a scenario's `apis` entry.
 
