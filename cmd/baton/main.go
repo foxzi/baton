@@ -24,6 +24,7 @@ Commands:
   init       Write a self-contained scenario template into a directory
   run        Execute a scenario
   validate   Check a scenario file and report every problem
+  doctor     Check a scenario and its environment, no run, no network
   resume     Continue a failed run at the step that failed
   runs       List runs, show one, print step logs
   tools      Print the tools an agent step would be given
@@ -65,7 +66,7 @@ func flagsExitCode(err error) int {
 // commandNames lists the top-level commands, for suggesting a close match
 // on an unknown one.
 var commandNames = []string{
-	"init", "run", "validate", "resume", "runs", "tools", "apis", "schema", "version", "help",
+	"init", "run", "validate", "doctor", "resume", "runs", "tools", "apis", "schema", "version", "help",
 }
 
 // unknownCommandError formats the "unknown command" message, with a
@@ -95,6 +96,8 @@ func run(args []string) int {
 		return runCmd(args[1:])
 	case "validate":
 		return validateCmd(args[1:])
+	case "doctor":
+		return doctorCmd(args[1:])
 	case "resume":
 		return resumeCmd(args[1:])
 	case "runs":
@@ -150,6 +153,8 @@ func commandUsage(name string) (string, bool) {
 		return runUsage, true
 	case "validate":
 		return validateUsage, true
+	case "doctor":
+		return doctorUsage, true
 	case "resume":
 		return resumeUsage, true
 	case "runs":
