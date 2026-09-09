@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -84,6 +85,27 @@ func NewID(now time.Time) string {
 	return fmt.Sprintf("%s-%s", now.Format("20060102-150405"), hex.EncodeToString(suffix))
 }
 
+// runIDPattern is the set of run ids Create accepts. A run id becomes the
+// name of a single directory under runsDir (filepath.Join(runsDir, runID)),
+// so it must not be able to smuggle a path separator or a ".." segment; the
+// safest way to guarantee that is to only allow characters that can never
+// form one. NewID and nextResumeID (cmd/baton/resume.go) both only ever
+// produce ids made of digits, lower-case hex and "-", which this accepts.
+var runIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+
+// ValidateID reports whether id is safe to use as a run directory name.
+// --run-id, resume and any other caller that lets a user pick a run id
+// should call this before it reaches Create.
+func ValidateID(id string) error {
+	if id == "" {
+		return errors.New("runstore: run id must not be empty")
+	}
+	if !runIDPattern.MatchString(id) {
+		return fmt.Errorf("runstore: run id %q is invalid: must start with a letter or digit and contain only letters, digits, \"-\" or \"_\"", id)
+	}
+	return nil
+}
+
 // Store owns one run directory. All methods are safe for concurrent use.
 type Store struct {
 	dir      string
@@ -101,8 +123,8 @@ type Store struct {
 // Create fails if the run directory already exists and is not empty, so that
 // a run never silently mixes its files with a previous one.
 func Create(runsDir, runID string, redactor *secrets.Redactor) (*Store, error) {
-	if runID == "" {
-		return nil, errors.New("runstore: run id must not be empty")
+	if err := ValidateID(runID); err != nil {
+		return nil, err
 	}
 	dir := filepath.Join(runsDir, runID)
 

@@ -33,6 +33,51 @@ func TestNewID(t *testing.T) {
 	}
 }
 
+func TestValidateID(t *testing.T) {
+	valid := []string{
+		NewID(time.Date(2024, 3, 5, 13, 4, 7, 0, time.UTC)),
+		"20240305-130407-ab12-r1",
+		"20240305-130407-ab12-r12",
+		"r1",
+		"base",
+		"run-1",
+	}
+	for _, id := range valid {
+		if err := ValidateID(id); err != nil {
+			t.Errorf("ValidateID(%q) = %v, want nil", id, err)
+		}
+	}
+
+	invalid := []string{
+		"../evil",
+		"a/b",
+		"",
+		"20250101-120000-xyz!",
+		"/etc/passwd",
+		"..",
+	}
+	for _, id := range invalid {
+		if err := ValidateID(id); err == nil {
+			t.Errorf("ValidateID(%q) = nil, want error", id)
+		}
+	}
+}
+
+func TestCreateRejectsPathTraversal(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Dir(root)
+
+	for _, id := range []string{"../escape", "../../escape", "/escape"} {
+		if _, err := Create(root, id, nil); err == nil {
+			t.Errorf("Create(%q) = nil error, want error", id)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(parent, "escape")); !os.IsNotExist(err) {
+		t.Fatalf("Create escaped runsDir: %v", err)
+	}
+}
+
 func TestCreate(t *testing.T) {
 	root := t.TempDir()
 
