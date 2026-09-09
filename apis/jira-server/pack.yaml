@@ -1,0 +1,244 @@
+# Jira Server / Data Center REST API pack. It is a separate pack from jira,
+# which speaks Jira Cloud: the two differ in three ways that a single pack
+# cannot straddle.
+#
+#   * Authorisation. Cloud takes an API token over HTTP Basic beside the
+#     account email; Server issues a personal access token that goes into
+#     Authorization: Bearer, with no user half at all.
+#   * Search. Cloud retired /rest/api/2/search and now serves only
+#     /rest/api/3/search/jql, which pages through an opaque nextPageToken.
+#     Server still serves /rest/api/2/search and pages through startAt.
+#   * Agile boards. Cloud reports a board's location (project key, name);
+#     Server answers with id, self, name and type alone.
+#
+# Everything here was checked against a live Jira Server 9.17.5 site, and
+# the recorded examples are that site's own responses with the values
+# anonymised.
+pack: jira-server
+version: 1
+description: Jira Server / Data Center REST API
+
+config:
+  # The site root, without a REST prefix: the paths below carry their own
+  # /rest/api/2/... and /rest/agile/1.0/... prefixes.
+  base_url: { required: true }
+
+# A Jira Server personal access token (Profile -> Personal Access Tokens) is
+# a Bearer token. The Basic scheme the Cloud pack uses does not apply: there
+# is no account email to pair the token with.
+auth:
+  kind: bearer
+
+ops:
+  get_issue:
+    get: /rest/api/2/issue/{key}
+    description: Fetch one issue by its key
+    readonly: true
+    params:
+      key: { pattern: '^[A-Z][A-Z0-9_]*-\d+$' }
+      # Asked for explicitly so the response carries what the transform
+      # reads and nothing else: the default field set of this endpoint is
+      # every field of the issue, tens of kilobytes on a busy project.
+      fields:
+        pattern: '^[\w,.-]+$'
+        default: 'summary,status,description,reporter'
+    # A field that was not requested, or one the issue leaves empty, comes
+    # back as null or missing, and tracker/v1 types status, body and author
+    # as strings; each is therefore added only when it has a value.
+    # url is the browsable link, rebuilt from the REST url of the issue,
+    # since Jira reports no other: self is .../rest/api/2/issue/86908 and
+    # a reader wants .../browse/DEMO-8661.
+    transform: |
+      { key, title: .fields.summary, url: (((.self | split("/rest/"))[0]) + "/browse/" + .key) }
+      + (if .fields.status then { status: .fields.status.name } else {} end)
+      + (if .fields.description then { body: .fields.description } else {} end)
+      + (if .fields.reporter then { author: .fields.reporter.displayName } else {} end)
+    implements: tracker/v1.get_issue
+
+  search:
+    # One page of results, sized by limit. search_all below walks every
+    # page; this operation stays single-page because tracker/v1.search
+    # takes a limit, and a paginated operation would overwrite it with the
+    # page size.
+    get: /rest/api/2/search
+    description: Search issues with JQL, first page only
+    readonly: true
+    params:
+      # tracker/v1 calls it query; Jira calls it jql.
+      query:
+        name: jql
+        pattern: '^[\s\S]+$'
+        max_len: 4000
+      limit:
+        name: maxResults
+        pattern: '^\d+$'
+        required: false
+      fields:
+        pattern: '^[\w,.-]+$'
+        default: 'summary,status'
+    transform: '[ .issues[] | { key, title: .fields.summary, status: .fields.status.name, url: (((.self | split("/rest/"))[0]) + "/browse/" + .key) } ]'
+    implements: tracker/v1.search
+
+  search_all:
+    get: /rest/api/2/search
+    description: Search issues with JQL, walking every page
+    readonly: true
+    paginate: true
+    pagination:
+      style: offset
+      param: startAt
+      limit_param: maxResults
+      in: query
+      max_pages: 50
+      items: .issues
+      total: .total
+      # This endpoint honours a page of 100 on the site this pack was
+      # checked against. It must not exceed what the site is willing to
+      # serve: when Jira trims maxResults, the walk reads the short page as
+      # the last one and stops early.
+      size: 100
+    params:
+      query:
+        name: jql
+        pattern: '^[\s\S]+$'
+        max_len: 4000
+      fields:
+        pattern: '^[\w,.-]+$'
+        default: 'summary,status'
+    # Paginated results reach the transform as the concatenation of the
+    # pages' items, so the input here is the array of issues itself.
+    transform: '[ .[] | { key, title: .fields.summary, status: .fields.status.name, url: (((.self | split("/rest/"))[0]) + "/browse/" + .key) } ]'
+
+  search_summary:
+    # search_all reshaped for a report: the same walk, but the transform
+    # also counts the issues by status, assignee and type. The counting
+    # belongs here because jq is the only place in a scenario that can
+    # group a list; a template can iterate but not aggregate.
+    get: /rest/api/2/search
+    description: Search issues with JQL and count them by status, assignee and type
+    readonly: true
+    paginate: true
+    pagination:
+      style: offset
+      param: startAt
+      limit_param: maxResults
+      in: query
+      max_pages: 50
+      items: .issues
+      total: .total
+      size: 100
+    params:
+      query:
+        name: jql
+        pattern: '^[\s\S]+$'
+        max_len: 4000
+      # Wider than the search default: a report names the assignee, the
+      # priority and the type, and sorts by the update date.
+      fields:
+        pattern: '^[\w,.-]+$'
+        default: 'summary,status,assignee,priority,issuetype,created,updated'
+    # total is the number of issues actually walked, which is short of the
+    # site's own total when the walk stops at max_pages.
+    transform: |
+      def counts(field): [ group_by(field)[] | { name: (.[0] | field), count: length } ] | sort_by(.count) | reverse;
+      {
+        total: length,
+        by_status: ([ group_by(.fields.status.name // "Unknown")[] | {
+          name: (.[0].fields.status.name // "Unknown"),
+          category: (.[0].fields.status.statusCategory.name // "Unknown"),
+          count: length
+        } ] | sort_by(.count) | reverse),
+        by_assignee: counts(.fields.assignee.displayName // "Unassigned"),
+        by_type: counts(.fields.issuetype.name // "Unknown"),
+        issues: [ (sort_by(.fields.updated // "") | reverse)[] | {
+          key,
+          title: (.fields.summary // ""),
+          status: (.fields.status.name // "Unknown"),
+          category: (.fields.status.statusCategory.name // "Unknown"),
+          assignee: (.fields.assignee.displayName // "Unassigned"),
+          priority: (.fields.priority.name // ""),
+          type: (.fields.issuetype.name // ""),
+          created: ((.fields.created // "") | split("T")[0]),
+          updated: ((.fields.updated // "") | split("T")[0]),
+          url: (((.self | split("/rest/"))[0]) + "/browse/" + .key)
+        } ]
+      }
+
+  list_boards:
+    get: /rest/agile/1.0/board
+    description: List the Agile boards of the site, walking every page
+    readonly: true
+    paginate: true
+    pagination:
+      style: offset
+      param: startAt
+      limit_param: maxResults
+      in: query
+      max_pages: 50
+      items: .values
+      total: .total
+      # The Agile API caps this endpoint at 50 whatever is asked for: a
+      # request for 100 comes back with maxResults 50. The page size has to
+      # match that cap, or the first page looks short and the walk ends
+      # after one page.
+      size: 50
+    params:
+      # Optional filters of the endpoint. Without them the walk covers
+      # every board the token can see.
+      project:
+        name: projectKeyOrId
+        pattern: '^[\w-]+$'
+        required: false
+      type:
+        pattern: '^(scrum|kanban|simple)$'
+        enum: [scrum, kanban, simple]
+        required: false
+      name:
+        pattern: '^[\s\S]+$'
+        max_len: 200
+        required: false
+    # A Server board carries no location, unlike a Cloud one, so there is
+    # no project key to report here; list_board_issues gets the issues of a
+    # board, and their keys name the project.
+    transform: '[ .[] | { id, name, type, url: (((.self | split("/rest/"))[0]) + "/secure/RapidBoard.jspa?rapidView=" + (.id | tostring)) } ]'
+
+  list_board_issues:
+    get: /rest/agile/1.0/board/{board}/issue
+    description: List the issues of one board, walking every page
+    readonly: true
+    paginate: true
+    pagination:
+      style: offset
+      param: startAt
+      limit_param: maxResults
+      in: query
+      max_pages: 50
+      items: .issues
+      total: .total
+      size: 100
+    params:
+      board: { pattern: '^\d+$' }
+      # The board's own filter already scopes the result; this narrows it
+      # further, for instance to one sprint or one status.
+      query:
+        name: jql
+        pattern: '^[\s\S]+$'
+        max_len: 4000
+        required: false
+      fields:
+        pattern: '^[\w,.-]+$'
+        default: 'summary,status'
+    transform: '[ .[] | { key, title: .fields.summary, status: .fields.status.name, url: (((.self | split("/rest/"))[0]) + "/browse/" + .key) } ]'
+
+  # comment and create_issue are left out on purpose.
+  #
+  # create_issue cannot be expressed at all: Jira nests a new issue's
+  # fields under a single "fields" object, and a pack sends its body
+  # arguments flat.
+  #
+  # comment (POST /rest/api/2/issue/{key}/comment) is expressible, and the
+  # jira pack carries it, but the token this pack was developed against is
+  # read-only, so no request of it was ever made against a live site. It
+  # belongs here once someone can check it; until then the pack ships only
+  # what was verified. A scenario that must comment on a Server issue posts
+  # it with a raw http step through this api.

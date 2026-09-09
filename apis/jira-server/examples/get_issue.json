@@ -1,0 +1,39 @@
+{
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "id": "86908",
+  "self": "https://jira.example.com/rest/api/2/issue/86908",
+  "key": "DEMO-8661",
+  "fields": {
+    "summary": "Search misses returned orders",
+    "description": "Steps:\r\n\r\nThe warehouse searches returned orders by their return tracking number. The recent status fix added a table that keeps those tracking numbers, but the search never looks at it.\r\n\r\nSearch should match both the order tracking number and the return one.",
+    "reporter": {
+      "self": "https://jira.example.com/rest/api/2/user?username=jdoe",
+      "name": "jdoe",
+      "key": "JIRAUSER10508",
+      "emailAddress": "jdoe@example.com",
+      "avatarUrls": {
+        "48x48": "https://jira.example.com/secure/useravatar?ownerId=JIRAUSER10508&avatarId=10901",
+        "24x24": "https://jira.example.com/secure/useravatar?size=small&ownerId=JIRAUSER10508&avatarId=10901",
+        "16x16": "https://jira.example.com/secure/useravatar?size=xsmall&ownerId=JIRAUSER10508&avatarId=10901",
+        "32x32": "https://jira.example.com/secure/useravatar?size=medium&ownerId=JIRAUSER10508&avatarId=10901"
+      },
+      "displayName": "Jane Doe",
+      "active": true,
+      "timeZone": "Europe/Berlin"
+    },
+    "status": {
+      "self": "https://jira.example.com/rest/api/2/status/10032",
+      "description": "",
+      "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
+      "name": "In review",
+      "id": "10032",
+      "statusCategory": {
+        "self": "https://jira.example.com/rest/api/2/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "inprogress",
+        "name": "In Progress"
+      }
+    }
+  }
+}

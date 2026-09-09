@@ -1,0 +1,25 @@
+[
+  {
+    "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+    "id": "84745",
+    "self": "https://jira.example.com/rest/agile/1.0/issue/84745",
+    "key": "DEMO-8438",
+    "fields": {
+      "summary": "Move the catalogue page to Inertia",
+      "status": {
+        "self": "https://jira.example.com/rest/api/2/status/10032",
+        "description": "",
+        "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
+        "name": "In review",
+        "id": "10032",
+        "statusCategory": {
+          "self": "https://jira.example.com/rest/api/2/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "inprogress",
+          "name": "In Progress"
+        }
+      }
+    }
+  }
+]

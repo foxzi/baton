@@ -318,6 +318,7 @@ declares `interface: forge/v1` can be moved between them by changing an input:
 | `github` | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review`, plus `get_change` without the file list |
 | `gitea` | `forge/v1` | the same as GitHub, except that `list_files` carries no diff text |
 | `jira` | `tracker/v1` | `get_issue`, `search`, `comment` |
+| `jira-server` | `tracker/v1` | `get_issue`, `search`, `search_all`, `search_summary`, `list_boards`, `list_board_issues`; read-only |
 | `telegram` | `notify/v1` | `send`, `send_document`, `get_me` |
 | `slack` | `notify/v1` | `send`, `auth_test` |
 

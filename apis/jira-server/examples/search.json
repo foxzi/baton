@@ -1,0 +1,54 @@
+{
+  "expand": "schema,names",
+  "startAt": 0,
+  "maxResults": 2,
+  "total": 5588,
+  "issues": [
+    {
+      "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+      "id": "86911",
+      "self": "https://jira.example.com/rest/api/2/issue/86911",
+      "key": "DEMO-8662",
+      "fields": {
+        "summary": "Enable SSR for the home page carousels",
+        "status": {
+          "self": "https://jira.example.com/rest/api/2/status/10033",
+          "description": "",
+          "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
+          "name": "Open",
+          "id": "10033",
+          "statusCategory": {
+            "self": "https://jira.example.com/rest/api/2/statuscategory/2",
+            "id": 2,
+            "key": "new",
+            "colorName": "default",
+            "name": "To Do"
+          }
+        }
+      }
+    },
+    {
+      "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+      "id": "86908",
+      "self": "https://jira.example.com/rest/api/2/issue/86908",
+      "key": "DEMO-8661",
+      "fields": {
+        "summary": "Search misses returned orders",
+        "status": {
+          "self": "https://jira.example.com/rest/api/2/status/10032",
+          "description": "",
+          "iconUrl": "https://jira.example.com/images/icons/statuses/generic.png",
+          "name": "In review",
+          "id": "10032",
+          "statusCategory": {
+            "self": "https://jira.example.com/rest/api/2/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "inprogress",
+            "name": "In Progress"
+          }
+        }
+      }
+    }
+  ]
+}

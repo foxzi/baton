@@ -321,6 +321,7 @@ cost by step:
 | `github` | `forge/v1` | `list_files`, `get_file`, `post_comment`, `post_review` и `get_change` без списка файлов |
 | `gitea` | `forge/v1` | то же, что у GitHub, только `list_files` не отдаёт текст диффа |
 | `jira` | `tracker/v1` | `get_issue`, `search`, `comment` |
+| `jira-server` | `tracker/v1` | `get_issue`, `search`, `search_all`, `search_summary`, `list_boards`, `list_board_issues`; только чтение |
 | `telegram` | `notify/v1` | `send`, `send_document`, `get_me` |
 | `slack` | `notify/v1` | `send`, `auth_test` |
 

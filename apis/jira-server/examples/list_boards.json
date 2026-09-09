@@ -1,0 +1,14 @@
+[
+  {
+    "id": 91,
+    "self": "https://jira.example.com/rest/agile/1.0/board/91",
+    "name": "(AT) scrum",
+    "type": "scrum"
+  },
+  {
+    "id": 124,
+    "self": "https://jira.example.com/rest/agile/1.0/board/124",
+    "name": "ANALYSISHB board",
+    "type": "kanban"
+  }
+]
