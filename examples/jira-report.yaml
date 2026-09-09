@@ -1,0 +1,60 @@
+version: 1
+name: jira-report
+description: >
+  Takes a JQL query, walks every page of the result through the jira-server
+  pack and writes a single self-contained HTML report: counts by status,
+  assignee and type, then the issue table. No model is involved, so the run
+  costs nothing and the same query always yields the same report.
+
+inputs:
+  jira_url:
+    type: string
+    required: true
+    pattern: '^https?://[\w.:/-]+$'
+  # Anything the site's own issue search accepts, for instance
+  # 'project = DEMO AND created >= -30d ORDER BY updated DESC'.
+  jql:
+    type: string
+    required: true
+  # Written inside the workspace: baton run --workspace ./out puts the
+  # report at ./out/jira-report.html.
+  out:
+    type: string
+    default: jira-report.html
+    pattern: '^[\w./-]+$'
+
+secrets:
+  jira: { from: env, key: JIRA_TOKEN }
+
+apis:
+  tracker:
+    pack: jira-server
+    from: ../apis/
+    config: { base_url: "{{ .inputs.jira_url }}" }
+    auth: { secret: jira }
+    # A wide JQL over a busy project walks tens of pages; the per-request
+    # timeout has to leave room for the slowest of them.
+    timeout: 60s
+
+steps:
+  - id: issues
+    http:
+      op: tracker.search_summary
+      args:
+        query: "{{ .inputs.jql }}"
+
+  - id: report
+    needs: [issues]
+    file:
+      write: "{{ .inputs.out }}"
+      # The template reads .steps.issues.result and .inputs, so the whole
+      # context is passed to it.
+      content: '{{ render "templates/jira-report.html" . }}'
+
+  - id: check
+    needs: [issues]
+    # A report of nothing is a mistyped JQL far more often than an empty
+    # project, and failing here is louder than an empty table.
+    assert:
+      condition: "steps.issues.result.total > 0"
+      message: "the query matched no issues"

@@ -1,0 +1,137 @@
+{{- /*
+  Jira report, rendered by examples/jira-report.yaml from the result of
+  tracker.search_summary. Every value goes through the html function, since
+  a Jira summary may well contain < or &, and text/template does not escape
+  anything by itself. The status colour is picked by CSS from the
+  data-category attribute rather than by an if chain here.
+*/ -}}
+{{- $report := .steps.issues.result -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jira report</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0 auto; padding: 2.5rem 1.5rem; max-width: 68rem;
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1a1c20; background: #fff;
+  }
+  h1 { margin: 0 0 .35rem; font-size: 1.6rem; }
+  h2 { margin: 2.25rem 0 .75rem; font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; color: #5b6472; }
+  .meta { color: #5b6472; font-size: .875rem; }
+  .meta code { background: #f2f4f7; padding: .15rem .4rem; border-radius: .25rem; word-break: break-all; }
+  .total { margin: 1.5rem 0 0; font-size: 2.5rem; font-weight: 600; line-height: 1; }
+  .total span { font-size: .875rem; font-weight: 400; color: #5b6472; text-transform: uppercase; letter-spacing: .06em; }
+  .cards { display: flex; flex-wrap: wrap; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+  .cards li {
+    flex: 1 1 8rem; padding: .7rem .9rem; border: 1px solid #e3e7ec;
+    border-left-width: 4px; border-radius: .35rem;
+  }
+  .cards .count { display: block; font-size: 1.4rem; font-weight: 600; }
+  .cards .name { color: #5b6472; font-size: .8rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { padding: .5rem .6rem; text-align: left; vertical-align: top; border-bottom: 1px solid #eceff3; }
+  th { color: #5b6472; font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+  tbody tr:hover { background: #f8fafc; }
+  td.key { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.date { white-space: nowrap; color: #5b6472; font-variant-numeric: tabular-nums; }
+  a { color: #1c58d9; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge {
+    display: inline-block; padding: .1rem .45rem; border-radius: 1rem;
+    font-size: .78rem; white-space: nowrap; background: #f2f4f7; color: #3b424e;
+  }
+  .cards li[data-category="To Do"]       { border-left-color: #8b95a5; }
+  .cards li[data-category="In Progress"] { border-left-color: #1c58d9; }
+  .cards li[data-category="Done"]        { border-left-color: #12855b; }
+  .badge[data-category="In Progress"] { background: #e5edff; color: #1743a5; }
+  .badge[data-category="Done"]        { background: #e2f4ec; color: #0c6344; }
+  .split { display: flex; flex-wrap: wrap; gap: 2.5rem; }
+  .split > section { flex: 1 1 18rem; min-width: 0; }
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #eceff3; color: #8b95a5; font-size: .8rem; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e8ec; background: #16181d; }
+    .meta, .cards .name, td.date, h2 { color: #9aa4b2; }
+    .meta code, .badge { background: #24272f; color: #cfd4dc; }
+    .cards li, th, td, footer { border-color: #2a2e37; }
+    tbody tr:hover { background: #1c1f26; }
+    a { color: #7aa2f7; }
+    .badge[data-category="In Progress"] { background: #1b2c56; color: #a9c2fb; }
+    .badge[data-category="Done"]        { background: #14352a; color: #8fd6b6; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Jira report</h1>
+<p class="meta">
+  {{ .inputs.jira_url | html }} &middot; generated {{ .run.started_at.Format "2006-01-02 15:04 MST" }}<br>
+  <code>{{ .inputs.jql | html }}</code>
+</p>
+
+<p class="total">{{ $report.total }} <span>issues</span></p>
+
+<h2>By status</h2>
+<ul class="cards">
+{{- range $report.by_status }}
+  <li data-category="{{ .category | html }}">
+    <span class="count">{{ .count }}</span>
+    <span class="name">{{ .name | html }}</span>
+  </li>
+{{- end }}
+</ul>
+
+<div class="split">
+  <section>
+    <h2>By assignee</h2>
+    <table>
+      <thead><tr><th>Assignee</th><th>Issues</th></tr></thead>
+      <tbody>
+      {{- range $report.by_assignee }}
+        <tr><td>{{ .name | html }}</td><td>{{ .count }}</td></tr>
+      {{- end }}
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>By type</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Issues</th></tr></thead>
+      <tbody>
+      {{- range $report.by_type }}
+        <tr><td>{{ .name | html }}</td><td>{{ .count }}</td></tr>
+      {{- end }}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<h2>Issues</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Key</th><th>Summary</th><th>Status</th><th>Type</th>
+      <th>Priority</th><th>Assignee</th><th>Updated</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{- range $report.issues }}
+    <tr>
+      <td class="key"><a href="{{ .url | html }}">{{ .key | html }}</a></td>
+      <td>{{ .title | html }}</td>
+      <td><span class="badge" data-category="{{ .category | html }}">{{ .status | html }}</span></td>
+      <td>{{ .type | default "—" | html }}</td>
+      <td>{{ .priority | default "—" | html }}</td>
+      <td>{{ .assignee | html }}</td>
+      <td class="date">{{ .updated | html }}</td>
+    </tr>
+  {{- end }}
+  </tbody>
+</table>
+
+<footer>baton {{ .run.name | html }} &middot; run {{ .run.id | html }}</footer>
+
+</body>
+</html>

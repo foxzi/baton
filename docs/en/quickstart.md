@@ -307,6 +307,7 @@ rough order of complexity:
 | `weekly-report.yaml` | a parallel `foreach` over projects, digested and sent to a channel |
 | `triage.yaml` | classification against an `enum`, labels, a comment, paging the on-call only when critical |
 | `review.yaml` | an `agent` step working over a checkout |
+| `jira-report.yaml` | pagination and aggregation inside the pack, an HTML report rendered to a file |
 
 The packs the repository ships live in `apis/` and are loaded with
 `from: ./apis/`. Each one names the interface it implements, so a scenario that
