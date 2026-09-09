@@ -417,12 +417,44 @@ func validateArg(path string, value any, line int, res *Result) {
 // validateSwitches reports on the switch steps Parse expanded away. The
 // expansion itself already rejected the malformed ones; what is left is the
 // subject expression and the coverage of the subject's values (section 4,
-// check 10), which without a default the validator cannot prove.
+// check 10). When the subject reads an enum field of an llm step's schema,
+// the cases must cover every value of that enum; otherwise the validator
+// cannot prove coverage and only asks for a default.
 func validateSwitches(scn *Scenario, res *Result) {
 	for _, info := range scn.switches {
 		validateExpr(info.path+".switch", info.subject, info.line, res)
-		if !info.hasDefault {
-			res.warnf(info.path, info.line, "no default case; every value of the subject must be covered")
+
+		enum := switchEnum(scn, info.subject)
+		if len(enum) == 0 {
+			if !info.hasDefault {
+				res.warnf(info.path, info.line, "no default case; every value of the subject must be covered")
+			}
+			continue
+		}
+
+		covered := make(map[string]bool, len(info.values))
+		for _, label := range info.values {
+			covered[label] = true
+		}
+		known := make(map[string]bool, len(enum))
+		var missing []string
+		for _, value := range enum {
+			label, ok := caseLabel(value)
+			if !ok {
+				continue
+			}
+			known[label] = true
+			if !covered[label] {
+				missing = append(missing, label)
+			}
+		}
+		for _, label := range info.values {
+			if !known[label] {
+				res.warnf(info.path+".cases", info.line, "case %s is not a value of the subject enum, so it can never match", label)
+			}
+		}
+		if len(missing) > 0 && !info.hasDefault {
+			res.errorf(info.path, info.line, "does not cover %s of the subject enum; add the missing cases or a default", strings.Join(missing, ", "))
 		}
 	}
 }

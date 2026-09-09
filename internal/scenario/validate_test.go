@@ -1,6 +1,8 @@
 package scenario
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -1268,5 +1270,100 @@ steps:
 	}
 	if !diagnosticsContain(res.Warnings, "no default case") {
 		t.Errorf("Warnings = %v, want a missing-default warning", res.Warnings)
+	}
+}
+
+// TestValidateSwitchEnumCoverage checks section 4 check 10 proper: when the
+// subject reads an enum field of an llm step's schema, the cases must cover
+// every value of that enum unless there is a default.
+func TestValidateSwitchEnumCoverage(t *testing.T) {
+	const schema = `{
+  "type": "object",
+  "properties": {"risk": {"type": "string", "enum": ["high", "medium", "low"]}},
+  "required": ["risk"]
+}`
+	const header = `
+version: 1
+name: valid
+steps:
+  - id: classify
+    llm:
+      model: openai/gpt-4o
+      prompt: classify
+      schema: schema.json
+`
+
+	cases := []struct {
+		name     string
+		body     string
+		wantErr  string
+		wantWarn string
+	}{
+		{
+			name: "missing case is an error",
+			body: `  - switch: steps.classify.result.risk
+    cases:
+      high: { id: deep, run: { argv: ["echo", "deep"] } }
+      medium: { id: light, run: { argv: ["echo", "light"] } }
+`,
+			wantErr: `does not cover "low"`,
+		},
+		{
+			name: "a default covers the rest",
+			body: `  - switch: steps.classify.result.risk
+    cases:
+      high: { id: deep, run: { argv: ["echo", "deep"] } }
+    default: { id: skip, run: { argv: ["echo", "skip"] } }
+`,
+		},
+		{
+			name: "every value covered needs no default",
+			body: `  - switch: steps.classify.result.risk
+    cases:
+      high: { id: deep, run: { argv: ["echo", "deep"] } }
+      medium: { id: deep, run: { argv: ["echo", "deep"] } }
+      low: { id: light, run: { argv: ["echo", "light"] } }
+`,
+		},
+		{
+			name: "a case outside the enum warns",
+			body: `  - switch: steps.classify.result.risk
+    cases:
+      high: { id: deep, run: { argv: ["echo", "deep"] } }
+      medium: { id: deep, run: { argv: ["echo", "deep"] } }
+      low: { id: light, run: { argv: ["echo", "light"] } }
+      critical: { id: page, run: { argv: ["echo", "page"] } }
+`,
+			wantWarn: `case "critical" is not a value of the subject enum`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "schema.json"), []byte(schema), 0o600); err != nil {
+				t.Fatalf("WriteFile() error = %v", err)
+			}
+			scn, err := Parse([]byte(header+tc.body), filepath.Join(dir, "scn.yaml"))
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			res := Validate(scn)
+
+			if tc.wantErr == "" {
+				if !res.OK() {
+					t.Fatalf("OK() = false, Errors = %v", res.Errors)
+				}
+				if diagnosticsContain(res.Warnings, "no default case") {
+					t.Errorf("Warnings = %v, want no missing-default warning once the enum is known", res.Warnings)
+				}
+			} else if !diagnosticsContain(res.Errors, tc.wantErr) {
+				t.Errorf("Errors = %v, want one about %s", res.Errors, tc.wantErr)
+			}
+
+			if tc.wantWarn != "" && !diagnosticsContain(res.Warnings, tc.wantWarn) {
+				t.Errorf("Warnings = %v, want one about %s", res.Warnings, tc.wantWarn)
+			}
+		})
 	}
 }
