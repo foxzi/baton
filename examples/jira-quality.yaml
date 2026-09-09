@@ -1,0 +1,109 @@
+version: 1
+name: jira-quality
+description: >
+  Walks every issue of one Jira board through the jira-server pack, asks a
+  model how completely each one describes its work, and writes a single HTML
+  report: a score out of ten per issue, what the description is missing and
+  what to add. The model calls are cached, so a second run over an unchanged
+  board spends no tokens.
+
+inputs:
+  jira_url:
+    type: string
+    required: true
+    pattern: '^https?://[\w.:/-]+$'
+  # The numeric board id, as in the rapidView parameter of the board's URL.
+  board:
+    type: string
+    required: true
+    pattern: '^\d+$'
+  # The board's own filter already decides which issues belong to it; this
+  # only orders them, or narrows them further, for instance to one sprint.
+  jql:
+    type: string
+    default: ORDER BY updated DESC
+  # Written inside the workspace: baton run --workspace ./out puts the
+  # report at ./out/jira-quality.html.
+  out:
+    type: string
+    default: jira-quality.html
+    pattern: '^[\w./-]+$'
+
+defaults:
+  # One cheap call per issue; a board of a hundred issues is a hundred
+  # calls, which is why the model is a small one and every call is cached.
+  model: openrouter/google/gemini-2.5-flash-lite
+  timeout: 60s
+
+budget:
+  usd: 1
+  time: 20m
+
+secrets:
+  jira: { from: env, key: JIRA_TOKEN }
+
+apis:
+  tracker:
+    pack: jira-server
+    from: ../apis/
+    config: { base_url: "{{ .inputs.jira_url }}" }
+    auth: { secret: jira }
+    timeout: 60s
+
+steps:
+  - id: issues
+    # Cached as well: the model step below is scored per issue, and rerunning
+    # the report should not walk the board again for a formatting change.
+    cache: true
+    http:
+      op: tracker.list_board_issues
+      args:
+        board: "{{ .inputs.board }}"
+        # description is what is being judged, so it has to be asked for.
+        fields: summary,status,description
+        # The pack calls this argument query; jql is its name on the wire.
+        query: "{{ .inputs.jql }}"
+
+  - id: scored
+    needs: [issues]
+    foreach:
+      items: "{{ .steps.issues.result }}"
+      as: issue
+      max_parallel: 4
+      # One issue the model chokes on does not lose the report; a fifth of
+      # the board failing means the run is not worth reading.
+      on_item_error: continue
+      min_success: 0.8
+      step:
+        cache: true
+        llm:
+          system: >
+            You review issue trackers. You judge only how completely an
+            issue describes the work to be done, never whether the work is
+            worth doing, and you never invent context the issue does not
+            carry. An issue with no description at all scores 1.
+          prompt: |
+            Issue {{ .issue.key }}, currently in status {{ .issue.status }}.
+
+            Title: {{ .issue.title }}
+
+            Description:
+            {{ default "(no description)" .issue.description }}
+          schema: schemas/jira-quality.json
+          max_tokens: 500
+
+  - id: report
+    needs: [scored]
+    file:
+      write: "{{ .inputs.out }}"
+      # The template pairs .steps.issues.result with .steps.scored.items by
+      # index, so the whole context is passed to it.
+      content: '{{ render "templates/jira-quality.html" . }}'
+
+  - id: check
+    needs: [issues]
+    # An empty board is a mistyped id far more often than a real state, and
+    # failing here is louder than a report with no rows.
+    assert:
+      condition: "len(steps.issues.result) > 0"
+      message: "the board has no issues, check the board id and the jql"

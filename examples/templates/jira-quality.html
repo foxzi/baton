@@ -1,0 +1,205 @@
+{{- /*
+  Jira quality report, rendered by examples/jira-quality.yaml from the
+  paired .steps.issues.result / .steps.scored.items arrays. The two arrays
+  are matched by index, never by an echoed key, since the model only ever
+  sees one issue at a time and cannot be trusted to repeat its key back
+  correctly. Every value goes through the html function, since a Jira
+  title, description or model recommendation may well contain < or &, and
+  text/template does not escape anything by itself. Templates render with
+  missingkey=zero, so an absent .description reads as "" rather than
+  erroring, which is why it gets its own empty-state branch below.
+*/ -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jira quality report</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0 auto; padding: 2.5rem 1.5rem; max-width: 68rem;
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1a1c20; background: #fff;
+  }
+  h1 { margin: 0 0 .35rem; font-size: 1.6rem; }
+  h2 { margin: 2.25rem 0 .75rem; font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; color: #5b6472; }
+  .meta { color: #5b6472; font-size: .875rem; }
+  .meta code { background: #f2f4f7; padding: .15rem .4rem; border-radius: .25rem; word-break: break-all; }
+  .empty { color: #5b6472; font-size: .9rem; }
+  .cards { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
+  .cards li {
+    flex: 1 1 8rem; padding: .7rem .9rem; border: 1px solid #e3e7ec;
+    border-left-width: 4px; border-radius: .35rem;
+  }
+  .cards .count { display: block; font-size: 1.4rem; font-weight: 600; }
+  .cards .name { color: #5b6472; font-size: .8rem; }
+  .cards li.n-insufficient { border-left-color: #c23b3b; }
+  .cards li.n-thin         { border-left-color: #b8860b; }
+  .cards li.n-ready        { border-left-color: #12855b; }
+  .row {
+    display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;
+    padding: .9rem 0; border-bottom: 1px solid #eceff3;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .col-score { flex: 0 0 3.5rem; }
+  .row .col-body { flex: 1 1 20rem; min-width: 0; }
+  .row .key { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .row h3 { margin: 0 0 .2rem; font-size: .98rem; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
+  .row .status { color: #5b6472; font-size: .8rem; }
+  .row .desc {
+    margin: .4rem 0 0; color: #5b6472; font-size: .85rem;
+    overflow-wrap: anywhere; word-break: break-word;
+  }
+  .row .missing { margin: .4rem 0 0; font-size: .85rem; }
+  .row .missing strong { color: #5b6472; font-weight: 600; }
+  .row .rec { margin: .3rem 0 0; font-size: .85rem; }
+  .row .rec strong { color: #5b6472; font-weight: 600; }
+  a { color: #1c58d9; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.6rem; height: 2.6rem; border-radius: 50%;
+    font-size: .95rem; font-weight: 600; background: #f2f4f7; color: #3b424e;
+  }
+  .badge.b-low    { background: #fbe6e6; color: #a12727; }
+  .badge.b-medium { background: #fbf1d9; color: #8a6100; }
+  .badge.b-high   { background: #e2f4ec; color: #0c6344; }
+  .bar { margin-top: .4rem; height: .3rem; width: 3.5rem; background: #eceff3; border-radius: .2rem; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: #8b95a5; }
+  .bar span.b-low    { background: #c23b3b; }
+  .bar span.b-medium { background: #b8860b; }
+  .bar span.b-high   { background: #12855b; }
+  .errors { list-style: none; margin: 0; padding: 0; font-size: .85rem; }
+  .errors li { padding: .5rem 0; border-bottom: 1px solid #eceff3; }
+  .errors li:last-child { border-bottom: none; }
+  .errors code { background: #f2f4f7; padding: .15rem .4rem; border-radius: .25rem; word-break: break-all; }
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #eceff3; color: #8b95a5; font-size: .8rem; }
+  @media (max-width: 40rem) {
+    body { padding: 1.5rem 1rem; }
+    .row { flex-direction: column; }
+    .row .col-score { flex-direction: row; display: flex; align-items: center; gap: .5rem; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e8ec; background: #16181d; }
+    .meta, .cards .name, .row .status, .row .desc, .empty, h2 { color: #9aa4b2; }
+    .meta code, .badge, .errors code { background: #24272f; color: #cfd4dc; }
+    .cards li, .row, .errors li, footer { border-color: #2a2e37; }
+    .bar { background: #2a2e37; }
+    a { color: #7aa2f7; }
+    .badge.b-low    { background: #3a1f1f; color: #e59a9a; }
+    .badge.b-medium { background: #3a2f10; color: #e0bd6b; }
+    .badge.b-high   { background: #14352a; color: #8fd6b6; }
+    .bar span.b-low    { background: #e59a9a; }
+    .bar span.b-medium { background: #e0bd6b; }
+    .bar span.b-high   { background: #8fd6b6; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Jira quality report</h1>
+<p class="meta">
+  board {{ .inputs.board | html }} on {{ .inputs.jira_url | html }} &middot;
+  <a href="{{ .inputs.jira_url | html }}">{{ .inputs.jira_url | html }}</a><br>
+  <code>{{ .inputs.jql | html }}</code>
+</p>
+
+<h2>Not actionable as written</h2>
+{{- $any := false -}}
+{{- range $i, $it := .steps.scored.items }}
+  {{- if and (eq $it.status "success") (eq $it.result.verdict "insufficient") }}{{ $any = true }}{{ end }}
+{{- end }}
+{{- if not $any }}
+<p class="empty">No issues fell into this bucket.</p>
+{{- else }}
+<div class="rows">
+{{- range $i, $it := .steps.scored.items }}
+  {{- if and (eq $it.status "success") (eq $it.result.verdict "insufficient") }}
+    {{- $issue := index $.steps.issues.result $i }}
+    {{- template "quality-row" dict "issue" $issue "item" $it }}
+  {{- end }}
+{{- end }}
+</div>
+{{- end }}
+
+<h2>Workable but thin</h2>
+{{- $any := false -}}
+{{- range $i, $it := .steps.scored.items }}
+  {{- if and (eq $it.status "success") (eq $it.result.verdict "thin") }}{{ $any = true }}{{ end }}
+{{- end }}
+{{- if not $any }}
+<p class="empty">No issues fell into this bucket.</p>
+{{- else }}
+<div class="rows">
+{{- range $i, $it := .steps.scored.items }}
+  {{- if and (eq $it.status "success") (eq $it.result.verdict "thin") }}
+    {{- $issue := index $.steps.issues.result $i }}
+    {{- template "quality-row" dict "issue" $issue "item" $it }}
+  {{- end }}
+{{- end }}
+</div>
+{{- end }}
+
+<h2>Ready to be worked on</h2>
+{{- $any := false -}}
+{{- range $i, $it := .steps.scored.items }}
+  {{- if and (eq $it.status "success") (eq $it.result.verdict "ready") }}{{ $any = true }}{{ end }}
+{{- end }}
+{{- if not $any }}
+<p class="empty">No issues fell into this bucket.</p>
+{{- else }}
+<div class="rows">
+{{- range $i, $it := .steps.scored.items }}
+  {{- if and (eq $it.status "success") (eq $it.result.verdict "ready") }}
+    {{- $issue := index $.steps.issues.result $i }}
+    {{- template "quality-row" dict "issue" $issue "item" $it }}
+  {{- end }}
+{{- end }}
+</div>
+{{- end }}
+
+{{- $anyFailed := false -}}
+{{- range $i, $it := .steps.scored.items }}
+  {{- if ne $it.status "success" }}{{ $anyFailed = true }}{{ end }}
+{{- end }}
+{{- if $anyFailed }}
+<h2>Could not be scored</h2>
+<ul class="errors">
+{{- range $i, $it := .steps.scored.items }}
+  {{- if ne $it.status "success" }}
+    {{- $issue := index $.steps.issues.result $i }}
+  <li>
+    <span class="key">{{ $issue.key | html }}</span> &mdash;
+    <code>{{ $it.error.message | html }}</code>
+  </li>
+  {{- end }}
+{{- end }}
+</ul>
+{{- end }}
+
+<footer>baton {{ .run.name | html }} &middot; run {{ .run.id | html }}</footer>
+
+</body>
+</html>
+
+{{- define "quality-row" }}
+{{- $issue := .issue -}}
+{{- $it := .item -}}
+<div class="row">
+  <div class="col-score">
+    <span class="badge {{ if le $it.result.score 3.0 }}b-low{{ else if le $it.result.score 6.0 }}b-medium{{ else }}b-high{{ end }}">{{ $it.result.score }}/10</span>
+    <div class="bar"><span class="{{ if le $it.result.score 3.0 }}b-low{{ else if le $it.result.score 6.0 }}b-medium{{ else }}b-high{{ end }}" style="width: {{ $it.result.score }}0%"></span></div>
+  </div>
+  <div class="col-body">
+    <h3><a class="key" href="{{ $issue.url | html }}">{{ $issue.key | html }}</a> &mdash; {{ $issue.title | html }}</h3>
+    <div class="status">{{ $issue.status | html }}</div>
+    {{- if $issue.description }}
+    <p class="desc">{{ trunc 220 $issue.description | html }}</p>
+    {{- else }}
+    <p class="desc"><em>no description</em></p>
+    {{- end }}
+    <p class="missing"><strong>Missing:</strong> {{ if $it.result.missing }}{{ join ", " $it.result.missing | html }}{{ else }}&mdash;{{ end }}</p>
+    <p class="rec"><strong>Recommendation:</strong> {{ $it.result.recommendation | html }}</p>
+  </div>
+</div>
+{{- end }}

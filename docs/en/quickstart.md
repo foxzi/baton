@@ -308,6 +308,7 @@ rough order of complexity:
 | `triage.yaml` | classification against an `enum`, labels, a comment, paging the on-call only when critical |
 | `review.yaml` | an `agent` step working over a checkout |
 | `jira-report.yaml` | pagination and aggregation inside the pack, an HTML report rendered to a file |
+| `jira-quality.yaml` | a `foreach` asking the model to score every issue of a board against a schema, collected into an HTML report |
 
 The packs the repository ships live in `apis/` and are loaded with
 `from: ./apis/`. Each one names the interface it implements, so a scenario that

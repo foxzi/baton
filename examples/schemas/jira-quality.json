@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["score", "verdict", "missing", "recommendation"],
+  "properties": {
+    "score": {
+      "type": "integer",
+      "description": "How completely the issue describes the work, from 1 for a bare title to 10 for a description someone else could pick up without asking anything",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "verdict": {
+      "type": "string",
+      "description": "The score in one word: ready to be worked on, workable but thin, or not actionable as written",
+      "enum": ["ready", "thin", "insufficient"]
+    },
+    "missing": {
+      "type": "array",
+      "description": "The pieces a reader needs and the description does not carry, each in two or three words",
+      "items": { "type": "string", "maxLength": 60 },
+      "maxItems": 5
+    },
+    "recommendation": {
+      "type": "string",
+      "description": "The single most useful thing to add to the description, addressed to whoever wrote it",
+      "maxLength": 300
+    }
+  }
+}
