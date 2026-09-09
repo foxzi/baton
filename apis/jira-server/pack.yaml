@@ -228,7 +228,9 @@ ops:
       fields:
         pattern: '^[\w,.-]+$'
         default: 'summary,status'
-    transform: '[ .[] | { key, title: .fields.summary, status: .fields.status.name, url: (((.self | split("/rest/"))[0]) + "/browse/" + .key) } ]'
+    # description comes along only when fields asked for it, so the field
+    # stays absent instead of turning into null for the default fields.
+    transform: '[ .[] | { key, title: .fields.summary, status: .fields.status.name, url: (((.self | split("/rest/"))[0]) + "/browse/" + .key) } + (if .fields.description then { description: .fields.description } else {} end) ]'
 
   # comment and create_issue are left out on purpose.
   #
