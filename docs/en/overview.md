@@ -28,7 +28,7 @@ Baton fills the gap: a scenario is a file in the repository, a run is a single c
 
 **A structural contract between steps.** Every LLM step returns JSON matching a schema. Branching is only allowed on validated fields, ideally on an `enum`. Invalid model output is a distinct error class with its own retry strategy.
 
-**Fail-fast by default, always notify.** Any failing step fails the run unless stated otherwise. The `on_failure` section runs for any error class, including budget exhaustion.
+**Fail-fast by default, always notify.** Any failing step fails the run unless stated otherwise. The `on_failure` section runs for any error class, including budget exhaustion, but not for a tripped `assert` (exit code 2) — that is a deliberate stop, not an error.
 
 **Triggers are external.** Baton knows nothing about schedules or webhooks. Scheduling is cron, a systemd timer, or a schedule in CI. That is what separates a CLI tool from a platform.
 

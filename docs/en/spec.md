@@ -38,25 +38,33 @@ Goal: a working binary that can (a) run MR code review from CI on GitLab and Git
 ## 2. Architecture
 
 ```
-cmd/baton              CLI (cobra or stdlib flag)
+cmd/baton              CLI (stdlib flag)
 internal/scenario      YAML parsing, validation, scenario JSON Schema
 internal/expr          wrapper around expr-lang, expression context
 internal/tmpl          text/template + functions, secret type protection
 internal/values        value type system (string, number, bool, list, map, secret, file)
-internal/secrets       providers, resolution, redactor for logs
-internal/engine        engine interface; claudecode/, anthropic/, fake/
-internal/steps         run, http, llm, agent, foreach, until, assert
-internal/tools         tool catalog, schema generation, execution
-internal/packs         API pack loading and validation, interface registry, checksums
-internal/httpx         generic HTTP client: auth schemes, exchange, pagination, envelope, jq
+internal/secrets       resolution of declared secrets, redactor for logs
+internal/config        global config (section 12): apis, secrets, on_failure, notify, llm providers, pricing, MCP
+internal/provider      LLM provider interface: anthropic, openai, structured output modes
+internal/agent         agent engine interface and tool policy; claudecode/, codex/, fake/
+internal/tools         tool catalog (fs, git, fetch, commands, mcp), schema generation, execution
+internal/packs         API pack loading and validation, jq transforms, OpenAPI import, checksums
+internal/ifaces        registry of API-pack interfaces (forge/v1, tracker/v1, notify/v1)
+internal/httpx         generic HTTP client: auth schemes, exchange, pagination, envelope
+internal/jsonschema    JSON Schema validation of LLM structured output
 internal/gateway       gateway MCP server (streamable HTTP on localhost)
-internal/runstate      runs/ directory, state, cache, resume
-internal/errors        error classes
+internal/runstore      runs/ directory: run.json, event log, cost, resume
+internal/cache         content-addressed step result cache
+internal/engine        DAG traversal, step kinds (run/http/llm/agent/foreach/until/assert), retry, on_error, budgets
+internal/workspace     prepares the agent's working directory (credentials, not files)
+internal/exitcode      process exit codes
 internal/notify        notification channels
-internal/executor      DAG traversal, retry, on_error, budgets, cancellation
+internal/units         parsing of durations and byte sizes
+internal/schemadoc     renders the scenario JSON Schema as Markdown (docs/*/schema.md)
+internal/version       build identity of the binary
 ```
 
-Dependency rule: `steps` depends on `engine`, `tools`, `runstate`; `executor` depends on `steps`; nothing depends on `cmd`. Secrets are accessible only to `secrets`, `httpx`, `gateway`, `notify` and `engine` (for the provider key) — other packages receive values already wrapped as `values.Secret` without access to the content.
+Dependency rule: `engine` depends on `agent`, `provider`, `tools`, `runstore`, `cache`, `httpx` and `notify`; `tools` depends on `gateway`; `agent/claudecode` and `agent/codex` depend on `provider` (message normalization); nothing depends on `cmd`. Plaintext secrets are accessible only to `values` (the type itself), `secrets`, `httpx`, `gateway`, `notify`, `engine`, `provider` and `tools` (section 7.5, a command's environment variables) — the restriction is enforced by the `internal/values/reveal_audit_test.go` test; other packages receive values already wrapped as `values.Secret` without access to the content.
 
 ### Run sequence
 
@@ -120,11 +128,11 @@ Rules:
   retry: { on: [transient], attempts: 2, backoff: 10s }
   on_error: fail            # fail | continue | fallback
   fallback: { <step body> } # required if on_error: fallback
-  cache: true               # see 8.3
+  cache: true               # see 10.3
   dedupe_key: <tmpl>        # for steps with side effects
 ```
 
-Exactly one of the fields `run`, `http`, `llm`, `agent`, `foreach`, `until`, `assert` must be present.
+Exactly one of the fields `run`, `http`, `llm`, `agent`, `foreach`, `until`, `assert` must be present. The check runs after `switch`/`cases` (section 3.10) has already been expanded: the sugar is expanded into separate steps at scenario-parsing time, before validation, so a step with `switch` is not subject to this rule and does not violate it.
 
 ### 3.3 `run`
 
@@ -138,6 +146,7 @@ Exactly one of the fields `run`, `http`, `llm`, `agent`, `foreach`, `until`, `as
     parse: json             # text | json | lines
     allow_exit_codes: [0]
     max_output_bytes: 1m
+    readonly: false          # true - the step does not change state: allows retry (9.4) and caching by default (10.3)
 ```
 
 No `sh -c`. If the user passes `run: "a string"`, validation accepts it only if the string contains no shell metacharacters, and splits it on whitespace with a warning. Result: `stdout`, `stderr`, `exit_code`, `result` (with `parse: json`).
@@ -174,7 +183,7 @@ The raw form — for one-off requests, when there is no pack and writing one is 
     parse: json
 ```
 
-`POST/PUT/PATCH/DELETE` (or an operation without `readonly: true`) without `dedupe_key` — a validation warning and automatic retry is disallowed (section 9.4). Result: `status`, `headers`, `body`, `result`.
+`POST/PUT/PATCH/DELETE` (or an operation without `readonly: true`) without `dedupe_key` — a validation warning and automatic retry is disallowed (section 9.4). Result: `http_status` (the response code; named differently from `status` so it does not collide with the step status of section 5.1), `headers`, `body`, `result`.
 
 ### 3.5 `llm`
 
@@ -237,7 +246,7 @@ The `items` result — a list of `{ status, result, error }` in input order. Wit
 ```yaml
 - id: fix
   until:
-    condition: "iter.test.exit_code == 0"  # iter — the result of the previous iteration — is available in context
+    condition: "iter.exit_code == 0"       # iter holds the flat fields of the previous iteration's result: status, result, stdout, stderr, exit_code, items
     max_iterations: 3                      # required
     step: { agent: { ... } }
 ```
@@ -301,6 +310,8 @@ Engine: `github.com/expr-lang/expr`. Context:
 inputs.<name>
 steps.<id>.status          # success | failed | skipped
 steps.<id>.result          # for llm, agent, http(parse), run(parse)
+steps.<id>.http_status     # the http step's response code; the step's own status is status above
+steps.<id>.headers / body  # for http: the first value of each header and the response body
 steps.<id>.stdout / stderr / exit_code
 steps.<id>.items           # for foreach
 run.id, run.name, run.started_at
@@ -379,6 +390,8 @@ limits:
   max_tool_calls: 60
   max_result_bytes: 64k
 ```
+
+`git.read: true` opens the tools `git.status`, `git.diff`, `git.log`, `git.show`, `git.blame`. `git.commit: true` additionally opens `git.commit` and implies `read`: a step allowed to commit cannot be denied reading.
 
 ### 7.4 API Packs
 
@@ -624,6 +637,8 @@ type AgentResult struct {
 }
 ```
 
+The gateway's session owns the submission state: it is what observes the `submit_result` call and holds the JSON that was passed. `AgentResult.Submitted` is a fallback for engines that run without direct access to the gateway (`fake`, for one); when the two disagree, the executor trusts the session.
+
 ### 8.2 CLI engines
 
 #### `claude-code`
@@ -631,7 +646,7 @@ type AgentResult struct {
 - Runs `claude -p` in non-interactive mode, `--output-format json` to get usage and cost, `--max-turns`
 - The gateway's MCP config is passed via a temporary `--mcp-config` file
 - Built-in tools: always allow `Read`, `Glob`, `Grep`; allow `Edit`, `Write`, `MultiEdit` when `fs.write: workspace`; **always forbid** `Bash`, `WebFetch`, `WebSearch`, `Task`. Mechanism: `--allowedTools` / `--disallowedTools` plus `--permission-mode` with no interactive prompts. Exact flags must be checked against `claude --help` of the installed version; the adapter checks the version at startup and refuses to run with an unknown major version
-- Path deny-lists: a temporary settings file with a PreToolUse hook that rejects `Read`/`Edit`/`Write` for paths from `fs.deny` and outside the workspace
+- Path deny-lists: a temporary `settings.json` carrying `permissions.deny` — a `Read(<pattern>)`/`Edit(<pattern>)` pair per `fs.deny` entry; the names of forbidden tools are repeated in `--disallowedTools`. The `PreToolUse` hook is not used (section 16, question 2)
 - Skills: copying or symlinking directories from `skills` into `<workspace>/.claude/skills/` for the duration of the step, removed afterward
 - Process environment: empty, plus `PATH`, `HOME` (a temporary directory), the provider key, the declared `env`
 - Termination: on `submit_result` — SIGTERM, after 10 s SIGKILL; on timeout — the same; on context cancellation — the same
@@ -716,7 +731,7 @@ Required for tests. Reads a behavior scenario from a file: a sequence of tool ca
 | `command` | `run` with a disallowed exit code, `http` with an unexpected 4xx status | no |
 | `timeout` | step exceeded `timeout` | no |
 | `budget` | `budget_usd`, `max_turns`, `max_tool_calls`, or run budget exceeded | **never** |
-| `policy` | `publish` validation, an `unsafe`-tool call, an argument outside `pattern` | never, an audit event |
+| `policy` | an `unsafe`-tool call, an argument outside `pattern` | never, an audit event |
 | `config` | validation error, an expression evaluation error at runtime | never |
 
 ### 9.2 Semantics of `on_error`

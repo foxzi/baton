@@ -38,25 +38,33 @@
 ## 2. Архитектура
 
 ```
-cmd/baton              CLI (cobra или stdlib flag)
+cmd/baton              CLI (stdlib flag)
 internal/scenario      парсинг YAML, валидация, JSON Schema сценария
 internal/expr          обёртка над expr-lang, контекст выражений
 internal/tmpl          text/template + функции, защита типа secret
 internal/values        система типов значений (string, number, bool, list, map, secret, file)
-internal/secrets       провайдеры, резолвинг, редактор для логов
-internal/engine        интерфейс движка; claudecode/, anthropic/, fake/
-internal/steps         run, http, llm, agent, foreach, until, assert
-internal/tools         каталог инструментов, генерация схем, исполнение
-internal/packs         загрузка и валидация API-паков, реестр интерфейсов, чексуммы
-internal/httpx         универсальный HTTP-клиент: auth-схемы, exchange, пагинация, конверт, jq
+internal/secrets       резолвинг объявленных секретов, редактор для логов
+internal/config        глобальный конфиг (раздел 12): apis, secrets, on_failure, notify, llm-провайдеры, прайсинг, MCP
+internal/provider      интерфейс LLM-провайдера: anthropic, openai, режимы structured output
+internal/agent         интерфейс движка агента и политика инструментов; claudecode/, codex/, fake/
+internal/tools         каталог инструментов (fs, git, fetch, commands, mcp), генерация схем, исполнение
+internal/packs         загрузка и валидация API-паков, jq-трансформы, импорт из OpenAPI, чексуммы
+internal/ifaces        реестр интерфейсов API-паков (forge/v1, tracker/v1, notify/v1)
+internal/httpx         универсальный HTTP-клиент: auth-схемы, exchange, пагинация, конверт
+internal/jsonschema    валидация structured output LLM по JSON Schema
 internal/gateway       MCP-сервер шлюза (streamable HTTP на localhost)
-internal/runstate      каталог runs/, состояние, кеш, resume
-internal/errors        классы ошибок
+internal/runstore      каталог runs/: run.json, журнал событий, стоимость, resume
+internal/cache         кеш результатов шагов по содержимому (content-addressed)
+internal/engine        обход DAG, виды шагов (run/http/llm/agent/foreach/until/assert), retry, on_error, бюджеты
+internal/workspace     подготовка рабочего каталога агента (креды, а не файлы)
+internal/exitcode      коды выхода процесса
 internal/notify        каналы уведомлений
-internal/executor      обход DAG, retry, on_error, бюджеты, отмена
+internal/units         разбор длительностей и размеров в байтах
+internal/schemadoc     рендер JSON Schema сценария в Markdown (docs/*/schema.md)
+internal/version       версия сборки бинарника
 ```
 
-Правило зависимостей: `steps` зависит от `engine`, `tools`, `runstate`; `executor` зависит от `steps`; ничто не зависит от `cmd`. Секреты доступны только `secrets`, `httpx`, `gateway`, `notify` и `engine` (для ключа провайдера) — остальные пакеты получают значения уже как `values.Secret` без доступа к содержимому.
+Правило зависимостей: `engine` зависит от `agent`, `provider`, `tools`, `runstore`, `cache`, `httpx` и `notify`; `tools` зависит от `gateway`; `agent/claudecode` и `agent/codex` зависят от `provider` (нормализация сообщений); ничто не зависит от `cmd`. Секреты в открытом виде доступны только `values` (сам тип), `secrets`, `httpx`, `gateway`, `notify`, `engine`, `provider` и `tools` (раздел 7.5, переменные окружения команд) — ограничение проверяется тестом `internal/values/reveal_audit_test.go`; остальные пакеты получают значения уже как `values.Secret` без доступа к содержимому.
 
 ### Последовательность прогона
 
@@ -120,11 +128,11 @@ on_failure: [ ... ]
   retry: { on: [transient], attempts: 2, backoff: 10s }
   on_error: fail            # fail | continue | fallback
   fallback: { <тело шага> } # обязательно при on_error: fallback
-  cache: true               # см. 8.3
+  cache: true               # см. 10.3
   dedupe_key: <tmpl>        # для шагов с побочными эффектами
 ```
 
-Ровно одно из полей `run`, `http`, `llm`, `agent`, `foreach`, `until`, `assert` должно присутствовать.
+Ровно одно из полей `run`, `http`, `llm`, `agent`, `foreach`, `until`, `assert` должно присутствовать. Проверка выполняется уже после раскрытия `switch`/`cases` (раздел 3.10): сахар раскрывается в отдельные шаги на этапе разбора сценария, до валидации, поэтому шаг со `switch` этому правилу не подчиняется и его не нарушает.
 
 ### 3.3 `run`
 
@@ -138,6 +146,7 @@ on_failure: [ ... ]
     parse: json             # text | json | lines
     allow_exit_codes: [0]
     max_output_bytes: 1m
+    readonly: false          # true - шаг не меняет состояние: разрешает retry (9.4) и кеш по умолчанию (10.3)
 ```
 
 Никакого `sh -c`. Если пользователь передал `run: "строка"`, валидация принимает это только если строка не содержит метасимволов shell, и разбивает по пробелам с предупреждением. Результат: `stdout`, `stderr`, `exit_code`, `result` (при `parse: json`).
@@ -174,7 +183,7 @@ on_failure: [ ... ]
     parse: json
 ```
 
-`POST/PUT/PATCH/DELETE` (или операция без `readonly: true`) без `dedupe_key` — предупреждение при валидации и запрет автоматического retry (раздел 9.4). Результат: `status`, `headers`, `body`, `result`.
+`POST/PUT/PATCH/DELETE` (или операция без `readonly: true`) без `dedupe_key` — предупреждение при валидации и запрет автоматического retry (раздел 9.4). Результат: `http_status` (код ответа; поле называется не `status`, чтобы не совпадать со статусом шага из раздела 5.1), `headers`, `body`, `result`.
 
 ### 3.5 `llm`
 
@@ -237,7 +246,7 @@ on_failure: [ ... ]
 ```yaml
 - id: fix
   until:
-    condition: "iter.test.exit_code == 0"  # в контексте доступен iter — результат прошлой итерации
+    condition: "iter.exit_code == 0"       # iter содержит плоские поля результата прошлой итерации: status, result, stdout, stderr, exit_code, items
     max_iterations: 3                      # обязательно
     step: { agent: { ... } }
 ```
@@ -301,6 +310,8 @@ on_failure: [ ... ]
 inputs.<name>
 steps.<id>.status          # success | failed | skipped
 steps.<id>.result          # для llm, agent, http(parse), run(parse)
+steps.<id>.http_status     # код ответа http-шага; статус самого шага — это status выше
+steps.<id>.headers / body  # для http: первое значение каждого заголовка и тело ответа
 steps.<id>.stdout / stderr / exit_code
 steps.<id>.items           # для foreach
 run.id, run.name, run.started_at
@@ -379,6 +390,8 @@ limits:
   max_tool_calls: 60
   max_result_bytes: 64k
 ```
+
+`git.read: true` открывает инструменты `git.status`, `git.diff`, `git.log`, `git.show`, `git.blame`. `git.commit: true` дополнительно открывает `git.commit` и включает `read` неявно: шаг, которому разрешено коммитить, не может быть лишён чтения.
 
 ### 7.4 API-паки
 
@@ -624,6 +637,8 @@ type AgentResult struct {
 }
 ```
 
+Состоянием сдачи результата владеет сессия шлюза: именно она видит вызов `submit_result` и хранит переданный JSON. `AgentResult.Submitted` — запасной источник для движков, которые работают без прямого доступа к шлюзу (например, `fake`); при расхождении исполнитель верит сессии.
+
 ### 8.2 CLI-движки
 
 #### `claude-code`
@@ -631,7 +646,7 @@ type AgentResult struct {
 - Запуск `claude -p` в неинтерактивном режиме, `--output-format json` для получения usage и стоимости, `--max-turns`
 - MCP-конфиг шлюза передаётся через временный файл `--mcp-config`
 - Встроенные инструменты: разрешать `Read`, `Glob`, `Grep` всегда; `Edit`, `Write`, `MultiEdit` — при `fs.write: workspace`; **запрещать** `Bash`, `WebFetch`, `WebSearch`, `Task` всегда. Механизм: `--allowedTools` / `--disallowedTools` плюс `--permission-mode` без интерактивных запросов. Точные флаги сверять с `claude --help` установленной версии; адаптер проверяет версию при старте и отказывается работать с неизвестной мажорной
-- Deny-списки путей: временный файл настроек с PreToolUse-хуком, который отклоняет `Read`/`Edit`/`Write` по путям из `fs.deny` и вне workspace
+- Deny-списки путей: временный `settings.json` с `permissions.deny` — пара правил `Read(<pattern>)`/`Edit(<pattern>)` на каждый элемент `fs.deny`; имена запрещённых инструментов дублируются в `--disallowedTools`. Хук `PreToolUse` не используется (раздел 16, вопрос 2)
 - Навыки: копирование или симлинк каталогов из `skills` в `<workspace>/.claude/skills/` на время шага, с удалением после
 - Окружение процесса: пустое, плюс `PATH`, `HOME` (временный каталог), ключ провайдера, объявленный `env`
 - Завершение: по `submit_result` — SIGTERM, через 10 с SIGKILL; по таймауту — то же; по отмене контекста — то же
@@ -716,7 +731,7 @@ providers:
 | `command` | `run` с недопустимым exit code, `http` с неожиданным статусом 4xx | нет |
 | `timeout` | шаг превысил `timeout` | нет |
 | `budget` | превышен `budget_usd`, `max_turns`, `max_tool_calls`, бюджет прогона | **никогда** |
-| `policy` | `publish`-валидация, вызов `unsafe`-инструмента, аргумент вне `pattern` | никогда, событие в аудит |
+| `policy` | вызов `unsafe`-инструмента, аргумент вне `pattern` | никогда, событие в аудит |
 | `config` | ошибка валидации, ошибка вычисления выражения в рантайме | никогда |
 
 ### 9.2 Семантика `on_error`
