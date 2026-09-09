@@ -52,6 +52,9 @@ func writeConfig(home string, req agent.Request) error {
 	if req.Gateway.Token != "" {
 		fmt.Fprintf(&b, "bearer_token_env_var = %s\n", strconv.Quote(bearerTokenVar))
 	}
+	// Without this the CLI asks a human before every gateway tool call and,
+	// with approvals switched off, fails the call instead of asking.
+	b.WriteString("default_tools_approval_mode = \"approve\"\n")
 
 	path := filepath.Join(home, "config.toml")
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {

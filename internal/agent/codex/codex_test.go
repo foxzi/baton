@@ -393,6 +393,7 @@ func TestConfigTOMLShape(t *testing.T) {
 		`[mcp_servers.baton]`,
 		`url = "http://127.0.0.1:8731/steps/fix/mcp"`,
 		`bearer_token_env_var = "BATON_GATEWAY_TOKEN"`,
+		`default_tools_approval_mode = "approve"`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("config.toml = %s, want %q", text, want)
