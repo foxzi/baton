@@ -140,6 +140,9 @@ func (e *Engine) prepareAgentPolicy(step *scenario.Step) (*agentCall, *Error) {
 	if call.engine == "" {
 		return nil, errorf(ClassConfig, "step %s: agent.engine is not set", step.ID)
 	}
+	if body.InheritAuth && call.engine != "codex" {
+		return nil, errorf(ClassConfig, "step %s: agent.inherit_auth is only supported by the codex engine", step.ID)
+	}
 	if call.budget == 0 {
 		call.budget = e.opts.Scenario.Defaults.BudgetUSD
 	}
@@ -216,6 +219,7 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 		MaxTurns:       step.Agent.MaxTurns,
 		BudgetUSD:      call.budget,
 		Env:            call.env,
+		InheritAuth:    step.Agent.InheritAuth,
 		TranscriptPath: filepath.Join(dir, "transcript.jsonl"),
 	})
 	// An agent that reached for a tool the step does not have, or for a

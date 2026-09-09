@@ -103,3 +103,40 @@ func environ(home string, gateway agent.GatewayInfo, extra map[string]string) []
 	}
 	return env
 }
+
+// userAuthFile is the credential file the CLI writes when a user logs in.
+const userAuthFile = "auth.json"
+
+// inheritAuth copies the user's stored credentials into the run's own
+// CODEX_HOME, which is what makes a subscription login work: the CLI reads
+// them from CODEX_HOME, and this run's CODEX_HOME is a directory of its own.
+//
+// It is a copy, not a link: the CLI rewrites the file when it refreshes the
+// access token, and a run must not be able to damage the user's login. The
+// refresh token stays valid, so the next run starts from the user's file
+// again.
+func inheritAuth(home string) error {
+	source := filepath.Join(userCodexHome(), userAuthFile)
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return fmt.Errorf("codex: inherit_auth: read %s: %w", source, err)
+	}
+	if err := os.WriteFile(filepath.Join(home, userAuthFile), data, 0o600); err != nil {
+		return fmt.Errorf("codex: inherit_auth: write the credentials: %w", err)
+	}
+	return nil
+}
+
+// userCodexHome is where the CLI keeps the user's own state: CODEX_HOME when
+// the runner has one, ~/.codex otherwise. This reads the runner's
+// environment, not the agent process's, which gets a CODEX_HOME of its own.
+func userCodexHome() string {
+	if dir := os.Getenv("CODEX_HOME"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".codex"
+	}
+	return filepath.Join(home, ".codex")
+}

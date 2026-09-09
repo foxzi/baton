@@ -324,6 +324,15 @@ steps:
 			wantErr: "script applies to engine: fake only",
 		},
 		{
+			name: "inherit_auth on another engine",
+			body: `      engine: claude-code
+      inherit_auth: true
+      prompt: p
+      result: r.json
+`,
+			wantErr: "agent.inherit_auth: applies to engine: codex only",
+		},
+		{
 			name: "prompt missing",
 			body: `      engine: claude-code
       result: r.json

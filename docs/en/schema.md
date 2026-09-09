@@ -187,6 +187,7 @@ Hands a prompt to an agent engine that works via tool calls until it submits a r
 | `budget_usd` | number | no | Minimum 0. |
 | `allow_unsafe` | boolean | no |  |
 | `env` | map of name to [template](#template) or object | no |  |
+| `inherit_auth` | boolean | no | Reuse the credentials the CLI stored in the user's home directory instead of an API key from env, so a subscription login works (spec section 8.2); supported by the codex engine only. |
 | `result` | string | yes |  |
 | `script` | string | no | The fake engine's behaviour file (spec section 8.4); rejected for any engine other than fake. |
 

@@ -14,6 +14,9 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
   `codex exec --json`, reaches the gateway as an MCP server in a `config.toml`
   of its own, and is held inside the step's policy by the CLI's sandbox, since
   its shell tool cannot be turned off. `skills` are not supported by it.
+- `agent.inherit_auth` for the `codex` engine: the user's stored CLI login is
+  copied into the run's own `CODEX_HOME`, so a ChatGPT subscription works in
+  place of an API key.
 - `create_issue` in the `jira` pack, so a scenario can open an issue through
   `tracker/v1` and not only read.
 - A pack parameter can address a nested field of the request body by naming

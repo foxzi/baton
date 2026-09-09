@@ -560,6 +560,10 @@
             ]
           }
         },
+        "inherit_auth": {
+          "description": "Reuse the credentials the CLI stored in the user's home directory instead of an API key from env, so a subscription login works (spec section 8.2); supported by the codex engine only.",
+          "type": "boolean"
+        },
         "result": {
           "type": "string"
         },

@@ -559,6 +559,11 @@ func validateAgent(scn *Scenario, step *Step, path string, res *Result) {
 		res.errorf(path+".script", step.Line, "script applies to engine: fake only")
 	}
 
+	// Only codex can reuse a login stored outside the run (spec section 8.2).
+	if agent.InheritAuth && agent.Engine != "codex" {
+		res.errorf(path+".inherit_auth", step.Line, "applies to engine: codex only")
+	}
+
 	if strings.TrimSpace(agent.Prompt) == "" {
 		res.errorf(path+".prompt", step.Line, "must not be empty")
 	}

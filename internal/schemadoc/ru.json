@@ -13,6 +13,7 @@
   "Name of a channel of the global configuration; the text comes from message (spec section 9.3).": "Имя канала из глобальной конфигурации; текст берётся из message (ТЗ, раздел 9.3).",
   "Calls a language model provider (spec section 3.5).": "Вызывает провайдера языковой модели (ТЗ, раздел 3.5).",
   "Hands a prompt to an agent engine that works via tool calls until it submits a result (spec section 3.6).": "Передаёт промпт агентскому движку, который работает через вызовы инструментов, пока не сдаст результат (ТЗ, раздел 3.6).",
+  "Reuse the credentials the CLI stored in the user's home directory instead of an API key from env, so a subscription login works (spec section 8.2); supported by the codex engine only.": "Использовать учётные данные, сохранённые CLI в домашнем каталоге пользователя, вместо API-ключа из env, чтобы работал вход по подписке (ТЗ, раздел 8.2); поддерживает только движок codex.",
   "The fake engine's behaviour file (spec section 8.4); rejected for any engine other than fake.": "Файл поведения движка fake (ТЗ, раздел 8.4); для любого другого движка отвергается.",
   "Overrides single fields of the step's profile (spec section 7.3).": "Переопределяет отдельные поля профиля шага (ТЗ, раздел 7.3).",
   "Caps how much an agent step may ask of the gateway (spec section 7.3).": "Ограничивает, сколько агентский шаг может запросить у шлюза (ТЗ, раздел 7.3).",

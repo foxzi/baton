@@ -37,6 +37,11 @@ type AgentStep struct {
 	// the minimal allow list (spec section 8.2).
 	Env map[string]EnvValue `yaml:"env"`
 
+	// InheritAuth reuses the credentials the CLI keeps in the user's home
+	// directory instead of an API key from env; only codex supports it
+	// (spec section 8.2).
+	InheritAuth bool `yaml:"inherit_auth"`
+
 	// Result is the path to the JSON Schema submit_result validates against.
 	// It is required: a step ends successfully only through submit_result.
 	Result string `yaml:"result"`

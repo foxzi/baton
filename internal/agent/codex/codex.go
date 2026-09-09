@@ -138,6 +138,11 @@ func (e *Engine) Run(ctx context.Context, req agent.Request) (agent.Result, erro
 	if err := writeConfig(home, req); err != nil {
 		return agent.Result{}, err
 	}
+	if req.InheritAuth {
+		if err := inheritAuth(home); err != nil {
+			return agent.Result{}, err
+		}
+	}
 
 	transcript, err := createTranscript(req.TranscriptPath)
 	if err != nil {

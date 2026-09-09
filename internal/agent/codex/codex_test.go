@@ -592,3 +592,75 @@ func TestRunHonoursCancellation(t *testing.T) {
 		t.Errorf("the run took %v, want a prompt stop", elapsed)
 	}
 }
+
+func TestInheritAuthCopiesTheUserCredentials(t *testing.T) {
+	source := t.TempDir()
+	credentials := []byte(`{"auth_mode":"chatgpt","tokens":{"refresh_token":"r"}}`)
+	if err := os.WriteFile(filepath.Join(source, "auth.json"), credentials, 0o600); err != nil {
+		t.Fatalf("write the user's credentials: %v", err)
+	}
+	t.Setenv("CODEX_HOME", source)
+
+	home := t.TempDir()
+	if err := inheritAuth(home); err != nil {
+		t.Fatalf("inheritAuth: %v", err)
+	}
+
+	copied := filepath.Join(home, "auth.json")
+	got, err := os.ReadFile(copied)
+	if err != nil {
+		t.Fatalf("read the copy: %v", err)
+	}
+	if !bytes.Equal(got, credentials) {
+		t.Errorf("auth.json = %s, want the user's credentials", got)
+	}
+
+	// The credentials are as private in the copy as in the original.
+	info, err := os.Stat(copied)
+	if err != nil {
+		t.Fatalf("stat the copy: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("mode = %v, want 0600", perm)
+	}
+
+	// The user's own file is left as it was: a run refreshing the token
+	// must not be able to damage the login.
+	if _, err := os.ReadFile(filepath.Join(source, "auth.json")); err != nil {
+		t.Errorf("the user's credentials are gone: %v", err)
+	}
+}
+
+func TestInheritAuthFallsBackToTheHomeDirectory(t *testing.T) {
+	user := t.TempDir()
+	if err := os.Mkdir(filepath.Join(user, ".codex"), 0o700); err != nil {
+		t.Fatalf("create ~/.codex: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(user, ".codex", "auth.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write the user's credentials: %v", err)
+	}
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("HOME", user)
+
+	home := t.TempDir()
+	if err := inheritAuth(home); err != nil {
+		t.Fatalf("inheritAuth: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "auth.json")); err != nil {
+		t.Errorf("the credentials were not copied: %v", err)
+	}
+}
+
+func TestRunReportsMissingCredentials(t *testing.T) {
+	// A step asking for the user's login when there is none says so,
+	// instead of running the CLI into an unauthenticated failure.
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	engine, req, _ := fixture(t, stub{stdout: oneTurn})
+	req.InheritAuth = true
+
+	_, err := engine.Run(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "inherit_auth") {
+		t.Fatalf("error = %v, want it to mention inherit_auth", err)
+	}
+}

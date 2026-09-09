@@ -51,6 +51,13 @@ type Request struct {
 	// so this map must never be written to disk.
 	Env map[string]string
 
+	// InheritAuth lets the engine reuse the credentials the CLI stored in
+	// the user's home directory, so a subscription login works where an API
+	// key would otherwise be required. Off by default: an engine's process
+	// gets a home directory of its own precisely so that nothing of the
+	// user's reaches it.
+	InheritAuth bool
+
 	// TranscriptPath is where the engine writes the agent's transcript.
 	TranscriptPath string
 }

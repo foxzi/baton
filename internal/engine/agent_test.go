@@ -331,6 +331,17 @@ func TestAgent_ConfigErrors(t *testing.T) {
 			want: "unknown agent engine",
 		},
 		{
+			name: "inherit_auth on another engine",
+			step: `
+      engine: fake
+      script: script.yaml
+      prompt: work
+      inherit_auth: true
+      result: result.json
+`,
+			want: "inherit_auth",
+		},
+		{
 			name: "missing schema",
 			step: `
       engine: fake
