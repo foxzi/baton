@@ -1,0 +1,11 @@
+# Allowlist: only the Go build inputs reach the build context. Everything
+# else (repo docs, packs, local config, run state, git metadata) is denied
+# by default and re-added explicitly below.
+**
+
+!go.mod
+!go.sum
+!cmd
+!cmd/**
+!internal
+!internal/**

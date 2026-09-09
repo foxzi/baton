@@ -1,0 +1,30 @@
+services:
+  baton:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        DATE: ${DATE:-unknown}
+    image: baton:local
+    # Matches the container user to the host user that owns the bind-mounted
+    # workspace, so files baton writes stay owned by you, not root or the
+    # image's baked-in uid 1000. Defaults to 1000:1000 (the image's own
+    # baton user) when unset.
+    user: "${BATON_UID:-1000}:${BATON_GID:-1000}"
+    working_dir: /workspace
+    volumes:
+      - ${BATON_WORKSPACE:-.}:/workspace
+    # HOME as a tmpfs keeps config/cache lookups (os.UserConfigDir,
+    # os.UserCacheDir) writable for whatever uid `user:` ends up being,
+    # without persisting anything or requiring root/--privileged. Nothing
+    # baton needs to keep between runs lives under HOME.
+    tmpfs:
+      - /tmp/baton-home:mode=1777,uid=0,gid=0
+    environment:
+      - HOME=/tmp/baton-home
+    # No env_file / .env forwarding here on purpose: secrets and provider
+    # keys are opt-in per invocation, e.g.
+    #   docker compose run --rm -e OPENROUTER_API_KEY baton run ...
+    # See docs/en/docker.md for the BATON_CONFIG read-only mount example.
