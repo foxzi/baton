@@ -60,7 +60,7 @@ Type: string or integer
 
 ### template
 
-A string that may contain {{ }} template actions.
+A string that may contain {{ }} template actions. Templates are text/template and escape nothing: pipe a value through html wherever the output is HTML. A missing key renders as an empty value instead of an error, so guard the fields you rely on with default or an assert step. A path passed to render is resolved against the directory of the scenario file, unlike the paths of a file step, which are resolved against the workspace.
 
 Type: string
 
