@@ -154,7 +154,7 @@ func execute(req runRequest) int {
 	result := scenario.Validate(scn)
 	if !result.OK() {
 		for _, problem := range result.Errors {
-			fmt.Fprintf(os.Stderr, "error: %s\n", problem)
+			fmt.Fprintf(os.Stderr, "error: %s\n", problem.Format(path))
 		}
 		fmt.Fprintf(os.Stderr, "%s: %s\n", path, plural(len(result.Errors), "error"))
 		return exitcode.Config
@@ -180,7 +180,7 @@ func execute(req runRequest) int {
 	// so it joins the scenario warnings once the configuration is loaded.
 	result.Warnings = append(result.Warnings, pricingWarnings(scn, cfg)...)
 	for _, warning := range result.Warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+		fmt.Fprintf(os.Stderr, "warning: %s\n", warning.Format(path))
 	}
 
 	baseDir := filepath.Dir(path)

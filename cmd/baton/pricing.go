@@ -27,8 +27,9 @@ func pricingWarnings(scn *scenario.Scenario, cfg *config.Config) []scenario.Diag
 			return
 		}
 		warnings = append(warnings, scenario.Diagnostic{
-			Path: "llm." + field,
-			Line: step.Line,
+			Path:   "llm." + field,
+			Line:   step.Line,
+			StepID: step.ID,
 			Message: fmt.Sprintf("model %s is not in pricing: cost_usd stays null and the dollar budget is not checked for it",
 				ref),
 		})

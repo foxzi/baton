@@ -52,10 +52,10 @@ func validateCmd(args []string) int {
 		result.Warnings = append(result.Warnings, pricingWarnings(scn, cfg)...)
 	}
 	for _, warning := range result.Warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+		fmt.Fprintf(os.Stderr, "warning: %s\n", warning.Format(path))
 	}
 	for _, problem := range result.Errors {
-		fmt.Fprintf(os.Stderr, "error: %s\n", problem)
+		fmt.Fprintf(os.Stderr, "error: %s\n", problem.Format(path))
 	}
 
 	if !result.OK() {

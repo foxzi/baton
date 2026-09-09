@@ -31,10 +31,62 @@ func Parse(data []byte, path string) (*Scenario, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	scn.Path = path
+	// A second, lenient decode into a plain node tree builds the line index
+	// Validate uses for fields that carry no Line of their own (inputs,
+	// secrets, version, name, budget). It is not expected to fail given the
+	// strict decode above already succeeded; if it somehow does, diagnostics
+	// on those fields just fall back to line 0 rather than the load failing.
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err == nil {
+		scn.lines = buildLineIndex(&root)
+	}
 	if err := expandSwitches(&scn); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return &scn, nil
+}
+
+// buildLineIndex walks a parsed document and records the source line of
+// every mapping key and sequence element, keyed by the same dotted path
+// convention Validate uses (steps[2].run.argv). It only sees the document as
+// written, so a path steps[i] created by switch expansion after Parse is not
+// in it; validateSteps never needs it for that, since every Step already
+// carries its own Line from UnmarshalYAML.
+func buildLineIndex(root *yaml.Node) map[string]int {
+	idx := map[string]int{}
+	indexNode(root, "", idx)
+	if len(idx) == 0 {
+		return nil
+	}
+	return idx
+}
+
+func indexNode(node *yaml.Node, prefix string, idx map[string]int) {
+	if node == nil {
+		return
+	}
+	switch node.Kind {
+	case yaml.DocumentNode:
+		for _, child := range node.Content {
+			indexNode(child, prefix, idx)
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key, val := node.Content[i], node.Content[i+1]
+			path := key.Value
+			if prefix != "" {
+				path = prefix + "." + key.Value
+			}
+			idx[path] = key.Line
+			indexNode(val, path, idx)
+		}
+	case yaml.SequenceNode:
+		for i, item := range node.Content {
+			path := fmt.Sprintf("%s[%d]", prefix, i)
+			idx[path] = item.Line
+			indexNode(item, path, idx)
+		}
+	}
 }
 
 // stepKeys are the field names accepted on a step. Step decodes itself to

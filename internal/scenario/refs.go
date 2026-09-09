@@ -20,7 +20,11 @@ var guardPattern = regexp.MustCompile(`\bcoalesce\b|\bdefault\b|\?\?`)
 // stepScope is the step whose expressions are being validated: references in
 // it may only name the steps declared before it.
 type stepScope struct {
-	path    string
+	path string
+	// id is the step's own id, used to attribute diagnostics raised while
+	// validating its body; empty for a step with no valid id yet (that is
+	// itself reported separately by validateStepID).
+	id      string
 	earlier map[string]bool
 
 	// conditional says the step itself runs under a when:, in which case it
@@ -74,9 +78,13 @@ func (r *Result) collectFrom(path, source string, line int) {
 
 // resolveRefs reports the references that cannot hold: to a step that is not
 // in scope (section 4, check 5) and to the result of a step that may be
-// skipped, from a step that cannot be skipped (check 6).
+// skipped, from a step that cannot be skipped (check 6). It runs after every
+// step has been validated and res.scope reset, so each diagnostic borrows
+// the scope of the step that held the reference just long enough to be
+// attributed to its id.
 func resolveRefs(res *Result, conditional map[string]bool) {
 	for _, ref := range res.refs {
+		res.scope = ref.scope
 		switch {
 		case !ref.scope.earlier[ref.id]:
 			if ref.scope.ordered {
@@ -97,6 +105,7 @@ func resolveRefs(res *Result, conditional map[string]bool) {
 				ref.field, ref.id)
 		}
 	}
+	res.scope = nil
 }
 
 // conditionalSteps collects the ids of the steps that run under a when: and

@@ -41,6 +41,43 @@ type Scenario struct {
 	// switches are the switch steps Parse expanded away, kept so that the
 	// validator can still report on them (section 3.10).
 	switches []switchInfo
+
+	// lines maps a dotted field path (the same convention Diagnostic.Path
+	// uses, e.g. inputs.foo.pattern) to the source line Parse found it on.
+	// It only covers fields that have no Line field of their own (Step, API
+	// and Command already carry one from their UnmarshalYAML). It is nil on
+	// a Scenario built in code rather than by Parse, in which case lineOf
+	// returns 0 for everything instead of guessing.
+	lines map[string]int
+}
+
+// lineOf returns the source line of path, or of its nearest ancestor when
+// path itself was never a YAML node (for example a field the document left
+// unset). It returns 0, rather than fabricating a line, when Parse built no
+// line index or when no ancestor of path appears in the source at all.
+func (s *Scenario) lineOf(path string) int {
+	if s == nil {
+		return 0
+	}
+	for p := path; p != ""; p = parentPath(p) {
+		if line, ok := s.lines[p]; ok {
+			return line
+		}
+	}
+	return 0
+}
+
+// parentPath strips the last path segment: a trailing .field or a trailing
+// [n] index, whichever comes last in path.
+func parentPath(path string) string {
+	cut := strings.LastIndexByte(path, '.')
+	if bracket := strings.LastIndexByte(path, '['); bracket > cut {
+		cut = bracket
+	}
+	if cut < 0 {
+		return ""
+	}
+	return path[:cut]
 }
 
 // Input is a declared scenario input (spec section 3.1).

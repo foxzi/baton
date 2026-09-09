@@ -15,17 +15,50 @@ import (
 type Diagnostic struct {
 	// Path locates the finding in the scenario, such as steps[2].run.argv.
 	Path string
-	// Line is the scenario line the finding belongs to, or 0 when unknown.
-	Line    int
+	// Line is the scenario line the finding belongs to, or 0 when Parse
+	// could not attribute it to one (a field the YAML never set, or a
+	// Scenario built in code rather than parsed). It is never fabricated.
+	Line int
+	// StepID is the id of the step the finding belongs to, read from the
+	// step's own id field rather than its steps[N] index so it still names
+	// the right step after reordering. Empty when the finding is not scoped
+	// to one step (inputs, secrets, apis, ...) or the step has no valid id.
+	StepID  string
 	Message string
 }
 
-// String renders the finding as one log line.
+// suffix renders the step-id annotation, when known, as " (step build)". It
+// is appended after the message rather than spliced between Path and
+// Message so that "path: message" stays one contiguous substring for
+// callers (and tests) that only care about those two.
+func (d Diagnostic) suffix() string {
+	if d.StepID == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (step %s)", d.StepID)
+}
+
+// String renders the finding as one log line, without a scenario path. It
+// predates Format and stays for callers that print a single scenario's
+// diagnostics without repeating its path on every line (doctor, apis, tools).
 func (d Diagnostic) String() string {
 	if d.Line > 0 {
-		return fmt.Sprintf("line %d: %s: %s", d.Line, d.Path, d.Message)
+		return fmt.Sprintf("line %d: %s: %s%s", d.Line, d.Path, d.Message, d.suffix())
 	}
-	return fmt.Sprintf("%s: %s", d.Path, d.Message)
+	return fmt.Sprintf("%s: %s%s", d.Path, d.Message, d.suffix())
+}
+
+// Format renders the finding as scenarioPath:line: path: message, the shape
+// editors and CI log scrapers recognise as a source location. scenarioPath
+// is normally the path Load or Parse read the scenario from; it is passed
+// in rather than stored on Diagnostic so one Result can be formatted
+// against whichever path the caller used. The line is omitted, not
+// invented, when Line is 0.
+func (d Diagnostic) Format(scenarioPath string) string {
+	if d.Line > 0 {
+		return fmt.Sprintf("%s:%d: %s: %s%s", scenarioPath, d.Line, d.Path, d.Message, d.suffix())
+	}
+	return fmt.Sprintf("%s: %s: %s%s", scenarioPath, d.Path, d.Message, d.suffix())
 }
 
 // Result collects validation findings. Validation reports every problem it
@@ -45,11 +78,21 @@ type Result struct {
 func (r *Result) OK() bool { return len(r.Errors) == 0 }
 
 func (r *Result) errorf(path string, line int, format string, args ...any) {
-	r.Errors = append(r.Errors, Diagnostic{Path: path, Line: line, Message: fmt.Sprintf(format, args...)})
+	r.Errors = append(r.Errors, Diagnostic{Path: path, Line: line, StepID: r.stepID(), Message: fmt.Sprintf(format, args...)})
 }
 
 func (r *Result) warnf(path string, line int, format string, args ...any) {
-	r.Warnings = append(r.Warnings, Diagnostic{Path: path, Line: line, Message: fmt.Sprintf(format, args...)})
+	r.Warnings = append(r.Warnings, Diagnostic{Path: path, Line: line, StepID: r.stepID(), Message: fmt.Sprintf(format, args...)})
+}
+
+// stepID reports the id of the step currently in scope, so that diagnostics
+// raised while validating its body (including a nested foreach/until body,
+// which has no id of its own) are attributed to it.
+func (r *Result) stepID() string {
+	if r.scope == nil {
+		return ""
+	}
+	return r.scope.id
 }
 
 // idPattern is the required shape of a step id (spec section 3.2).
@@ -59,6 +102,12 @@ var idPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 var inputTypes = map[InputType]bool{
 	TypeString: true, TypeInt: true, TypeNumber: true,
 	TypeBool: true, TypeList: true, TypeMap: true,
+}
+
+// inputTypeNames lists inputTypes in a stable order for diagnostic hints.
+var inputTypeNames = []string{
+	string(TypeString), string(TypeInt), string(TypeNumber),
+	string(TypeBool), string(TypeList), string(TypeMap),
 }
 
 // errorClasses are the retryable-error class names (spec section 9.1).
@@ -81,13 +130,13 @@ func Validate(scn *Scenario) Result {
 	var res Result
 
 	if scn.Version != 1 {
-		res.errorf("version", 0, "must be 1, got %d", scn.Version)
+		res.errorf("version", scn.lineOf("version"), "must be 1, got %d", scn.Version)
 	}
 	if strings.TrimSpace(scn.Name) == "" {
-		res.errorf("name", 0, "must not be empty")
+		res.errorf("name", scn.lineOf("name"), "must not be empty")
 	}
 	if scn.Budget.Tokens < 0 {
-		res.errorf("budget.tokens", 0, "must not be negative")
+		res.errorf("budget.tokens", scn.lineOf("budget.tokens"), "must not be negative")
 	}
 
 	validateInputs(scn, &res)
@@ -96,7 +145,7 @@ func Validate(scn *Scenario) Result {
 	validateCommands(scn, &res)
 
 	if len(scn.Steps) == 0 {
-		res.errorf("steps", 0, "must declare at least one step")
+		res.errorf("steps", scn.lineOf("steps"), "must declare at least one step")
 	}
 
 	declared := map[string]bool{}
@@ -115,22 +164,24 @@ func validateInputs(scn *Scenario, res *Result) {
 	for _, name := range sortedKeys(scn.Inputs) {
 		input := scn.Inputs[name]
 		path := "inputs." + name
+		line := scn.lineOf(path)
 		switch {
 		case input.Type == "":
-			res.errorf(path, 0, "must declare a type")
+			res.errorf(path, line, "must declare a type, one of %s", strings.Join(inputTypeNames, ", "))
 		case !inputTypes[input.Type]:
-			res.errorf(path, 0, "unknown type %q", input.Type)
+			res.errorf(path, line, "unknown type %q, want one of %s", input.Type, strings.Join(inputTypeNames, ", "))
 		}
 		if input.Pattern != "" {
+			patternLine := scn.lineOf(path + ".pattern")
 			if input.Type != TypeString {
-				res.errorf(path+".pattern", 0, "pattern applies to string inputs only")
+				res.errorf(path+".pattern", patternLine, "pattern applies to string inputs only")
 			}
 			if _, err := regexp.Compile(input.Pattern); err != nil {
-				res.errorf(path+".pattern", 0, "invalid regular expression: %v", err)
+				res.errorf(path+".pattern", patternLine, "invalid regular expression: %v", err)
 			}
 		}
 		if input.Required && input.Default != nil {
-			res.warnf(path, 0, "default is unreachable on a required input")
+			res.warnf(path, line, "default is unreachable on a required input")
 		}
 	}
 }
@@ -139,25 +190,26 @@ func validateSecrets(scn *Scenario, res *Result) {
 	for _, name := range sortedKeys(scn.Secrets) {
 		secret := scn.Secrets[name]
 		path := "secrets." + name
+		line := scn.lineOf(path)
 		switch secret.From {
 		case SecretFromEnv:
 			if secret.Key == "" {
-				res.errorf(path, 0, "from: env needs key")
+				res.errorf(path, line, "from: env needs key")
 			}
 			if secret.Path != "" {
-				res.errorf(path, 0, "path applies to from: file only")
+				res.errorf(path, line, "path applies to from: file only")
 			}
 		case SecretFromFile:
 			if secret.Path == "" {
-				res.errorf(path, 0, "from: file needs path")
+				res.errorf(path, line, "from: file needs path")
 			}
 			if secret.Key != "" {
-				res.errorf(path, 0, "key applies to from: env only")
+				res.errorf(path, line, "key applies to from: env only")
 			}
 		case "":
-			res.errorf(path, 0, "must declare from: env or from: file")
+			res.errorf(path, line, "must declare from: env or from: file")
 		default:
-			res.errorf(path, 0, "unknown source %q", secret.From)
+			res.errorf(path, line, "unknown source %q, want env or file", secret.From)
 		}
 	}
 }
@@ -170,6 +222,7 @@ func validateSteps(scn *Scenario, steps []Step, prefix string, declared map[stri
 		path := fmt.Sprintf("%s[%d]", prefix, i)
 		res.enterStep(&stepScope{
 			path:        path,
+			id:          step.ID,
 			earlier:     cloneIDs(declared),
 			conditional: strings.TrimSpace(step.When) != "",
 			ordered:     prefix == "steps",

@@ -352,7 +352,7 @@ func apisCallCmd(args []string) int {
 	}
 	if result := scenario.Validate(scn); !result.OK() {
 		for _, problem := range result.Errors {
-			fmt.Fprintf(os.Stderr, "error: %s\n", problem)
+			fmt.Fprintf(os.Stderr, "error: %s\n", problem.Format(scenarioPath))
 		}
 		fmt.Fprintf(os.Stderr, "%s: %s\n", scenarioPath, plural(len(result.Errors), "error"))
 		return exitcode.Config

@@ -502,6 +502,20 @@ In CI a run is one command and its exit code:
 Baton has no scheduler and no webhooks by design: cron, a systemd timer or your
 CI's schedule is the trigger.
 
+### Reading validation errors
+
+`baton validate scenario.yaml` and validation before `baton run` report
+`error: scenario.yaml:8: budget.tokens: must not be negative`.
+The location is followed by the field path and the explanation; step findings
+also include `(step build)` when the step ID is available. Unknown input types
+and secret sources list the accepted values.
+
+Line numbers identify the field or its containing declaration, not necessarily
+an individual value. Missing fields can point to the nearest known parent;
+when no location is known, the line number is omitted. YAML parsing errors
+retain the parser's own format. Fix the reported fields and run `baton validate`
+again before executing the scenario.
+
 Then read on:
 
 - [Scenario schema reference](schema.md) — every field of the format, generated
