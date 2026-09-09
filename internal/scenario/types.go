@@ -76,6 +76,8 @@ type Defaults struct {
 type Budget struct {
 	USD  float64  `yaml:"usd"`
 	Time Duration `yaml:"time"`
+	// Tokens caps input+output tokens spent across the run.
+	Tokens int `yaml:"tokens"`
 }
 
 // Secret declares where a secret value is read from (spec section 6).

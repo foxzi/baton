@@ -41,6 +41,7 @@ No other fields are allowed.
 |---|---|---|---|
 | `usd` | number | no | Minimum 0. |
 | `time` | [duration](#duration) | no |  |
+| `tokens` | integer | no | Minimum 0. |
 
 No other fields are allowed.
 

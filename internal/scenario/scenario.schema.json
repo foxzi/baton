@@ -54,6 +54,10 @@
         },
         "time": {
           "$ref": "#/$defs/duration"
+        },
+        "tokens": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

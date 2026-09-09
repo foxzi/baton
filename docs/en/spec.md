@@ -92,6 +92,7 @@ defaults:
 budget:
   usd: 8               # for the entire run
   time: 40m
+  tokens: 200000        # total input+output tokens for the run
 
 secrets: { ... }       # section 6
 apis:    { ... }       # section 7.4
@@ -674,7 +675,7 @@ Structured output strategy, common to all: (1) native JSON Schema mode, if the p
 
 The tool loop for `llm.tools` is driven by the runner, the same for all providers: the tools are the same ones as in the gateway, called directly without HTTP; the limits `max_tool_calls` are the same. Differences in tool-call formats between Anthropic and OpenAI are hidden behind message normalization.
 
-Cost accounting: if the provider returned a cost — use it; otherwise `usage × pricing[model]`; if the model is not in `pricing` — a validation warning and `cost_usd: null` in the report, the dollar budget is not checked for such a step, only the token budget is (`budget_tokens`).
+Cost accounting: if the provider returned a cost — use it; otherwise `usage × pricing[model]`; if the model is not in `pricing` — a validation warning and `cost_usd: null` in the report, the dollar budget is not checked for such a step, only the overall token limit is (`budget.tokens`).
 
 Provider config (global or in the scenario, merged by name):
 

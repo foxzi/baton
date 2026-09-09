@@ -86,6 +86,9 @@ func Validate(scn *Scenario) Result {
 	if strings.TrimSpace(scn.Name) == "" {
 		res.errorf("name", 0, "must not be empty")
 	}
+	if scn.Budget.Tokens < 0 {
+		res.errorf("budget.tokens", 0, "must not be negative")
+	}
 
 	validateInputs(scn, &res)
 	validateSecrets(scn, &res)

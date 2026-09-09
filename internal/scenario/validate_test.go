@@ -83,6 +83,20 @@ steps: []
 			wantErr: "steps: must declare at least one step",
 		},
 		{
+			name: "negative budget tokens",
+			yaml: `
+version: 1
+name: valid
+budget:
+  tokens: -1
+steps:
+  - id: s
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: "budget.tokens: must not be negative",
+		},
+		{
 			name: "step without body",
 			yaml: `
 version: 1
