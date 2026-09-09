@@ -81,10 +81,23 @@ ops:
     transform: '{ id, url: .self }'
     implements: tracker/v1.comment
 
-  # create_issue is deliberately left out of this pack. Jira nests the
-  # fields of a new issue under a single "fields" object in the request
-  # body, { "fields": { "project": { "key": ... }, "summary": ..., ... } },
-  # while a pack can only ever send its body arguments flat at the top
-  # level. tracker/v1.create_issue therefore cannot be expressed in the
-  # pack format as it stands; a scenario that needs to create a Jira issue
-  # posts it with a raw http step instead.
+  create_issue:
+    # Jira nests a new issue's fields under a single "fields" object,
+    # { "fields": { "project": { "key": ... }, "summary": ..., ... } }, which
+    # the dotted names below build: fields.project.key is sent as that path
+    # in the request body.
+    post: /rest/api/2/issue
+    description: Create an issue in a project
+    encode: json
+    params:
+      project: { name: fields.project.key, pattern: '^[A-Z][A-Z0-9_]*$' }
+      title: { name: fields.summary, max_len: 255 }
+      body: { name: fields.description, max_len: 32000, required: false }
+      # Jira has no universal default issue type, but every project template
+      # ships a Task, so it is the one safe guess when a scenario says
+      # nothing. A project without it answers 400 with the list it does have.
+      type: { name: fields.issuetype.name, max_len: 255, default: Task }
+    # The create response is the bare identity of the issue: id, key and
+    # self, no fields at all.
+    transform: '{ key, url: .self }'
+    implements: tracker/v1.create_issue

@@ -237,17 +237,13 @@ absent from the result instead of turning into null for the default fields.
 
 ## What is not here, and why
 
-`create_issue` cannot be expressed in this pack. Jira nests the fields of a
-new issue under a single `"fields"` object in the request body,
-`{ "fields": { "project": { "key": ... }, "summary": ..., ... } }`, while a
-pack can only ever send its body arguments flat at the top level.
-
-`comment` (`POST /rest/api/2/issue/{key}/comment`) is expressible, and the
-`jira` pack carries it, but the personal access token this pack was
-developed against is read-only, so no request of it was ever made against a
-live site. It belongs here once someone can check it; until then the pack
-ships only what was verified. A scenario that must comment on a Server issue
-posts it with a raw http step through this api.
+Both `comment` (`POST /rest/api/2/issue/{key}/comment`) and `create_issue`
+(`POST /rest/api/2/issue`, using dotted body names) are expressible now, and
+the `jira` pack carries both, but the personal access token this pack was
+developed against is read-only, so no write request was ever made against a
+live site. They belong here once someone can check them; until then the
+pack ships only what was verified. A scenario that must write to a Server
+issue posts it with a raw http step through this api.
 
 ## A note on the recorded examples
 

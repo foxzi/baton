@@ -232,15 +232,9 @@ ops:
     # stays absent instead of turning into null for the default fields.
     transform: '[ .[] | { key, title: .fields.summary, status: .fields.status.name, url: (((.self | split("/rest/"))[0]) + "/browse/" + .key) } + (if .fields.description then { description: .fields.description } else {} end) ]'
 
-  # comment and create_issue are left out on purpose.
-  #
-  # create_issue cannot be expressed at all: Jira nests a new issue's
-  # fields under a single "fields" object, and a pack sends its body
-  # arguments flat.
-  #
-  # comment (POST /rest/api/2/issue/{key}/comment) is expressible, and the
-  # jira pack carries it, but the token this pack was developed against is
-  # read-only, so no request of it was ever made against a live site. It
-  # belongs here once someone can check it; until then the pack ships only
-  # what was verified. A scenario that must comment on a Server issue posts
-  # it with a raw http step through this api.
+  # comment and create_issue are left out on purpose. Both are expressible
+  # here, and the jira pack carries them, but the token this pack was
+  # developed against is read-only, so no write request was ever made
+  # against a live site. They belong here once someone can check them;
+  # until then the pack ships only what was verified. A scenario that must
+  # write to a Server issue posts it with a raw http step through this api.

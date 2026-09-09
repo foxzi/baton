@@ -1,15 +1,15 @@
 # jira
 
 An API pack that teaches baton the Jira Cloud REST API without putting the
-name Jira into the binary. It implements three operations of the
-`tracker/v1` interface, so a scenario written against `tracker/v1` can run on
-Jira Cloud by loading this pack.
+name Jira into the binary. It implements the whole `tracker/v1` interface,
+so a scenario written against `tracker/v1` can run on Jira Cloud by loading
+this pack.
 
 | | |
 |---|---|
 | Pack | `jira`, version 1 |
 | API | Jira Cloud REST API |
-| Interface | `tracker/v1` — `get_issue`, `search`, `comment` |
+| Interface | `tracker/v1` — `get_issue`, `search`, `create_issue`, `comment` |
 | Extra operations | none |
 | Auth | `basic`, user from config, token as the secret |
 | Base URL | none, `base_url` is required |
@@ -119,15 +119,30 @@ Writes. Implements `tracker/v1.comment`. Body is sent as JSON.
 Not read-only, so this step is never served from the cache and `--dry-run`
 never sends it.
 
-## What is not here, and why
+### `create_issue` — `POST /rest/api/2/issue`
 
-`create_issue` cannot be expressed in this pack. Jira nests the fields of a
-new issue under a single `"fields"` object in the request body,
-`{ "fields": { "project": { "key": ... }, "summary": ..., ... } }`, while a
-pack can only ever send its body arguments flat at the top level.
-`tracker/v1.create_issue` therefore cannot be expressed in the pack format as
-it stands; a scenario that needs to create a Jira issue posts it with a raw
-http step instead.
+Writes. Implements `tracker/v1.create_issue`. Body is sent as JSON.
+
+| Argument | In | Wire name | Pattern / Limit | Default | Required |
+|---|---|---|---|---|---|
+| `project` | body | `fields.project.key` | `^[A-Z][A-Z0-9_]*$` | — | yes |
+| `title` | body | `fields.summary` | 255 chars | — | yes |
+| `body` | body | `fields.description` | 32000 chars | — | no |
+| `type` | body | `fields.issuetype.name` | 255 chars | `Task` | yes (has a default) |
+
+```json
+{ "key": "OPS-17", "url": "https://example.atlassian.net/rest/api/2/issue/10002" }
+```
+
+Jira nests the fields of a new issue under a single `"fields"` object, and
+the dotted wire names above build exactly that: the request body comes out as
+`{ "fields": { "project": { "key": ... }, "summary": ..., "description": ...,
+"issuetype": { "name": ... } } }`. `type` defaults to `Task` because every
+project template ships one; a project without it answers 400 with the list of
+types it does have.
+
+The response of a create is the bare identity of the issue — `id`, `key` and
+`self`, no fields — so the result carries the key and the REST URL only.
 
 ## Validating a change
 
