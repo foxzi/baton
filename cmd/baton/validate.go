@@ -37,6 +37,14 @@ func validateCmd(args []string) int {
 	}
 
 	result := scenario.Validate(scn)
+	// Checks 12 and 13 of section 4 need the packs themselves, which
+	// Validate does not read; only run them once the scenario itself holds
+	// up, since a scenario with undeclared apis produces noise here.
+	if result.OK() {
+		packResult := scenario.CheckPacks(scn)
+		result.Errors = append(result.Errors, packResult.Errors...)
+		result.Warnings = append(result.Warnings, packResult.Warnings...)
+	}
 	// The pricing table lives in the global configuration, so a model with
 	// no price can only be reported when that configuration loads. A broken
 	// one is the business of `baton run`, not of a scenario check.
