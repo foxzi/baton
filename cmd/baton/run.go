@@ -274,11 +274,11 @@ func execute(req runRequest) int {
 		return exitcode.Failure
 	}
 
-	fmt.Fprintf(os.Stderr, "run %s: %s in %s\n", runID, outcome.Status, outcome.Duration.Round(time.Millisecond))
-	if outcome.Error != nil {
-		fmt.Fprintf(os.Stderr, "failed step %s: %s: %s\n", outcome.FailedStep, outcome.Error.Class, outcome.Error.Message)
+	workspace := req.workspace
+	if workspace == "" {
+		workspace = baseDir
 	}
-	fmt.Fprintf(os.Stderr, "run directory: %s\n", store.Dir())
+	printRunSummary(scn, runsDir, runID, outcome, workspace, store.Dir())
 
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return exitcode.Interrupted
@@ -406,4 +406,70 @@ func secretValues(keys map[string]values.Secret) []values.Secret {
 		out = append(out, secret)
 	}
 	return out
+}
+
+// printRunSummary is the compact human-readable report at the end of `run`
+// and `resume` (both go through execute): status and duration always, cost
+// only when a step actually priced one, written artifacts only when a file
+// step actually wrote one, and on failure a ready-to-paste resume command.
+// --runs-dir is always spelled out because the CLI default depends on the
+// current directory, which need not be the one this run used.
+func printRunSummary(scn *scenario.Scenario, runsDir, runID string, outcome *engine.Result, workspace, runDir string) {
+	fmt.Fprintf(os.Stderr, "run %s: %s in %s\n", runID, outcome.Status, outcome.Duration.Round(time.Millisecond))
+
+	if report, err := runstore.ReadCost(runsDir, runID); err == nil && report != nil && report.TotalUSD != nil {
+		fmt.Fprintf(os.Stderr, "cost: %s\n", usd(report.TotalUSD))
+	}
+
+	if paths := fileArtifacts(scn, runsDir, runID, workspace); len(paths) > 0 {
+		fmt.Fprintln(os.Stderr, "artifacts:")
+		for _, path := range paths {
+			fmt.Fprintf(os.Stderr, "  %s\n", path)
+		}
+	}
+
+	if outcome.Error != nil {
+		fmt.Fprintf(os.Stderr, "failed step %s: %s: %s\n", outcome.FailedStep, outcome.Error.Class, outcome.Error.Message)
+		fmt.Fprintf(os.Stderr, "resume: baton resume %s --runs-dir %s\n", shellQuote(runID), shellQuote(runsDir))
+	}
+
+	fmt.Fprintf(os.Stderr, "run directory: %s\n", runDir)
+	fmt.Fprintf(os.Stderr, "details: baton runs show %s --runs-dir %s\n", shellQuote(runID), shellQuote(runsDir))
+	fmt.Fprintf(os.Stderr, "logs:    baton runs logs %s --runs-dir %s\n", shellQuote(runID), shellQuote(runsDir))
+}
+
+// fileArtifacts is the paths a top-level file write/append step actually
+// wrote, read back from its own output.json rather than guessed from the
+// scenario: a step that failed, was skipped or never ran leaves nothing to
+// report.
+func fileArtifacts(scn *scenario.Scenario, runsDir, runID, workspace string) []string {
+	var paths []string
+	for i := range scn.Steps {
+		step := &scn.Steps[i]
+		if step.Kind() != scenario.KindFile || step.File == nil {
+			continue
+		}
+		op, _ := step.File.Op()
+		if op != scenario.FileOpWrite && op != scenario.FileOpAppend {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(runsDir, runID, "steps", step.ID, "output.json"))
+		if err != nil {
+			continue
+		}
+		var output struct {
+			Status string `json:"status"`
+			Result struct {
+				Path string `json:"path"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(data, &output); err != nil {
+			continue
+		}
+		if output.Status != "success" || output.Result.Path == "" {
+			continue
+		}
+		paths = append(paths, filepath.Join(workspace, filepath.FromSlash(output.Result.Path)))
+	}
+	return paths
 }
