@@ -74,8 +74,9 @@ var parseModes = map[ParseMode]bool{
 
 // Validate performs the structural checks of specification section 4.
 // Checks 3, 4 and 7 compile expressions and templates through internal/expr
-// and internal/tmpl. Checks 5, 6, 10, 12 and 13 need reference analysis or
-// loaded API packs and are not implemented yet.
+// and internal/tmpl; checks 5 and 6 run in internal/scenario/refs.go. Checks
+// 12 and 13 need the packs, which load at run time, so internal/engine makes
+// them instead.
 func Validate(scn *Scenario) Result {
 	var res Result
 
