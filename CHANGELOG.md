@@ -8,8 +8,20 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-09
+
 ### Added
 
+- `baton init` with `hello` and `summarize` templates, so a new project
+  starts from a runnable scenario instead of a blank file.
+- A local `doctor` check that reports missing config, credentials and
+  provider setup without making a network call.
+- A run/resume summary (status, duration, cost, artifacts) and recovery
+  hints pointing at the run's `runs show`/`runs logs` command.
+- An offline JSON Schema for scenario YAML, emitted by `init` alongside a
+  `# $schema` modeline, for editor validation without network access.
+- `budget.tokens` to cap a scenario's total token spend, alongside the
+  existing cost budget.
 - The `codex` engine for `agent:` steps: the OpenAI Codex CLI is driven through
   `codex exec --json`, reaches the gateway as an MCP server in a `config.toml`
   of its own, and is held inside the step's policy by the CLI's sandbox, since
@@ -34,6 +46,10 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ### Changed
 
+- Validation diagnostics include the filename, YAML line and step ID when
+  available, plus accepted-value hints for unknown input types and secret sources.
+- The CLI prints usage on `-h`/`--help`, suggests a correction for an
+  unknown command, and quotes paths with spaces in its hint output.
 - Checking a recorded example replays pagination: for an operation with
   `paginate: true` the example is the body of a single page, `pagination.items`
   is applied to it and the transform is fed that page's items. Examples of the
@@ -41,6 +57,13 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ### Fixed
 
+- Template rendering confines file paths to the scenario directory, closing a
+  path-traversal escape.
+- A run ID is validated before use, closing a path-traversal escape through
+  `--run-id`.
+- The Codex gateway requires `default_tools_approval_mode = "approve"` when
+  `approval_policy = "never"`, allowing gateway tool calls without an
+  approval prompt instead of failing outright.
 - The cache key of an http step includes the pack checksum, so editing a pack
   invalidates the entries that came from it.
 - `ValidateJSON` decodes numbers as `float64`, which fixes false type errors
@@ -87,5 +110,6 @@ agent gateway.
 - **Release.** goreleaser builds static binaries for linux/amd64 and
   linux/arm64 with checksums, published by pushing a `v*` tag.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/foxzi/baton/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/foxzi/baton/releases/tag/v0.1.0
