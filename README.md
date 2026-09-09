@@ -187,6 +187,7 @@ Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>
 - [Specification for v1](docs/en/spec.md) — the authoritative technical document
 - [Scenario schema reference](docs/en/schema.md) — every field of the format, generated from the JSON Schema
 - [Specification review](docs/en/spec-review.md) — inconsistencies and gaps found while reading the spec
+- [Changelog](CHANGELOG.md) — what changed in each release
 - Russian originals: [быстрый старт](docs/ru/quickstart.md), [обзор](docs/ru/overview.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [вычитка](docs/ru/spec-review.md), [README](docs/ru/README.md)
 
 ## License
