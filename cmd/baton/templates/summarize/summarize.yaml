@@ -2,8 +2,9 @@ version: 1
 name: summarize
 description: >
   Summarize a piece of text with a single llm call, checked against a JSON
-  schema. Self-contained: the only thing it needs is a provider API key in
-  the environment (see baton.yaml next to this file).
+  schema, then save the result to a file. Self-contained: the only thing it
+  needs is a provider API key in the environment (see baton.yaml next to
+  this file).
 
 inputs:
   text:
@@ -11,11 +12,21 @@ inputs:
     default: >
       The new deploy pipeline finally stopped waking us up at night, though
       the rollback step is still slower than it should be.
+  out:
+    type: string
+    default: summary.json
+    # Restrict the output path to simple path characters; workspace path
+    # checks enforce the write boundary.
+    pattern: "^[A-Za-z0-9_./-]+$"
 
 defaults:
   model: __BATON_MODEL__
   timeout: 60s
 
+# Caps this run's spend and wall-clock time; baton stops the scenario, not
+# just the step, once either is exceeded (spec section 10). Raise usd for a
+# longer text or a pricier model, or drop --template summarize's own default
+# model with --model (see baton init --help).
 budget:
   usd: 0.05
   time: 2m
@@ -28,3 +39,9 @@ steps:
       with: { text: "{{ .inputs.text }}" }
       schema: schemas/summarize.json
       max_tokens: 300
+
+  - id: report
+    needs: [summarize]
+    file:
+      write: "{{ .inputs.out }}"
+      content: "{{ toJSON .steps.summarize.result }}\n"

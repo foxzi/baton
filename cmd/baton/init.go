@@ -39,8 +39,11 @@ Options:
 Templates:
   hello       One "run" step that echoes a greeting and checks its exit
               code. No API key, no network, no global config.
-  summarize   One "llm" step that summarizes text against a JSON schema.
-              Needs a provider API key in the environment; the generated
+  summarize   An "llm" step that summarizes text against a JSON schema,
+              then a "file" step that writes the result to disk. The text
+              to summarize and the output path are scenario inputs
+              (-i text=..., -i out=...), overridable on any run. Needs a
+              provider API key in the environment; the generated
               baton.yaml and the command's own output say which one.
 `
 
