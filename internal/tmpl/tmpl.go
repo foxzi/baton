@@ -76,9 +76,13 @@ func (r *Renderer) renderFile(path string, data any, depth int) (string, error) 
 	if depth >= maxRenderDepth {
 		return "", fmt.Errorf("render %s: nested more than %d levels deep", path, maxRenderDepth)
 	}
-	resolved := path
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(r.baseDir, resolved)
+	cleaned, err := checkTemplatePath(path)
+	if err != nil {
+		return "", fmt.Errorf("render %s: %v", path, err)
+	}
+	resolved, err := r.resolveTemplatePath(cleaned)
+	if err != nil {
+		return "", fmt.Errorf("render %s: %v", path, err)
 	}
 	text, err := os.ReadFile(resolved)
 	if err != nil {
@@ -88,6 +92,55 @@ func (r *Renderer) renderFile(path string, data any, depth int) (string, error) 
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
 	return r.render(path, string(text), data, depth+1)
+}
+
+// checkTemplatePath holds a render() path to the scenario directory:
+// relative, no ".." segment. This is the same rule checkFilePath applies to
+// a file: step's path (internal/engine/file.go), duplicated here rather than
+// imported because internal/engine already imports internal/tmpl.
+func checkTemplatePath(value string) (string, error) {
+	switch {
+	case strings.TrimSpace(value) == "":
+		return "", errors.New("must not be empty")
+	case filepath.IsAbs(value):
+		return "", errors.New("must be relative to the scenario directory")
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == ".." {
+			return "", errors.New(`must not contain a ".." segment`)
+		}
+	}
+	cleaned := filepath.Clean(value)
+	if cleaned == "." {
+		return "", errors.New("must name a file, not the scenario directory itself")
+	}
+	return cleaned, nil
+}
+
+// resolveTemplatePath turns a path checkTemplatePath already cleared into
+// the absolute path on disk, refusing one that would leave the scenario
+// directory through a symlink: the lexical check above cannot see where a
+// link points. This mirrors resolveFilePath in internal/engine/file.go; it
+// is not resolved through evalExisting first because render() only ever
+// reads, so a target that does not exist yet is left for os.ReadFile to
+// report as its usual "no such file" error.
+func (r *Renderer) resolveTemplatePath(cleaned string) (string, error) {
+	root, err := filepath.EvalSymlinks(r.baseDir)
+	if err != nil {
+		return "", fmt.Errorf("scenario directory %s: %w", r.baseDir, err)
+	}
+	candidate := filepath.Join(r.baseDir, filepath.FromSlash(cleaned))
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		}
+		return "", err
+	}
+	if resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator)) {
+		return "", errors.New("leaves the scenario directory")
+	}
+	return candidate, nil
 }
 
 // Check parses text and rejects references to secrets. Validation runs it over

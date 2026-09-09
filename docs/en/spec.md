@@ -311,7 +311,7 @@ Secrets are absent from the expression context as a class. An evaluation error a
 
 ### 5.2 Templates
 
-`text/template` with functions: `render(path, data)`, `toJSON`, `fromJSON`, `coalesce`, `default`, `trunc(n)`, `indent(n)`, `join`, `dict`, `quote`, `md2html`, `md2text`. The last two are for APIs that accept HTML (Confluence storage format) or plain text; vendor-specific formats (ADF and similar) are not added to the binary. The template engine receives values through a wrapper: attempting to output a `values.Secret` returns a render error, not a string.
+`text/template` with functions: `render(path, data)`, `toJSON`, `fromJSON`, `coalesce`, `default`, `trunc(n)`, `indent(n)`, `join`, `dict`, `quote`, `md2html`, `md2text`. The last two are for APIs that accept HTML (Confluence storage format) or plain text; vendor-specific formats (ADF and similar) are not added to the binary. The template engine receives values through a wrapper: attempting to output a `values.Secret` returns a render error, not a string. The `path` given to `render` is confined to the scenario directory: an absolute path, a `..` segment, or a symlink pointing outside it is a render error.
 
 ### 5.3 Value types
 
@@ -858,6 +858,7 @@ mcp_servers:
 - [x] `commands` do not interpret shell metacharacters (test: an argument `; echo pwned` is rejected by `pattern`, an argument `$(id)` with a permissive pattern is passed through literally)
 - [x] `fetch` to a domain outside the allowlist → `policy`; a redirect to a domain outside the allowlist → `policy`
 - [x] A path `../x` and `/etc/passwd` in command arguments and `fs` → `policy`
+- [x] `render` is confined to the scenario directory: `render "../../etc/passwd"` is rejected with a render error
 - [x] `.git/config` after workspace preparation contains no tokens
 - [x] `http` with `POST` without `dedupe_key` is not retried on `transient`
 - [x] `budget` is never retried regardless of `retry` settings

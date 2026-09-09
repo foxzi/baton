@@ -416,6 +416,87 @@ func TestRenderFileChecksIncludedFiles(t *testing.T) {
 	}
 }
 
+// TestRenderFileRejectsPathTraversal checks that render() refuses a path
+// leaving the scenario directory, whether through a ".." segment, an
+// absolute path, or a symlink, while a normal relative path inside the
+// directory still renders.
+func TestRenderFileRejectsPathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("outside"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	scenarioDir := filepath.Join(dir, "scenario")
+	if err := os.Mkdir(scenarioDir, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(scenarioDir, "child.tmpl"), []byte("child:{{ .name }}"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(scenarioDir, "templates"), 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(scenarioDir, "templates", "nested.tmpl"), []byte("nested:{{ .name }}"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	r := NewRenderer(scenarioDir)
+	data := map[string]any{"name": "joe"}
+
+	t.Run("dotdot segment escapes the scenario directory", func(t *testing.T) {
+		if _, err := r.RenderFile("../secret.txt", data); err == nil {
+			t.Fatalf("RenderFile succeeded, want error")
+		}
+	})
+
+	t.Run("absolute path is rejected", func(t *testing.T) {
+		abs := filepath.Join(dir, "secret.txt")
+		if _, err := r.RenderFile(abs, data); err == nil {
+			t.Fatalf("RenderFile succeeded, want error")
+		}
+	})
+
+	t.Run("symlink escaping the scenario directory is rejected", func(t *testing.T) {
+		link := filepath.Join(scenarioDir, "escape.tmpl")
+		if err := os.Symlink(filepath.Join(dir, "secret.txt"), link); err != nil {
+			t.Skipf("Symlink not supported: %v", err)
+		}
+		if _, err := r.RenderFile("escape.tmpl", data); err == nil {
+			t.Fatalf("RenderFile succeeded, want error")
+		}
+	})
+
+	t.Run("relative path inside the scenario directory still renders", func(t *testing.T) {
+		got, err := r.RenderFile("child.tmpl", data)
+		if err != nil {
+			t.Fatalf("RenderFile returned error: %v", err)
+		}
+		if got != "child:joe" {
+			t.Errorf("RenderFile() = %q, want %q", got, "child:joe")
+		}
+	})
+
+	t.Run("nested subdirectory path still renders", func(t *testing.T) {
+		got, err := r.RenderFile("templates/nested.tmpl", data)
+		if err != nil {
+			t.Fatalf("RenderFile returned error: %v", err)
+		}
+		if got != "nested:joe" {
+			t.Errorf("RenderFile() = %q, want %q", got, "nested:joe")
+		}
+	})
+
+	t.Run("./ prefixed path still renders", func(t *testing.T) {
+		got, err := r.RenderFile("./child.tmpl", data)
+		if err != nil {
+			t.Fatalf("RenderFile returned error: %v", err)
+		}
+		if got != "child:joe" {
+			t.Errorf("RenderFile() = %q, want %q", got, "child:joe")
+		}
+	})
+}
+
 func TestCheckAcceptsTemplateBuiltins(t *testing.T) {
 	texts := []string{
 		"{{ len .steps.count.result }}",
