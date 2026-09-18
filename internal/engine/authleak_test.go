@@ -271,3 +271,62 @@ steps:
 
 	walkForPlaintext(t, store.Dir(), token)
 }
+
+// 4. A cached response that echoes the token back is redacted in the cache
+// entry, the same as in the run directory (spec section 13): the cache
+// directory outlives the run and is not cleaned with it.
+func TestRun_HTTPOp_EchoedTokenNeverInCache(t *testing.T) {
+	const token = "unlikely-echo-token-77"
+	t.Setenv("BATON_ECHO_SECRET", token)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// The path scheme carries the token in the URL: echo it back.
+		json.NewEncoder(w).Encode(map[string]string{"echo": r.URL.Path})
+	}))
+	defer server.Close()
+
+	yamlText := fmt.Sprintf(`
+version: 1
+name: echo-auth
+secrets:
+  tok:
+    from: env
+    key: BATON_ECHO_SECRET
+apis:
+  svc:
+    pack: demo
+    from: ./apis/
+    config:
+      base_url: %q
+    auth:
+      secret: tok
+steps:
+  - id: one
+    cache: true
+    http:
+      op: svc.send
+`, server.URL+"/bot{auth}")
+
+	cacheDir := t.TempDir()
+	eng, store, dir := newTestEngine(t, yamlText, func(o *Options) {
+		s, err := secrets.Resolve(o.Scenario.Secrets, filepath.Dir(o.Scenario.Path))
+		if err != nil {
+			t.Fatalf("secrets.Resolve: %v", err)
+		}
+		o.Secrets = s
+		o.Cache = cache.Open(cacheDir)
+	})
+	writePack(t, dir, "demo", pathAuthPack)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q, want success (error=%+v)", result.Status, result.Error)
+	}
+
+	walkForPlaintext(t, store.Dir(), token)
+	walkForPlaintext(t, cacheDir, token)
+}

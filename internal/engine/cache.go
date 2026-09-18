@@ -182,6 +182,10 @@ func (e *Engine) cachePut(key string, step *scenario.Step, out expr.Step) {
 	if err != nil {
 		return
 	}
+	// The cache outlives the run and is not under runs/, but section 13
+	// applies to it all the same: a response that echoed a token back must
+	// not survive there in plain text.
+	data = e.redactor().Bytes(data)
 	if err := e.opts.Cache.Put(key, data); err != nil {
 		e.emit(Event{Type: "warning", Step: step.ID, Message: err.Error()})
 	}
