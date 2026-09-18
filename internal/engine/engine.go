@@ -92,7 +92,9 @@ type Options struct {
 	// nil, in which case such a message is dropped.
 	Stdout io.Writer
 	// Observer receives events as they happen, for the human readable log.
-	// It may be nil.
+	// It may be nil. The engine calls it from one goroutine at a time, so
+	// the observer needs no locking of its own even when foreach bodies run
+	// in parallel.
 	Observer func(Event)
 	// Now supplies the clock, for tests. It defaults to time.Now.
 	Now func() time.Time
@@ -135,6 +137,9 @@ type Engine struct {
 	// reach concurrently.
 	mu        *sync.Mutex
 	providers map[string]provider.Provider
+	// emitMu serializes emit, so that the observer and events.jsonl see
+	// events one at a time and in the same order.
+	emitMu *sync.Mutex
 	// agents is the machinery agent steps share: the gateway, the engines
 	// and the prepared workspace (section 3.6).
 	agents *agentRuntime
@@ -184,6 +189,7 @@ func New(opts Options) (*Engine, error) {
 		dir:       baseDir,
 		renderer:  tmpl.NewRenderer(baseDir),
 		mu:        &sync.Mutex{},
+		emitMu:    &sync.Mutex{},
 		cost:      &costLedger{},
 		steps:     map[string]expr.Step{},
 		hits:      map[string]bool{},
@@ -571,6 +577,8 @@ func (e *Engine) record(stepID string, state *runstore.StepState) {
 // the string fields are redacted first: the observer prints them to the log
 // without knowing the secrets of the run (section 13).
 func (e *Engine) emit(event Event) {
+	e.emitMu.Lock()
+	defer e.emitMu.Unlock()
 	event.Message = e.redact(event.Message)
 	event.Fields = e.redactFields(event.Fields)
 	if e.opts.Observer != nil {
