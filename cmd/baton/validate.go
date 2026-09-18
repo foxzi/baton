@@ -58,7 +58,7 @@ func validateCmd(args []string) int {
 	if asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(struct {
+		err := enc.Encode(struct {
 			Scenario string           `json:"scenario"`
 			OK       bool             `json:"ok"`
 			Errors   []diagnosticJSON `json:"errors"`
@@ -69,6 +69,10 @@ func validateCmd(args []string) int {
 			Errors:   diagnosticsJSON(result.Errors),
 			Warnings: diagnosticsJSON(result.Warnings),
 		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+			return exitcode.Config
+		}
 		if !result.OK() {
 			return exitcode.Config
 		}

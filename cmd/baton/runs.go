@@ -98,7 +98,10 @@ func runsListCmd(args []string) int {
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(runs)
+		if err := enc.Encode(runs); err != nil {
+			fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+			return exitcode.Config
+		}
 		return exitcode.OK
 	}
 	for _, state := range runs {
@@ -146,10 +149,14 @@ func runsShowCmd(args []string) int {
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(struct {
+		err = enc.Encode(struct {
 			Run  *runstore.RunState   `json:"run"`
 			Cost *runstore.CostReport `json:"cost"`
 		}{Run: state, Cost: report})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+			return exitcode.Config
+		}
 		return exitcode.OK
 	}
 
