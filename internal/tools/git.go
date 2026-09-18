@@ -310,11 +310,7 @@ func (g *Git) run(ctx context.Context, argv ...string) (any, error) {
 	// git never waits for input in any of these calls, but a hung prompt
 	// would otherwise sit there until the timeout.
 	cmd.Stdin = strings.NewReader("")
-	isolate(cmd)
-	cmd.Cancel = func() error { return terminate(cmd) }
-	// The last resort if the process ignores the signal: the pipes are
-	// closed and the wait ends, whatever git is still doing.
-	cmd.WaitDelay = terminateGrace
+	Isolate(cmd)
 
 	started := time.Now()
 	runErr := cmd.Run()

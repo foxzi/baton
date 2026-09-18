@@ -13,6 +13,7 @@ import (
 
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/scenario"
+	"github.com/foxzi/baton/internal/tools"
 )
 
 // defaultMaxOutputBytes caps stdout and stderr of a command when the step
@@ -75,6 +76,9 @@ func (e *Engine) execRun(ctx context.Context, step *scenario.Step, path string) 
 	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	// A timed out step is stopped with everything it started, and the wait
+	// ends even if a child keeps the pipes open.
+	tools.Isolate(cmd)
 
 	runErr := cmd.Run()
 

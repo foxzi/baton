@@ -204,11 +204,7 @@ func (c *Commands) handler(id string, command scenario.Command) gateway.Handler 
 		cmd.Stderr = stderr
 		// A command that waits for input would sit there until the timeout.
 		cmd.Stdin = strings.NewReader("")
-		isolate(cmd)
-		cmd.Cancel = func() error { return terminate(cmd) }
-		// The last resort if the group ignores the signal: the pipes are
-		// closed and the wait ends, whatever the children are doing.
-		cmd.WaitDelay = terminateGrace
+		Isolate(cmd)
 
 		started := time.Now()
 		runErr := cmd.Run()
