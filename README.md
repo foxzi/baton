@@ -197,11 +197,12 @@ Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>
 
 - [Quickstart](docs/en/quickstart.md) — build, first scenario, run artifacts, first model call
 - [Project overview](docs/en/overview.md) — the source this README is based on
+- [Architecture](docs/en/architecture.md) — package map, execution lifecycle, config/secrets boundaries
 - [Specification for v1](docs/en/spec.md) — the authoritative technical document
 - [Scenario schema reference](docs/en/schema.md) — every field of the format, generated from the JSON Schema
 - [Docker](docs/en/docker.md) — build/run with docker compose, host uid/gid, secrets, config mount
 - [Changelog](CHANGELOG.md) — what changed in each release
-- Russian originals: [быстрый старт](docs/ru/quickstart.md), [обзор](docs/ru/overview.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [Docker](docs/ru/docker.md), [README](docs/ru/README.md)
+- Russian originals: [быстрый старт](docs/ru/quickstart.md), [обзор](docs/ru/overview.md), [архитектура](docs/ru/architecture.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [Docker](docs/ru/docker.md), [README](docs/ru/README.md)
 
 ## License
 
