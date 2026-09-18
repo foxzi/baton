@@ -8,6 +8,20 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-19
+
+### Added
+
+- A top-level `env` block in the scenario: the environment of every
+  process the run starts — `run` steps, agent processes and `commands`.
+  Entries take the same forms as `run.env` (a literal template or
+  `{ secret: name }`); a step's or command's own entry of the same name
+  overrides the shared one. MCP servers are not affected.
+- Spec section on passing values between steps through templates in
+  `env` (`{{ index .steps.<id>.result 0 }}`, `{{ .steps.<id>.result.x }}`).
+- An architecture document (`docs/en/architecture.md`,
+  `docs/ru/architecture.md`) mapping the spec onto the Go packages.
+
 ## [0.3.0] - 2026-09-09
 
 ### Added
@@ -126,7 +140,8 @@ agent gateway.
 - **Release.** goreleaser builds static binaries for linux/amd64 and
   linux/arm64 with checksums, published by pushing a `v*` tag.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/foxzi/baton/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/foxzi/baton/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/foxzi/baton/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/foxzi/baton/releases/tag/v0.1.0

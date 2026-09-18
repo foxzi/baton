@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-19
+
+### Добавлено
+
+- Блок `env` верхнего уровня в сценарии: окружение каждого процесса,
+  который запускает прогон, — шагов `run`, процессов агента и `commands`.
+  Формы записи те же, что в `run.env` (литеральный шаблон или
+  `{ secret: name }`); собственная запись того же имени у шага или команды
+  переопределяет общую. MCP-серверы не затрагиваются.
+- Раздел ТЗ о передаче значений между шагами через шаблоны в `env`
+  (`{{ index .steps.<id>.result 0 }}`, `{{ .steps.<id>.result.x }}`).
+- Документ по архитектуре (`docs/en/architecture.md`,
+  `docs/ru/architecture.md`): карта ТЗ на Go-пакеты.
+
 ## [0.3.0] - 2026-09-09
 
 ### Добавлено
@@ -127,7 +141,8 @@
 - **Релиз.** goreleaser собирает статические бинарники для linux/amd64 и
   linux/arm64 с контрольными суммами, публикация — пушем тега `v*`.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/foxzi/baton/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/foxzi/baton/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/foxzi/baton/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/foxzi/baton/releases/tag/v0.1.0
