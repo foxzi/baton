@@ -819,6 +819,8 @@ By default `cache: true` for `llm` and `run` with `readonly: true`; `false` for 
 
 `baton resume <id>`: reads `run.json`, skips steps with status `success` (takes their output), starts from the failed one. Secrets are resolved again. The new run gets the same `id` with a suffix `-r1`, `-r2`, with a reference to the original in `run.json`.
 
+Every successful step record in `run.json` carries `definition`, the hash of the step definition without `id` and `when`. A step is replayed only while its current definition matches: a step edited since the original run is executed again and reported with the `step_changed` event. A record without `definition`, written by an older baton, is executed again as well.
+
 ## 11. CLI
 
 ```

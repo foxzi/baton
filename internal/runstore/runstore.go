@@ -49,7 +49,10 @@ type StepState struct {
 	FallbackUsed bool       `json:"fallback_used,omitempty"`
 	CacheHit     bool       `json:"cache_hit,omitempty"`
 	Resumed      bool       `json:"resumed,omitempty"`
-	Error        *RunError  `json:"error,omitempty"`
+	// Definition is the hash of the step definition that produced this
+	// record; resume replays the step only while it still matches.
+	Definition string    `json:"definition,omitempty"`
+	Error      *RunError `json:"error,omitempty"`
 }
 
 // RunState is the content of run.json (docs/ru/spec.md, section 10.2).

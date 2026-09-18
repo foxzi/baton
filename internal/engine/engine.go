@@ -69,8 +69,9 @@ type Options struct {
 	Cache *cache.Cache
 	// Resume holds the outputs of the steps a previous run already finished,
 	// by step path (section 10.4). Those steps are replayed instead of
-	// executed; ResumeOf names the run they come from.
-	Resume map[string]expr.Step
+	// executed while their definition is unchanged; ResumeOf names the run
+	// they come from.
+	Resume map[string]ResumedStep
 	// ResumeOf is the id of the run this one continues, recorded in
 	// run.json (section 10.4).
 	ResumeOf string
@@ -316,6 +317,7 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 
 	if stepErr == nil {
 		state.Status = runstore.StatusSuccess
+		state.Definition = definitionHash(step)
 		out.Status = expr.StatusSuccess
 		e.steps[step.ID] = out
 		e.record(step.ID, state)

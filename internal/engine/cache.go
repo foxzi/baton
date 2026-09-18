@@ -95,17 +95,14 @@ func (e *Engine) cacheKey(step *scenario.Step, input any, files map[string]strin
 	if !e.cacheable(step) {
 		return ""
 	}
-	normalized := *step
-	normalized.ID = ""
-	normalized.When = ""
-	definition, err := yaml.Marshal(&normalized)
-	if err != nil {
+	definition := definitionHash(step)
+	if definition == "" {
 		return ""
 	}
 	key, err := cache.Key(map[string]any{
 		"version":    version.Version,
 		"kind":       string(step.Kind()),
-		"definition": string(definition),
+		"definition": definition,
 		"input":      input,
 		"files":      files,
 	})
@@ -205,6 +202,21 @@ func (e *Engine) takeCacheHit(path string) bool {
 	hit := e.hits[path]
 	delete(e.hits, path)
 	return hit
+}
+
+// definitionHash identifies a step definition without its id and when: the
+// cache key includes it, and run.json records it so that resume can tell a
+// step that was edited since the run it continues. Empty when the step
+// cannot be serialized.
+func definitionHash(step *scenario.Step) string {
+	normalized := *step
+	normalized.ID = ""
+	normalized.When = ""
+	definition, err := yaml.Marshal(&normalized)
+	if err != nil {
+		return ""
+	}
+	return hashBytes(definition)
 }
 
 // hashBytes is the content hash of a file that a step reads.

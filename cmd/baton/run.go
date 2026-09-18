@@ -17,7 +17,6 @@ import (
 	"github.com/foxzi/baton/internal/config"
 	"github.com/foxzi/baton/internal/engine"
 	"github.com/foxzi/baton/internal/exitcode"
-	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/notify"
 	"github.com/foxzi/baton/internal/runstore"
 	"github.com/foxzi/baton/internal/scenario"
@@ -138,7 +137,7 @@ type runRequest struct {
 	verbose    bool
 	// resume replays the steps a previous run already finished
 	// (section 10.4).
-	resume   map[string]expr.Step
+	resume   map[string]engine.ResumedStep
 	resumeOf string
 }
 
@@ -324,7 +323,7 @@ func observer(asJSON, verbose bool) func(engine.Event) {
 func interesting(eventType string) bool {
 	switch eventType {
 	case "step_started", "step_finished", "step_failed", "step_skipped", "step_retry",
-		"step_fallback", "cache_hit", "on_failure_failed", "store_error":
+		"step_fallback", "step_resumed", "step_changed", "cache_hit", "on_failure_failed", "store_error":
 		return true
 	default:
 		return false

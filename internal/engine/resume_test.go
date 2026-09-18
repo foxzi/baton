@@ -8,6 +8,7 @@ import (
 
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/runstore"
+	"github.com/foxzi/baton/internal/scenario"
 )
 
 // 1. A resumed step is not executed: the command that would fail is never
@@ -26,8 +27,11 @@ steps:
       parse: text
 `
 	eng, store, _ := newTestEngine(t, yamlText, func(opts *Options) {
-		opts.Resume = map[string]expr.Step{
-			"first": {Result: "one", Stdout: "one\n", ExitCode: 0},
+		opts.Resume = map[string]ResumedStep{
+			"first": {
+				Output:     expr.Step{Result: "one", Stdout: "one\n", ExitCode: 0},
+				Definition: definitionHash(&scenario.Step{ID: "first", Run: &scenario.RunStep{Argv: []string{"false"}}}),
+			},
 		}
 		opts.ResumeOf = "base"
 	})
@@ -107,11 +111,60 @@ steps:
 	if !found {
 		t.Fatalf("resume = %v, want the ok step", resume)
 	}
-	if ok.Result != "done\n" {
-		t.Errorf("resumed result = %q, want the parsed output", ok.Result)
+	if ok.Output.Result != "done\n" {
+		t.Errorf("resumed result = %q, want the parsed output", ok.Output.Result)
 	}
-	if ok.Stdout != "done\n" {
-		t.Errorf("resumed stdout = %q, want the recorded stdout", ok.Stdout)
+	if ok.Output.Stdout != "done\n" {
+		t.Errorf("resumed stdout = %q, want the recorded stdout", ok.Output.Stdout)
+	}
+	if ok.Definition == "" || ok.Definition != state.Steps["ok"].Definition {
+		t.Errorf("resumed definition = %q, want the hash run.json recorded (%q)", ok.Definition, state.Steps["ok"].Definition)
+	}
+}
+
+// 4. A step edited since the previous run is executed again instead of
+// replayed, and so is a record without a definition hash from an older
+// baton (section 10.4).
+func TestResume_ChangedStepIsExecutedAgain(t *testing.T) {
+	yamlText := `
+name: changed
+steps:
+  - id: first
+    run:
+      argv: ["echo", "fresh"]
+      parse: text
+`
+	cases := map[string]string{
+		"changed definition": "stale-hash",
+		"missing definition": "",
+	}
+	for name, definition := range cases {
+		t.Run(name, func(t *testing.T) {
+			eng, store, _ := newTestEngine(t, yamlText, func(opts *Options) {
+				opts.Resume = map[string]ResumedStep{
+					"first": {Output: expr.Step{Result: "stale", Stdout: "stale\n"}, Definition: definition},
+				}
+				opts.ResumeOf = "base"
+			})
+			result, err := eng.Run(t.Context())
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if result.Status != "success" {
+				t.Fatalf("status = %s, error = %+v", result.Status, result.Error)
+			}
+			stdout := readFile(t, filepath.Join(store.Dir(), "steps", "first", "stdout.log"))
+			if strings.TrimSpace(stdout) != "fresh" {
+				t.Errorf("stdout = %q, want the step executed again, not replayed", stdout)
+			}
+			state, err := runstore.ReadRun(filepath.Dir(store.Dir()), "test-run")
+			if err != nil {
+				t.Fatalf("ReadRun: %v", err)
+			}
+			if first := state.Steps["first"]; first == nil || first.Resumed || first.Definition == "" {
+				t.Errorf("step first = %+v, want an executed record with a definition hash", first)
+			}
+		})
 	}
 }
 

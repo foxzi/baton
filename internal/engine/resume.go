@@ -17,11 +17,11 @@ import (
 //
 // A successful step whose output.json cannot be read is left out: the step
 // runs again, which is slower but never wrong.
-func LoadResume(runDir string, state *runstore.RunState) (map[string]expr.Step, error) {
+func LoadResume(runDir string, state *runstore.RunState) (map[string]ResumedStep, error) {
 	if state == nil {
 		return nil, fmt.Errorf("engine: no run state to resume")
 	}
-	steps := map[string]expr.Step{}
+	steps := map[string]ResumedStep{}
 	for id, step := range state.Steps {
 		if step.Status != runstore.StatusSuccess {
 			continue
@@ -30,9 +30,16 @@ func LoadResume(runDir string, state *runstore.RunState) (map[string]expr.Step, 
 		if err != nil {
 			continue
 		}
-		steps[id] = out
+		steps[id] = ResumedStep{Output: out, Definition: step.Definition}
 	}
 	return steps, nil
+}
+
+// ResumedStep is what a previous run recorded for a finished step: its output
+// and the hash of the definition that produced it.
+type ResumedStep struct {
+	Output     expr.Step
+	Definition string
 }
 
 // readStepOutput rebuilds the step result from the files of a step directory.
@@ -60,11 +67,22 @@ func readStepOutput(dir string) (expr.Step, error) {
 // executing it, and reports whether it did (section 10.4). The replayed step
 // gets a step directory and a run.json record of its own, so that the
 // resumed run directory is complete on its own.
+//
+// A step whose definition changed since the previous run is executed again:
+// its recorded output belongs to a step that no longer exists. A record
+// without a definition hash, written by an older baton, is treated the same
+// way.
 func (e *Engine) resumeStep(step *scenario.Step, path string) bool {
-	out, ok := e.opts.Resume[path]
+	resumed, ok := e.opts.Resume[path]
 	if !ok {
 		return false
 	}
+	definition := definitionHash(step)
+	if resumed.Definition == "" || resumed.Definition != definition {
+		e.emit(Event{Type: "step_changed", Step: step.ID, Message: "definition changed since the resumed run, executing again"})
+		return false
+	}
+	out := resumed.Output
 	e.replayStepFiles(path, string(step.Kind()), "resumed", newCachedOutput(out))
 
 	now := e.opts.Now()
@@ -73,6 +91,7 @@ func (e *Engine) resumeStep(step *scenario.Step, path string) bool {
 		StartedAt:  now,
 		FinishedAt: &now,
 		Resumed:    true,
+		Definition: definition,
 	}
 	if step.Run != nil {
 		code := out.ExitCode
