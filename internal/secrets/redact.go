@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/url"
 	"sort"
 	"strings"
@@ -57,12 +58,18 @@ func NewRedactor(secretList ...values.Secret) *Redactor {
 
 // encodedForms returns the plaintext value and the encodings a secret is
 // likely to appear in.
+//
+// The JSON string form matters because the run store redacts bytes after
+// json.Marshal: a secret holding quotes, backslashes, newlines or HTML
+// characters (a multi-line PEM key, for example) no longer matches its
+// plaintext once escaped.
 func encodedForms(value string) []string {
 	if value == "" {
 		return nil
 	}
 	return []string{
 		value,
+		jsonEscaped(value),
 		base64.StdEncoding.EncodeToString([]byte(value)),
 		base64.RawStdEncoding.EncodeToString([]byte(value)),
 		base64.URLEncoding.EncodeToString([]byte(value)),
@@ -70,6 +77,16 @@ func encodedForms(value string) []string {
 		url.QueryEscape(value),
 		url.PathEscape(value),
 	}
+}
+
+// jsonEscaped returns value as it appears inside a JSON string literal,
+// without the surrounding quotes.
+func jsonEscaped(value string) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	return string(data[1 : len(data)-1])
 }
 
 // String redacts every known secret form in text.

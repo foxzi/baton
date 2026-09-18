@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/url"
 	"strings"
 	"testing"
@@ -74,6 +75,27 @@ func TestRedactorEncodedForms(t *testing.T) {
 				t.Errorf("String() = %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+// TestRedactorJSONEscaped checks that a secret containing characters JSON
+// must escape is still redacted after the surrounding document has been
+// marshaled, which is how the run store writes run.json and events.jsonl.
+func TestRedactorJSONEscaped(t *testing.T) {
+	secret := "-----BEGIN KEY-----\nab\"c\\d<e>&f\n-----END KEY-----"
+	r := NewRedactor(values.NewSecret("key", secret))
+
+	doc, err := json.Marshal(map[string]string{"token": secret, "note": "ok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(r.Bytes(doc))
+	want := `{"note":"ok","token":"***"}`
+	if got != want {
+		t.Errorf("Bytes() = %s, want %s", got, want)
+	}
+	if strings.Contains(got, "BEGIN KEY") {
+		t.Errorf("secret leaked through JSON escaping: %s", got)
 	}
 }
 
