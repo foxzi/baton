@@ -200,7 +200,7 @@ func (e *Engine) resolveCwd(stepID, cwd string) (string, *Error) {
 // input.json. Secret values reach the child process and nothing else: they
 // are never rendered, logged or written to the run directory (section 6).
 func (e *Engine) buildEnv(stepID string, declared map[string]scenario.EnvValue) ([]string, []string, *Error) {
-	vals, names, stepErr := e.envMap(stepID, "run.env", declared)
+	vals, names, stepErr := e.stepEnv(stepID, "run.env", declared)
 	if stepErr != nil {
 		return nil, nil, stepErr
 	}
@@ -209,6 +209,34 @@ func (e *Engine) buildEnv(stepID string, declared map[string]scenario.EnvValue) 
 		env = append(env, name+"="+vals[name])
 	}
 	return env, names, nil
+}
+
+// stepEnv resolves the environment of a step's process: the scenario-wide
+// env first, the step's own declarations on top of it. An entry the step
+// overrides is not resolved from the scenario at all, so a step may replace
+// a shared secret reference with a literal without that secret being needed
+// (section 3.1).
+func (e *Engine) stepEnv(stepID, field string, declared map[string]scenario.EnvValue) (map[string]string, []string, *Error) {
+	shared := make(map[string]scenario.EnvValue, len(e.opts.Scenario.Env))
+	for name, entry := range e.opts.Scenario.Env {
+		if _, overridden := declared[name]; !overridden {
+			shared[name] = entry
+		}
+	}
+	vals, names, stepErr := e.envMap(stepID, "env", shared)
+	if stepErr != nil {
+		return nil, nil, stepErr
+	}
+	own, ownNames, stepErr := e.envMap(stepID, field, declared)
+	if stepErr != nil {
+		return nil, nil, stepErr
+	}
+	for name, value := range own {
+		vals[name] = value
+	}
+	names = append(names, ownNames...)
+	sort.Strings(names)
+	return vals, names, nil
 }
 
 // envMap resolves declared environment variables to their values, with the

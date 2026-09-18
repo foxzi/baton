@@ -23,8 +23,14 @@ type Scenario struct {
 	Defaults    Defaults          `yaml:"defaults"`
 	Budget      Budget            `yaml:"budget"`
 	Secrets     map[string]Secret `yaml:"secrets"`
-	Steps       []Step            `yaml:"steps"`
-	OnFailure   []Step            `yaml:"on_failure"`
+
+	// Env is the environment every process of the run gets: run steps,
+	// agent processes and commands. A step's own env entry of the same name
+	// overrides it (spec section 3.1).
+	Env map[string]EnvValue `yaml:"env"`
+
+	Steps     []Step `yaml:"steps"`
+	OnFailure []Step `yaml:"on_failure"`
 
 	// APIs binds API packs to the names their operations are called under
 	// (spec section 7.4.1).

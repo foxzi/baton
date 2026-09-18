@@ -108,7 +108,7 @@ func (m *MCP) start(ctx context.Context, name string, server MCPServer, opts MCP
 	if len(server.Command) == 0 {
 		return fmt.Errorf("no command")
 	}
-	env, err := processEnv(opts.Secrets, server.Env)
+	env, err := processEnv(opts.Secrets, nil, server.Env)
 	if err != nil {
 		return err
 	}

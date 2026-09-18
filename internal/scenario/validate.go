@@ -141,6 +141,7 @@ func Validate(scn *Scenario) Result {
 
 	validateInputs(scn, &res)
 	validateSecrets(scn, &res)
+	validateEnv(scn, scn.Env, "env", scn.lineOf("env"), &res)
 	validateAPIs(scn, &res)
 	validateCommands(scn, &res)
 

@@ -14,15 +14,28 @@ import (
 var keptVars = []string{"PATH", "HOME", "GOCACHE", "GOPATH", "GOFLAGS"}
 
 // processEnv builds the environment of a process the runner starts for an
-// agent: the minimal allow list plus what the scenario or the configuration
-// declares, secrets included. Secrets reach the child process and nothing
-// else: they are not written to the run directory.
-func processEnv(secrets SecretSource, declared map[string]scenario.EnvValue) ([]string, error) {
-	env := make([]string, 0, len(keptVars)+len(declared))
+// agent: the minimal allow list, the scenario-wide env the runner already
+// resolved, then what the scenario or the configuration declares, secrets
+// included. A declared entry overrides a shared one of the same name.
+// Secrets reach the child process and nothing else: they are not written to
+// the run directory.
+func processEnv(secrets SecretSource, shared map[string]string, declared map[string]scenario.EnvValue) ([]string, error) {
+	env := make([]string, 0, len(keptVars)+len(shared)+len(declared))
 	for _, name := range keptVars {
 		if value, ok := os.LookupEnv(name); ok {
 			env = append(env, name+"="+value)
 		}
+	}
+
+	sharedNames := make([]string, 0, len(shared))
+	for name := range shared {
+		if _, overridden := declared[name]; !overridden {
+			sharedNames = append(sharedNames, name)
+		}
+	}
+	sort.Strings(sharedNames)
+	for _, name := range sharedNames {
+		env = append(env, name+"="+shared[name])
 	}
 
 	names := make([]string, 0, len(declared))

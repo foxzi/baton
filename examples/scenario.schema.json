@@ -67,6 +67,29 @@
         "$ref": "#/$defs/secret"
       }
     },
+    "env": {
+      "description": "Environment of every process of the run: run steps, agent processes and commands. A step's own env entry of the same name overrides it.",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/template"
+          },
+          {
+            "type": "object",
+            "required": [
+              "secret"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "secret": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
     "apis": {
       "type": "object",
       "additionalProperties": {

@@ -348,6 +348,36 @@ func TestCommandEnvIsMinimal(t *testing.T) {
 	}
 }
 
+// TestCommandEnvShared checks that the scenario's shared environment reaches
+// a command and that a command's own declared entry of the same name
+// overrides it.
+func TestCommandEnvShared(t *testing.T) {
+	bin := script(t, t.TempDir(), "env.sh", "env")
+	c := newCommands(t, t.TempDir(), map[string]scenario.Command{
+		"env": {
+			Argv: []string{bin},
+			Env: map[string]scenario.EnvValue{
+				"PLAIN": {Value: "own"},
+			},
+		},
+	})
+	c.shared = map[string]string{"SHARED": "from-scenario", "PLAIN": "from-scenario"}
+
+	response, err := call(t, c, "env", `{}`)
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	if !strings.Contains(response.Stdout, "SHARED=from-scenario") {
+		t.Errorf("env is missing the shared entry:\n%s", response.Stdout)
+	}
+	if !strings.Contains(response.Stdout, "PLAIN=own") {
+		t.Errorf("env is missing the overriding declared entry:\n%s", response.Stdout)
+	}
+	if strings.Contains(response.Stdout, "PLAIN=from-scenario") {
+		t.Error("the declared entry did not override the shared one")
+	}
+}
+
 func TestCommandUnknownSecretIsRefused(t *testing.T) {
 	c := newCommands(t, t.TempDir(), map[string]scenario.Command{
 		"env": {Argv: []string{"true"}, Env: map[string]scenario.EnvValue{"TOKEN": {Secret: "missing"}}},

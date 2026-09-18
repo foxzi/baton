@@ -912,3 +912,58 @@ func TestNew_RejectsMissingRequiredFields(t *testing.T) {
 		t.Error("New with a nil store succeeded, want error")
 	}
 }
+
+// 21. Top-level scenario env reaches a run step's process, and the step's
+// own env of the same name overrides it without resolving the shared entry.
+func TestRun_ScenarioEnvSharedWithStep(t *testing.T) {
+	yamlText := `
+version: 1
+name: shared-env
+env:
+  SHARED: from-scenario
+  OVERRIDE: from-scenario
+steps:
+  - id: check
+    run:
+      argv: ["sh", "-c", "echo SHARED=$SHARED; echo OVERRIDE=$OVERRIDE"]
+      env:
+        OVERRIDE: from-step
+`
+	eng, store, _ := newTestEngine(t, yamlText, nil)
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q, want success", result.Status)
+	}
+
+	stdout := readFile(t, filepath.Join(store.Dir(), "steps", "check", "stdout.log"))
+	if !strings.Contains(stdout, "SHARED=from-scenario") {
+		t.Errorf("stdout does not have the shared value: %q", stdout)
+	}
+	if !strings.Contains(stdout, "OVERRIDE=from-step") {
+		t.Errorf("stdout does not have the step's overriding value: %q", stdout)
+	}
+	if strings.Contains(stdout, "OVERRIDE=from-scenario") {
+		t.Errorf("the step's env did not override the shared entry: %q", stdout)
+	}
+
+	var input struct {
+		Env []string `json:"env"`
+	}
+	data := readFile(t, filepath.Join(store.Dir(), "steps", "check", "input.json"))
+	if err := json.Unmarshal([]byte(data), &input); err != nil {
+		t.Fatalf("unmarshal input.json: %v", err)
+	}
+	counts := map[string]int{}
+	for _, name := range input.Env {
+		counts[name]++
+	}
+	if counts["OVERRIDE"] != 1 {
+		t.Errorf("input.json env has OVERRIDE %d times, want 1: %v", counts["OVERRIDE"], input.Env)
+	}
+	if counts["SHARED"] != 1 {
+		t.Errorf("input.json env has SHARED %d times, want 1: %v", counts["SHARED"], input.Env)
+	}
+}

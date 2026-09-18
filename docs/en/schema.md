@@ -17,6 +17,7 @@ Generated from the JSON Schema that `baton schema` prints, so it always describe
 | `defaults` | object | no |  |
 | `budget` | object | no |  |
 | `secrets` | map of name to [secret](#secret) | no |  |
+| `env` | map of name to [template](#template) or object | no | Environment of every process of the run: run steps, agent processes and commands. A step's own env entry of the same name overrides it. |
 | `apis` | map of name to [api](#api) | no |  |
 | `commands` | map of name to [command](#command) | no |  |
 | `steps` | array of [step](#step) | yes | At least items: 1. |
@@ -42,6 +43,14 @@ No other fields are allowed.
 | `usd` | number | no | Minimum 0. |
 | `time` | [duration](#duration) | no |  |
 | `tokens` | integer | no | Minimum 0. |
+
+No other fields are allowed.
+
+### scenario.env.*
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `secret` | string | yes |  |
 
 No other fields are allowed.
 

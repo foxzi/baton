@@ -80,6 +80,9 @@ type agentCall struct {
 	policy agent.Policy
 	skills []string
 	env    map[string]string
+	// shared is the scenario-wide env alone, for the commands the agent
+	// runs: they get it, but not the agent process's own env (section 7.5).
+	shared map[string]string
 	// budget is the step's dollar cap, from the step or from defaults.
 	budget float64
 	// startedAt is when the step began, for the duration in cost.json.
@@ -118,7 +121,10 @@ func (e *Engine) prepareAgent(step *scenario.Step) (*agentCall, *Error) {
 		call.skills = append(call.skills, dir)
 	}
 
-	if call.env, _, stepErr = e.envMap(step.ID, "agent.env", body.Env); stepErr != nil {
+	if call.env, _, stepErr = e.stepEnv(step.ID, "agent.env", body.Env); stepErr != nil {
+		return nil, stepErr
+	}
+	if call.shared, _, stepErr = e.envMap(step.ID, "env", e.opts.Scenario.Env); stepErr != nil {
 		return nil, stepErr
 	}
 	return call, nil
@@ -248,6 +254,7 @@ func (e *Engine) agentToolSet(ctx context.Context, step *scenario.Step, call *ag
 		Declared:  e.opts.Scenario.Commands,
 		Policy:    call.policy,
 		Secrets:   e.secretSource(),
+		Env:       call.shared,
 		// The commands of a step share half of its timeout (section 7.5).
 		Budget:         e.stepLimit(step) / 2,
 		MaxOutputBytes: call.policy.MaxResultBytes,

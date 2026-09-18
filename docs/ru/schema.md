@@ -17,6 +17,7 @@
 | `defaults` | object | нет |  |
 | `budget` | object | нет |  |
 | `secrets` | отображение имени в [secret](#secret) | нет |  |
+| `env` | отображение имени в [template](#template) или object | нет | Environment of every process of the run: run steps, agent processes and commands. A step's own env entry of the same name overrides it. |
 | `apis` | отображение имени в [api](#api) | нет |  |
 | `commands` | отображение имени в [command](#command) | нет |  |
 | `steps` | массив из [step](#step) | да | Элементов не менее: 1. |
@@ -42,6 +43,14 @@
 | `usd` | number | нет | Минимум 0. |
 | `time` | [duration](#duration) | нет |  |
 | `tokens` | integer | нет | Минимум 0. |
+
+Другие поля не допускаются.
+
+### scenario.env.*
+
+| Поле | Тип | Обязательное | Описание |
+|---|---|---|---|
+| `secret` | string | да |  |
 
 Другие поля не допускаются.
 

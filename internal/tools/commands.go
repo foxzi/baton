@@ -44,6 +44,10 @@ type CommandOptions struct {
 
 	Secrets SecretSource
 
+	// Env is the scenario-wide environment, already resolved by the runner;
+	// a command's own env entry of the same name overrides it.
+	Env map[string]string
+
 	// Budget is the wall clock all of the step's command calls share; the
 	// runner sets it to half the step's timeout (spec section 7.5).
 	Budget time.Duration
@@ -73,6 +77,7 @@ type Commands struct {
 	workspace string
 	commands  map[string]scenario.Command
 	secrets   SecretSource
+	shared    map[string]string
 	renderer  *tmpl.Renderer
 	maxBytes  int64
 
@@ -117,6 +122,7 @@ func NewCommands(opts CommandOptions) (*Commands, error) {
 		workspace: opts.Workspace,
 		commands:  selected,
 		secrets:   opts.Secrets,
+		shared:    opts.Env,
 		renderer:  tmpl.NewRenderer(opts.Workspace),
 		maxBytes:  maxBytes,
 		bounded:   opts.Budget > 0,
@@ -262,10 +268,10 @@ func (c *Commands) renderArgv(id string, argv []string, args map[string]string) 
 	return rendered, nil
 }
 
-// env builds the command's environment out of the runner's allow list and
-// what the command declares.
+// env builds the command's environment out of the runner's allow list, the
+// scenario-wide env and what the command declares.
 func (c *Commands) env(declared map[string]scenario.EnvValue) ([]string, error) {
-	return processEnv(c.secrets, declared)
+	return processEnv(c.secrets, c.shared, declared)
 }
 
 // take reserves time for one call out of the step's shared budget.

@@ -1129,6 +1129,42 @@ steps:
 			checkOK:     true,
 			checkNoWarn: true,
 		},
+		{
+			name: "top level env references undeclared secret",
+			yaml: `
+version: 1
+name: valid
+env:
+  TOKEN:
+    secret: nope
+steps:
+  - id: s
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: `env.TOKEN: undeclared secret "nope"`,
+		},
+		{
+			name: "top level env valid literal and declared secret",
+			yaml: `
+version: 1
+name: valid
+secrets:
+  tok:
+    from: env
+    key: TOK
+env:
+  MODE: production
+  TOKEN:
+    secret: tok
+steps:
+  - id: s
+    run:
+      argv: ["echo", "hi"]
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
 	}
 
 	for _, tc := range cases {

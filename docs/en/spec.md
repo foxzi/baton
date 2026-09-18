@@ -103,6 +103,7 @@ budget:
   tokens: 200000        # total input+output tokens for the run
 
 secrets: { ... }       # section 6
+env:     { ... }       # shared environment, see below
 apis:    { ... }       # section 7.4
 commands:              # section 7.5
   test: { argv: ["go", "test", "./..."] }
@@ -117,6 +118,7 @@ Rules:
 - `inputs` are typed: `string | int | number | bool | list | map`; `pattern` is required for string inputs that end up in command argv
 - `defaults` apply to steps whose field is not set
 - Paths to prompt files, schemas, templates and skills are given relative to the scenario file
+- `env` is the environment of every process the run starts — `run` steps, agent processes and `commands`; a step's or command's own `env` entry of the same name overrides it. The entry forms are the same as in `run.env` (a literal template or `{ secret: name }`), and the same rules for secrets apply. MCP servers are configured in the global config and do not receive it.
 
 ### 3.2 Common step fields
 
@@ -150,6 +152,19 @@ Exactly one of the fields `run`, `http`, `llm`, `agent`, `foreach`, `until`, `as
 ```
 
 No `sh -c`. If the user passes `run: "a string"`, validation accepts it only if the string contains no shell metacharacters, and splits it on whitespace with a warning. Result: `stdout`, `stderr`, `exit_code`, `result` (with `parse: json`).
+
+Passing values between steps. A step's environment is built from the scenario-level `env` plus its own `run.env`. To pass a value computed by one step into another, use a template in `env`:
+
+```yaml
+- id: version
+  run: { argv: ["git", "describe", "--tags"], parse: lines }
+- id: build
+  run:
+    argv: ["make", "build"]
+    env: { VERSION: "{{ index .steps.version.result 0 }}" }
+```
+
+With `parse: json` a step's fields are available the same way, e.g. `{{ .steps.cfg.result.x }}`. Steps do not export variables implicitly: a child process's own environment changes are never propagated to later steps.
 
 ### 3.4 `http`
 
