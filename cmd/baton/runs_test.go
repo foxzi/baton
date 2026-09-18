@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,5 +190,53 @@ func TestRunsDirFromEnv(t *testing.T) {
 	})
 	if !strings.Contains(stdout, runID) {
 		t.Fatalf("list output = %q", stdout)
+	}
+}
+
+func TestRunsListJSON(t *testing.T) {
+	runsDir, runID := makeRun(t, helloScenario)
+
+	var code int
+	stdout, _ := captureOutput(t, func() {
+		code = runsListCmd([]string{"--runs-dir", runsDir, "--json"})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.OK)
+	}
+	var runs []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &runs); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("got %d runs, want 1", len(runs))
+	}
+	if runs[0]["id"] != runID {
+		t.Fatalf("id = %v, want %q", runs[0]["id"], runID)
+	}
+}
+
+func TestRunsShowJSON(t *testing.T) {
+	runsDir, runID := makeRun(t, helloScenario)
+
+	var code int
+	stdout, _ := captureOutput(t, func() {
+		code = runsShowCmd([]string{runID, "--runs-dir", runsDir, "--json"})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, want %d", code, exitcode.OK)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout)
+	}
+	run, ok := out["run"].(map[string]any)
+	if !ok {
+		t.Fatalf("run field missing or not an object: %v", out)
+	}
+	if run["id"] != runID {
+		t.Fatalf("run.id = %v, want %q", run["id"], runID)
+	}
+	if _, ok := out["cost"]; !ok {
+		t.Fatalf("cost field missing: %v", out)
 	}
 }

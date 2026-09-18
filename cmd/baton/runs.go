@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -13,14 +14,15 @@ import (
 )
 
 const runsUsage = `Usage:
-  baton runs list [--runs-dir DIR] [-n 20]
-  baton runs show <run-id> [--runs-dir DIR]
+  baton runs list [--runs-dir DIR] [-n 20] [--json]
+  baton runs show <run-id> [--runs-dir DIR] [--json]
   baton runs logs <run-id> [--runs-dir DIR] [--step ID]
 
 Options:
   --runs-dir DIR   Directory holding the runs (default: $BATON_RUNS_DIR or ./runs)
-  -n N             Number of runs to list (default 20)
+  -n N, --limit N  Number of runs to list (default 20)
   --step ID        Show the logs of this step only
+  --json           Print JSON instead of text
 `
 
 // runsSubcommands lists runs's subcommands, for suggesting a close match on
@@ -64,12 +66,15 @@ func runsListCmd(args []string) int {
 	var (
 		runsDir string
 		limit   int
+		asJSON  bool
 	)
 	flags := flag.NewFlagSet("runs list", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	flags.Usage = func() { fmt.Fprint(os.Stderr, runsUsage) }
 	flags.StringVar(&runsDir, "runs-dir", "", "run directory root")
 	flags.IntVar(&limit, "n", 20, "number of runs to list")
+	flags.IntVar(&limit, "limit", 20, "number of runs to list")
+	flags.BoolVar(&asJSON, "json", false, "print JSON instead of text")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
 		return flagsExitCode(err)
@@ -87,6 +92,15 @@ func runsListCmd(args []string) int {
 	if limit > 0 && len(runs) > limit {
 		runs = runs[:limit]
 	}
+	if asJSON {
+		if runs == nil {
+			runs = []*runstore.RunState{}
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(runs)
+		return exitcode.OK
+	}
 	for _, state := range runs {
 		fmt.Printf("%-24s %-8s %-10s %s%s\n",
 			state.ID,
@@ -99,11 +113,15 @@ func runsListCmd(args []string) int {
 }
 
 func runsShowCmd(args []string) int {
-	var runsDir string
+	var (
+		runsDir string
+		asJSON  bool
+	)
 	flags := flag.NewFlagSet("runs show", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	flags.Usage = func() { fmt.Fprint(os.Stderr, runsUsage) }
 	flags.StringVar(&runsDir, "runs-dir", "", "run directory root")
+	flags.BoolVar(&asJSON, "json", false, "print JSON instead of text")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
 		return flagsExitCode(err)
@@ -118,6 +136,21 @@ func runsShowCmd(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
 		return exitcode.Config
+	}
+
+	if asJSON {
+		report, err := runstore.ReadCost(dir, state.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+			return exitcode.Config
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(struct {
+			Run  *runstore.RunState   `json:"run"`
+			Cost *runstore.CostReport `json:"cost"`
+		}{Run: state, Cost: report})
+		return exitcode.OK
 	}
 
 	fmt.Printf("run:      %s\n", state.ID)

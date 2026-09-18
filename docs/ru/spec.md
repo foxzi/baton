@@ -826,10 +826,12 @@ runs/<id>/
 ```
 baton run <scenario.yaml> [-i key=val]... [--input-file f.json] [--run-id ID]
           [--runs-dir DIR] [--workspace DIR] [--no-cache] [--dry-run] [--json] [-v]
-baton validate <scenario.yaml>            # только валидация, код 0/3
+baton validate <scenario.yaml> [--json]   # только валидация, код 0/3
+baton doctor <scenario.yaml>              # сценарий, конфиг, провайдеры, файлы: без запуска шагов
+baton init <directory>                    # самодостаточный пример сценария с его файлами
 baton resume <run-id> [--runs-dir DIR]
-baton runs list [--runs-dir DIR] [-n 20]
-baton runs show <run-id>                  # сводка, стоимость, статусы шагов
+baton runs list [--runs-dir DIR] [-n 20] [--json]
+baton runs show <run-id> [--json]         # сводка, стоимость, статусы шагов
 baton runs logs <run-id> [--step ID]      # stdout/stderr шага
 baton tools <scenario.yaml> --step ID     # что увидит агент: имена, схемы, описания
 baton schema                              # JSON Schema сценария на stdout

@@ -826,10 +826,12 @@ Every successful step record in `run.json` carries `definition`, the hash of the
 ```
 baton run <scenario.yaml> [-i key=val]... [--input-file f.json] [--run-id ID]
           [--runs-dir DIR] [--workspace DIR] [--no-cache] [--dry-run] [--json] [-v]
-baton validate <scenario.yaml>            # validation only, code 0/3
+baton validate <scenario.yaml> [--json]   # validation only, code 0/3
+baton doctor <scenario.yaml>              # scenario, config, providers, files: no step runs
+baton init <directory>                    # a self-contained example scenario with its files
 baton resume <run-id> [--runs-dir DIR]
-baton runs list [--runs-dir DIR] [-n 20]
-baton runs show <run-id>                  # summary, cost, step statuses
+baton runs list [--runs-dir DIR] [-n 20] [--json]
+baton runs show <run-id> [--json]         # summary, cost, step statuses
 baton runs logs <run-id> [--step ID]      # step stdout/stderr
 baton tools <scenario.yaml> --step ID     # what the agent will see: names, schemas, descriptions
 baton schema                              # scenario JSON Schema on stdout
