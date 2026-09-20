@@ -24,10 +24,11 @@ type PruneOptions struct {
 // Prune deletes run directories and returns the ids it removed, newest
 // first. A run is removed when it falls outside the Keep newest ones or is
 // older than OlderThan; either condition alone is enough. A run still marked
-// running is never removed by Keep alone, since it may be live: only an age
-// past OlderThan removes it, on the grounds that a run that old is a crash
-// that never wrote its end, not a run still going. Directories without a
-// readable run.json are left alone.
+// running or waiting is never removed by Keep alone, since it may be live or
+// pending a decision: only an age past OlderThan removes it, on the grounds
+// that a run that old is a crash that never wrote its end or a question
+// nobody is going to answer. Directories without a readable run.json are
+// left alone.
 func Prune(runsDir string, opts PruneOptions) ([]string, error) {
 	if opts.Keep <= 0 && opts.OlderThan <= 0 {
 		return nil, fmt.Errorf("runstore: prune needs a keep count or an age")
@@ -45,7 +46,7 @@ func Prune(runsDir string, opts PruneOptions) ([]string, error) {
 	for i, state := range runs {
 		beyondKeep := opts.Keep > 0 && i >= opts.Keep
 		tooOld := opts.OlderThan > 0 && now.Sub(runEnd(state)) > opts.OlderThan
-		if state.Status == StatusRunning && !tooOld {
+		if (state.Status == StatusRunning || state.Status == StatusWaiting) && !tooOld {
 			continue
 		}
 		if !beyondKeep && !tooOld {

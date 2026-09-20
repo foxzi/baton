@@ -1417,3 +1417,92 @@ steps:
 		})
 	}
 }
+
+// TestParseValidateGateStep checks the section 3.11 gate: it parses, needs a
+// message, and is only allowed at the top level.
+func TestParseValidateGateStep(t *testing.T) {
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr string
+	}{
+		{
+			name: "valid",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: approve
+    gate:
+      message: "Deploy {{ .inputs.version }}?"
+      notify: ops
+  - id: deploy
+    when: steps.approve.result.decision == "approved"
+    run:
+      argv: ["echo", "deploy"]
+`,
+		},
+		{
+			name: "empty message",
+			yaml: `
+version: 1
+name: invalid
+steps:
+  - id: approve
+    gate:
+      message: "   "
+`,
+			wantErr: "must not be empty",
+		},
+		{
+			name: "retry rejected",
+			yaml: `
+version: 1
+name: invalid
+steps:
+  - id: approve
+    retry: { attempts: 2 }
+    gate:
+      message: "ok?"
+`,
+			wantErr: "a gate takes no retry",
+		},
+		{
+			name: "gate inside loop body",
+			yaml: `
+version: 1
+name: invalid
+steps:
+  - id: each
+    foreach:
+      items: inputs.items
+      step:
+        id: approve
+        gate:
+          message: "ok?"
+`,
+			wantErr: "only be a top-level step",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scn, err := Parse([]byte(tc.yaml), "test.yaml")
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			res := Validate(scn)
+			if tc.wantErr == "" {
+				if !res.OK() {
+					t.Fatalf("OK() = false, Errors = %v", res.Errors)
+				}
+				if scn.Steps[0].Kind() != KindGate {
+					t.Errorf("Kind() = %q, want %q", scn.Steps[0].Kind(), KindGate)
+				}
+				return
+			}
+			if res.OK() || !diagnosticsContain(res.Errors, tc.wantErr) {
+				t.Fatalf("Errors = %v, want one containing %q", res.Errors, tc.wantErr)
+			}
+		})
+	}
+}

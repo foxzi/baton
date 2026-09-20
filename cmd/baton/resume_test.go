@@ -179,3 +179,118 @@ func TestResumeCmd_WrongArgCount(t *testing.T) {
 		t.Errorf("stderr = %q, want the usage message", stderr)
 	}
 }
+
+// gateScenario stops at a gate and branches on the decision.
+const gateScenario = `
+version: 1
+name: gated
+steps:
+  - id: approval
+    gate:
+      message: "Go ahead?"
+  - id: apply
+    needs: [approval]
+    when: 'steps.approval.result.decision == "approved"'
+    run:
+      argv: ["echo", "applied"]
+      readonly: true
+      parse: text
+  - id: cancel
+    needs: [approval]
+    when: 'steps.approval.result.decision == "rejected"'
+    run:
+      argv: ["echo", "cancelled"]
+      readonly: true
+      parse: text
+`
+
+// 5. A run stops at a gate with exit code 5; resume --approve or --reject
+// answers it and the run continues down the matching branch. Rejecting is
+// not a failure (section 3.11).
+func TestResumeCmd_AnswersGate(t *testing.T) {
+	for _, tc := range []struct {
+		flag    string
+		ran     string
+		skipped string
+	}{
+		{"--approve", "apply", "cancel"},
+		{"--reject", "cancel", "apply"},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			dir := t.TempDir()
+			scenarioPath := writeScenario(t, dir, "s.yaml", gateScenario)
+			runsDir := filepath.Join(dir, "runs")
+
+			var code int
+			_, stderr := captureOutput(t, func() {
+				code = runCmd([]string{scenarioPath, "--runs-dir", runsDir, "--run-id", "base"})
+			})
+			if code != exitcode.Waiting {
+				t.Fatalf("run: runCmd() = %d, want %d", code, exitcode.Waiting)
+			}
+			if !strings.Contains(stderr, "waiting at gate approval") || !strings.Contains(stderr, "--approve") {
+				t.Errorf("run stderr = %q, want the waiting hint with the resume commands", stderr)
+			}
+
+			captureOutput(t, func() {
+				code = resumeCmd([]string{"base", "--runs-dir", runsDir, tc.flag, "--reason", "checked"})
+			})
+			if code != exitcode.OK {
+				t.Fatalf("resume %s: resumeCmd() = %d, want %d", tc.flag, code, exitcode.OK)
+			}
+
+			state, err := runstore.ReadRun(runsDir, "base-r1")
+			if err != nil {
+				t.Fatalf("ReadRun(base-r1) error = %v", err)
+			}
+			if state.Status != runstore.StatusSuccess {
+				t.Errorf("status = %s, want %s", state.Status, runstore.StatusSuccess)
+			}
+			if step := state.Steps[tc.ran]; step == nil || step.Status != runstore.StatusSuccess {
+				t.Errorf("step %s = %+v, want success", tc.ran, step)
+			}
+			if step := state.Steps[tc.skipped]; step == nil || step.Status != runstore.StatusSkipped {
+				t.Errorf("step %s = %+v, want skipped", tc.skipped, step)
+			}
+			output := readStepOutput(t, runsDir, "base-r1", "approval")
+			result, _ := output["result"].(map[string]any)
+			if result["reason"] != "checked" {
+				t.Errorf("gate result = %v, want the reason recorded", result)
+			}
+		})
+	}
+}
+
+// 6. A waiting run cannot be resumed without a decision, a run that is not
+// waiting takes none, and the two answers exclude each other.
+func TestResumeCmd_GateFlagsAreChecked(t *testing.T) {
+	dir := t.TempDir()
+	runsDir := filepath.Join(dir, "runs")
+
+	gatePath := writeScenario(t, dir, "gate.yaml", gateScenario)
+	captureOutput(t, func() { runCmd([]string{gatePath, "--runs-dir", runsDir, "--run-id", "waiting"}) })
+
+	failPath := writeScenario(t, dir, "fail.yaml", resumeScenario)
+	captureOutput(t, func() { runCmd([]string{failPath, "--runs-dir", runsDir, "--run-id", "failed"}) })
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no decision", []string{"waiting", "--runs-dir", runsDir}, "--approve or --reject"},
+		{"both", []string{"waiting", "--runs-dir", runsDir, "--approve", "--reject"}, "exclude each other"},
+		{"not waiting", []string{"failed", "--runs-dir", runsDir, "--approve"}, "not waiting at a gate"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var code int
+			_, stderr := captureOutput(t, func() { code = resumeCmd(tc.args) })
+			if code != exitcode.Config {
+				t.Errorf("resumeCmd() = %d, want %d", code, exitcode.Config)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want it to mention %q", stderr, tc.want)
+			}
+		})
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/foxzi/baton/internal/agent"
 	"github.com/foxzi/baton/internal/cache"
 	"github.com/foxzi/baton/internal/config"
+	"github.com/foxzi/baton/internal/exitcode"
 	"github.com/foxzi/baton/internal/expr"
 	"github.com/foxzi/baton/internal/httpx"
 	"github.com/foxzi/baton/internal/notify"
@@ -75,6 +76,8 @@ type Options struct {
 	// ResumeOf is the id of the run this one continues, recorded in
 	// run.json (section 10.4).
 	ResumeOf string
+	// Decision answers the gate the resumed run stopped at (section 3.11).
+	Decision *Decision
 	// NoCache disables reading from the cache; writing continues, so that
 	// the next run can reuse the fresh results (section 10.3).
 	NoCache bool
@@ -112,12 +115,17 @@ type Event struct {
 type Result struct {
 	Status     string
 	FailedStep string
-	Error      *runstore.RunError
-	Duration   time.Duration
+	// WaitingStep is the gate a waiting run stopped at (section 3.11).
+	WaitingStep string
+	Error       *runstore.RunError
+	Duration    time.Duration
 }
 
 // ExitCode is the process exit code for the result (section 9.5).
 func (r *Result) ExitCode() int {
+	if r.Status == runstore.StatusWaiting {
+		return exitcode.Waiting
+	}
 	if r.Error == nil {
 		return ExitCode("")
 	}
@@ -161,6 +169,8 @@ type Engine struct {
 	failure *Error
 	// failedStep is the id of the step that produced failure.
 	failedStep string
+	// waitingStep is the gate the run stopped at, if any.
+	waitingStep string
 }
 
 // New checks the options and prepares an engine.
@@ -239,10 +249,11 @@ func (e *Engine) Run(ctx context.Context) (*Result, error) {
 	}
 
 	result := &Result{
-		Status:     e.state.Status,
-		FailedStep: e.state.FailedStep,
-		Error:      e.state.Error,
-		Duration:   e.opts.Now().Sub(e.startedAt),
+		Status:      e.state.Status,
+		FailedStep:  e.state.FailedStep,
+		WaitingStep: e.state.WaitingStep,
+		Error:       e.state.Error,
+		Duration:    e.opts.Now().Sub(e.startedAt),
 	}
 	e.emit(Event{Type: "run_finished", Message: result.Status, Fields: map[string]any{
 		"duration": result.Duration.String(),
@@ -264,6 +275,14 @@ func (e *Engine) finish(ctx context.Context) {
 	e.state.FinishedAt = &finishedAt
 	defer e.writeCost()
 
+	// A gate is not an outcome: the run stops without an end time and
+	// picks up where it left off (section 3.11).
+	if e.waitingStep != "" {
+		e.state.FinishedAt = nil
+		e.state.Status = runstore.StatusWaiting
+		e.state.WaitingStep = e.waitingStep
+		return
+	}
 	if e.failure == nil {
 		e.state.Status = runstore.StatusSuccess
 		return
@@ -308,6 +327,10 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 		return false
 	}
 
+	if step.Kind() == scenario.KindGate {
+		return e.runGate(ctx, step, path)
+	}
+
 	state := &runstore.StepState{Status: runstore.StatusRunning, StartedAt: e.opts.Now()}
 	e.emit(Event{Type: "step_started", Step: step.ID})
 
@@ -333,13 +356,7 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 		return false
 	}
 
-	state.Status = runstore.StatusFailed
-	state.Error = &runstore.RunError{Class: stepErr.Class, Message: e.redact(stepErr.Msg)}
-	out.Status = expr.StatusFailed
-	out.Result = nil
-	e.steps[step.ID] = out
-	e.record(step.ID, state)
-	e.emit(Event{Type: "step_failed", Step: step.ID, Message: stepErr.Error()})
+	e.failStep(step, state, stepErr, out)
 
 	// continue keeps the run going with a failed step (section 9.2). An
 	// assert is never continued: it stops the run by definition.
@@ -348,6 +365,21 @@ func (e *Engine) runStep(ctx context.Context, step *scenario.Step, path string) 
 	}
 	e.fail(step.ID, stepErr)
 	return true
+}
+
+// failStep records a step that failed, with the output it produced so far.
+func (e *Engine) failStep(step *scenario.Step, state *runstore.StepState, stepErr *Error, out expr.Step) {
+	if state.FinishedAt == nil {
+		finishedAt := e.opts.Now()
+		state.FinishedAt = &finishedAt
+	}
+	state.Status = runstore.StatusFailed
+	state.Error = &runstore.RunError{Class: stepErr.Class, Message: e.redact(stepErr.Msg)}
+	out.Status = expr.StatusFailed
+	out.Result = nil
+	e.steps[step.ID] = out
+	e.record(step.ID, state)
+	e.emit(Event{Type: "step_failed", Step: step.ID, Message: stepErr.Error()})
 }
 
 // attempt executes the step body, retrying per section 9.1 and 9.4.

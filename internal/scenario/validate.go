@@ -259,7 +259,7 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 	switch len(kinds) {
 	case 1:
 	case 0:
-		res.errorf(path, step.Line, "must declare one of run, http, llm, agent, foreach, until, file, assert")
+		res.errorf(path, step.Line, "must declare one of run, http, llm, agent, foreach, until, file, assert, gate")
 		return
 	default:
 		res.errorf(path, step.Line, "must declare exactly one body, got %s", joinKinds(kinds))
@@ -289,6 +289,29 @@ func validateStepBody(scn *Scenario, step *Step, path string, res *Result) {
 		validateFile(step, path+".file", res)
 	case KindNotify:
 		validateNotify(step, path, res)
+	case KindGate:
+		validateGate(step, path+".gate", res)
+	}
+}
+
+// validateGate checks a gate (spec section 3.11): a question to ask. The
+// channel, when named, lives in the global configuration and is checked at
+// run time, like the channel of a notify step.
+func validateGate(step *Step, path string, res *Result) {
+	if strings.TrimSpace(step.Gate.Message) == "" {
+		res.errorf(path+".message", step.Line, "must not be empty")
+	}
+	validateTemplate(path+".message", step.Gate.Message, step.Line, res)
+	if step.Retry != nil || step.Fallback != nil || step.Cache != nil || step.DedupeKey != "" {
+		res.errorf(path, step.Line, "a gate takes no retry, fallback, cache or dedupe_key: it waits for a person")
+	}
+}
+
+// validateNoGate rejects a gate where the run cannot stop and pick up again:
+// inside a loop body or as a fallback.
+func validateNoGate(body *Step, path string, res *Result) {
+	if body != nil && body.Gate != nil {
+		res.errorf(path, body.Line, "a gate can only be a top-level step")
 	}
 }
 
@@ -853,6 +876,7 @@ func validateForeach(scn *Scenario, step *Step, path string, res *Result) {
 	if each.Step.ID != "" {
 		res.errorf(path+".step.id", each.Step.Line, "the body of a foreach has no id of its own")
 	}
+	validateNoGate(each.Step, path+".step", res)
 	validateStepBody(scn, each.Step, path+".step", res)
 	validateExpr(path+".step.when", each.Step.When, each.Step.Line, res)
 }
@@ -881,6 +905,7 @@ func validateUntil(scn *Scenario, step *Step, path string, res *Result) {
 	if loop.Step.ID != "" {
 		res.errorf(path+".step.id", loop.Step.Line, "the body of an until has no id of its own")
 	}
+	validateNoGate(loop.Step, path+".step", res)
 	validateStepBody(scn, loop.Step, path+".step", res)
 	validateExpr(path+".step.when", loop.Step.When, loop.Step.Line, res)
 }
@@ -959,6 +984,7 @@ func validateStepControl(step *Step, path string, declared map[string]bool, res 
 		if step.Fallback == nil {
 			res.errorf(path+".fallback", step.Line, "on_error: fallback requires a fallback body")
 		}
+		validateNoGate(step.Fallback, path+".fallback", res)
 	default:
 		res.errorf(path+".on_error", step.Line, "unknown value %q, want fail, continue or fallback", step.OnError)
 	}

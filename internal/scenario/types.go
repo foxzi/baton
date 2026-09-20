@@ -161,6 +161,7 @@ type Step struct {
 	Foreach *ForeachStep `yaml:"foreach"`
 	Until   *UntilStep   `yaml:"until"`
 	File    *FileStep    `yaml:"file"`
+	Gate    *GateStep    `yaml:"gate"`
 
 	// Bodies of step kinds the runner does not execute yet. These are kept
 	// as raw nodes; yaml.v3 only decodes into a yaml.Node value, never into
@@ -191,6 +192,7 @@ const (
 	KindForeach Kind = "foreach"
 	KindUntil   Kind = "until"
 	KindFile    Kind = "file"
+	KindGate    Kind = "gate"
 	KindSwitch  Kind = "switch"
 	KindNotify  Kind = "notify"
 )
@@ -221,6 +223,9 @@ func (s *Step) Kinds() []Kind {
 	}
 	if s.File != nil {
 		kinds = append(kinds, KindFile)
+	}
+	if s.Gate != nil {
+		kinds = append(kinds, KindGate)
 	}
 	if s.Switch != "" {
 		kinds = append(kinds, KindSwitch)
@@ -372,6 +377,14 @@ func (h *HTTPStep) Raw() bool { return h.Op == "" }
 type AssertStep struct {
 	Condition string `yaml:"condition"`
 	Message   string `yaml:"message"`
+}
+
+// GateStep stops the run until a human decides (spec section 3.11). Message
+// is what they are asked; Notify optionally names a channel of the global
+// configuration the question is sent to.
+type GateStep struct {
+	Message string `yaml:"message"`
+	Notify  string `yaml:"notify"`
 }
 
 // LLMStep calls a language model provider (spec section 3.5).

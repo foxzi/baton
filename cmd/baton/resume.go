@@ -19,10 +19,17 @@ Options:
   --runs-dir DIR   Directory holding the runs (default: $BATON_RUNS_DIR or ./runs)
   --json           Print events as JSONL on stdout; the human log stays on stderr
   -v               Print every event, not just step boundaries
+  --approve        Answer the gate a waiting run stopped at: decision approved
+  --reject         Answer the gate a waiting run stopped at: decision rejected
+  --reason TEXT    Free-text reason recorded with the decision
 
 The steps the original run finished are replayed from its run directory; the
 run continues at the step that failed. Secrets are resolved again. The new run
 keeps the id of the original with an -rN suffix.
+
+A run that stopped at a gate (status waiting) needs --approve or --reject.
+Either continues the run; the gate's result.decision tells the following
+steps which way to branch.
 `
 
 // resumeSuffix matches the -rN suffix of an already resumed run.
@@ -34,6 +41,9 @@ func resumeCmd(args []string) int {
 		runsDir string
 		asJSON  bool
 		verbose bool
+		approve bool
+		reject  bool
+		reason  string
 	)
 
 	flags := flag.NewFlagSet("resume", flag.ContinueOnError)
@@ -42,12 +52,19 @@ func resumeCmd(args []string) int {
 	flags.StringVar(&runsDir, "runs-dir", "", "run directory root")
 	flags.BoolVar(&asJSON, "json", false, "print events as JSONL on stdout")
 	flags.BoolVar(&verbose, "v", false, "print every event")
+	flags.BoolVar(&approve, "approve", false, "approve the gate the run waits at")
+	flags.BoolVar(&reject, "reject", false, "reject the gate the run waits at")
+	flags.StringVar(&reason, "reason", "", "reason recorded with the decision")
 	positional, err := parseFlags(flags, args)
 	if err != nil {
 		return flagsExitCode(err)
 	}
 	if len(positional) != 1 {
 		fmt.Fprint(os.Stderr, resumeUsage)
+		return exitcode.Config
+	}
+	if approve && reject {
+		fmt.Fprintln(os.Stderr, "baton: --approve and --reject exclude each other")
 		return exitcode.Config
 	}
 
@@ -65,6 +82,28 @@ func resumeCmd(args []string) int {
 	if state.Scenario == "" {
 		fmt.Fprintf(os.Stderr, "baton: run %s does not record its scenario, it cannot be resumed\n", runID)
 		return exitcode.Config
+	}
+
+	var decision *engine.Decision
+	switch {
+	case state.Status == runstore.StatusWaiting && !approve && !reject:
+		fmt.Fprintf(os.Stderr, "baton: run %s waits at gate %s: resume it with --approve or --reject\n", runID, state.WaitingStep)
+		return exitcode.Config
+	case state.Status != runstore.StatusWaiting && (approve || reject):
+		fmt.Fprintf(os.Stderr, "baton: run %s is not waiting at a gate, --approve and --reject do not apply\n", runID)
+		return exitcode.Config
+	case approve || reject:
+		gate := state.Steps[state.WaitingStep]
+		if gate == nil {
+			fmt.Fprintf(os.Stderr, "baton: run %s does not record gate %s, it cannot be answered\n", runID, state.WaitingStep)
+			return exitcode.Config
+		}
+		decision = &engine.Decision{
+			Step:       state.WaitingStep,
+			Definition: gate.Definition,
+			Approved:   approve,
+			Reason:     reason,
+		}
 	}
 
 	resume, err := engine.LoadResume(filepath.Join(runsDir, runID), state)
@@ -87,6 +126,7 @@ func resumeCmd(args []string) int {
 		runsDir:      runsDir,
 		resume:       resume,
 		resumeOf:     runID,
+		decision:     decision,
 		asJSON:       asJSON,
 		verbose:      verbose,
 	})

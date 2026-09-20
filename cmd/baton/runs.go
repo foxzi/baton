@@ -30,8 +30,9 @@ Options:
   --dry-run         prune: list what would be removed without removing it
 
 prune needs --keep, --older-than or both; a run matching either is removed.
-A run still marked running is kept by --keep and removed only once it is
-older than --older-than, which treats it as a crash that never finished.
+A run still marked running or waiting at a gate is kept by --keep and removed
+only once it is older than --older-than, which treats it as a crash that never
+finished or a question nobody will answer.
 `
 
 // runsSubcommands lists runs's subcommands, for suggesting a close match on
@@ -297,10 +298,13 @@ func stepDuration(step *runstore.StepState) string {
 }
 
 func failedSuffix(state *runstore.RunState) string {
-	if state.FailedStep == "" {
-		return ""
+	switch {
+	case state.FailedStep != "":
+		return fmt.Sprintf(" (failed at %s)", state.FailedStep)
+	case state.WaitingStep != "":
+		return fmt.Sprintf(" (waiting at %s)", state.WaitingStep)
 	}
-	return fmt.Sprintf(" (failed at %s)", state.FailedStep)
+	return ""
 }
 
 // usd formats a price that may be unknown, as when the model is missing from

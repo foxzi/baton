@@ -25,7 +25,7 @@ Commands:
   run        Execute a scenario
   validate   Check a scenario file and report every problem
   doctor     Check a scenario and its environment, no run, no network
-  resume     Continue a failed run at the step that failed
+  resume     Continue a failed run, or answer the gate a waiting run stopped at
   runs       List runs, show one, print step logs, prune old ones
   tools      Print the tools an agent step would be given
   apis       Generate a pack skeleton from an OpenAPI document

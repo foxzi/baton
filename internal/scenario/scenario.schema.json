@@ -372,6 +372,9 @@
         "file": {
           "$ref": "#/$defs/file"
         },
+        "gate": {
+          "$ref": "#/$defs/gate"
+        },
         "switch": {
           "description": "Subject expression of a switch; sugar over when, expanded at load (spec section 3.10).",
           "type": "string"
@@ -442,6 +445,11 @@
         {
           "required": [
             "notify"
+          ]
+        },
+        {
+          "required": [
+            "gate"
           ]
         }
       ]
@@ -769,6 +777,24 @@
         "step": {
           "description": "The per-iteration body; it has no id of its own.",
           "$ref": "#/$defs/step-body"
+        }
+      }
+    },
+    "gate": {
+      "description": "Stops the run until a person decides; baton resume --approve or --reject continues it and the following steps branch on result.decision (spec section 3.11).",
+      "type": "object",
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "description": "The question to ask, shown in the log and sent to notify.",
+          "$ref": "#/$defs/template"
+        },
+        "notify": {
+          "description": "Name of a channel of the global configuration to send the question to, with the resume command appended.",
+          "type": "string"
         }
       }
     },

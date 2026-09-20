@@ -31,6 +31,9 @@ const (
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
 	StatusSkipped = "skipped"
+	// StatusWaiting marks a run stopped at a gate until a person decides
+	// (spec section 3.11); the step itself carries the same status.
+	StatusWaiting = "waiting"
 )
 
 // RunError describes a run or step failure.
@@ -70,8 +73,10 @@ type RunState struct {
 	Steps      map[string]*StepState `json:"steps,omitempty"`
 	CostUSD    *float64              `json:"cost_usd"`
 	FailedStep string                `json:"failed_step,omitempty"`
-	Error      *RunError             `json:"error,omitempty"`
-	ResumeOf   string                `json:"resume_of,omitempty"`
+	// WaitingStep is the gate a waiting run stopped at (section 3.11).
+	WaitingStep string    `json:"waiting_step,omitempty"`
+	Error       *RunError `json:"error,omitempty"`
+	ResumeOf    string    `json:"resume_of,omitempty"`
 }
 
 // NewID returns a run id of the form YYYYMMDD-HHMMSS-<4 hex>

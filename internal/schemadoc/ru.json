@@ -32,5 +32,8 @@
   "Pattern matched against workspace-relative paths.": "Шаблон, сопоставляемый с путями относительно workspace.",
   "Text written by write and append.": "Текст, записываемый write и append.",
   "Read only: how the file's content becomes the step result.": "Только для read: как содержимое файла становится результатом шага.",
-  "Read only: largest file the step accepts, 1MiB by default; a bigger file is an error.": "Только для read: наибольший файл, который принимает шаг, по умолчанию 1MiB; файл больше — ошибка."
+  "Read only: largest file the step accepts, 1MiB by default; a bigger file is an error.": "Только для read: наибольший файл, который принимает шаг, по умолчанию 1MiB; файл больше — ошибка.",
+  "Stops the run until a person decides; baton resume --approve or --reject continues it and the following steps branch on result.decision (spec section 3.11).": "Останавливает прогон до решения человека; baton resume --approve или --reject продолжает его, а следующие шаги ветвятся по result.decision (ТЗ, раздел 3.11).",
+  "The question to ask, shown in the log and sent to notify.": "Вопрос, который задаётся: выводится в лог и отправляется в notify.",
+  "Name of a channel of the global configuration to send the question to, with the resume command appended.": "Имя канала глобальной конфигурации, куда отправить вопрос вместе с командой resume."
 }

@@ -139,6 +139,8 @@ type runRequest struct {
 	// (section 10.4).
 	resume   map[string]engine.ResumedStep
 	resumeOf string
+	// decision answers the gate the resumed run stopped at (section 3.11).
+	decision *engine.Decision
 }
 
 // execute validates the scenario, prepares the run directory and runs it.
@@ -250,6 +252,7 @@ func execute(req runRequest) int {
 		NoCache:       req.noCache,
 		Resume:        req.resume,
 		ResumeOf:      req.resumeOf,
+		Decision:      req.decision,
 		Workspace:     req.workspace,
 		Config:        cfg,
 		Channels:      channels,
@@ -430,6 +433,11 @@ func printRunSummary(scn *scenario.Scenario, runsDir, runID string, outcome *eng
 	if outcome.Error != nil {
 		fmt.Fprintf(os.Stderr, "failed step %s: %s: %s\n", outcome.FailedStep, outcome.Error.Class, outcome.Error.Message)
 		fmt.Fprintf(os.Stderr, "resume: baton resume %s --runs-dir %s\n", shellQuote(runID), shellQuote(runsDir))
+	}
+	if outcome.Status == runstore.StatusWaiting {
+		fmt.Fprintf(os.Stderr, "waiting at gate %s\n", outcome.WaitingStep)
+		fmt.Fprintf(os.Stderr, "approve: baton resume %s --approve --runs-dir %s\n", shellQuote(runID), shellQuote(runsDir))
+		fmt.Fprintf(os.Stderr, "reject:  baton resume %s --reject --runs-dir %s\n", shellQuote(runID), shellQuote(runsDir))
 	}
 
 	fmt.Fprintf(os.Stderr, "run directory: %s\n", runDir)

@@ -16,6 +16,9 @@ const (
 	Config = 3
 	// Budget means the run exhausted its budget.
 	Budget = 4
+	// Waiting means the run stopped at a gate and waits for baton resume
+	// --approve or --reject.
+	Waiting = 5
 	// Interrupted means the run was cancelled by a signal.
 	Interrupted = 130
 )
