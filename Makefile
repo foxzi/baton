@@ -11,7 +11,7 @@ LDFLAGS := -s -w \
 	-X $(PKG)/internal/version.Commit=$(COMMIT) \
 	-X $(PKG)/internal/version.Date=$(DATE)
 
-.PHONY: all build test race vet fmt lint tidy clean docs docs-check validate-apis validate-examples e2e
+.PHONY: all build test race vet fmt fmt-check lint check tidy clean docs docs-check validate-apis validate-examples e2e
 
 all: fmt vet test build
 
@@ -32,6 +32,14 @@ fmt:
 
 lint:
 	golangci-lint run
+
+# check runs what CI runs, so a push does not go red on something a local
+# command would have caught. Needs golangci-lint on PATH.
+check: fmt-check vet lint docs-check race validate-apis validate-examples
+
+fmt-check:
+	@unformatted="$$(gofmt -l .)"; test -z "$$unformatted" \
+		|| { echo "$$unformatted"; echo 'gofmt: files need formatting, run make fmt'; exit 1; }
 
 tidy:
 	go mod tidy

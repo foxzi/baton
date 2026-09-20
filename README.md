@@ -152,6 +152,7 @@ make build      # builds ./baton with version metadata
 make test       # go test ./...
 make race       # go test -race ./...
 make all        # fmt, vet, test, build
+make check      # everything CI runs: vet, lint, docs-check, race, packs, examples
 make docs       # regenerates docs/{en,ru}/schema.md from the scenario schema
 make validate-apis      # replays every pack's recorded examples
 make validate-examples  # validates every scenario in examples/

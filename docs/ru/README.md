@@ -152,6 +152,7 @@ make build      # собирает ./baton с метаданными верси�
 make test       # go test ./...
 make race       # go test -race ./...
 make all        # fmt, vet, test, build
+make check      # всё, что запускает CI: vet, lint, docs-check, race, паки, примеры
 make docs       # пересобирает docs/{en,ru}/schema.md из схемы сценария
 make validate-apis      # прогоняет записанные примеры каждого пака
 make validate-examples  # проверяет каждый сценарий из examples/
