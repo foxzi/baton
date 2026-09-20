@@ -26,7 +26,6 @@
 
 - Docker-песочница и режим `exec.mode: shell`
 - `baton serve`, вебхуки, встроенное расписание
-- Шаг `gate` с ожиданием человека
 - CLI-агенты, кроме `claude-code` и `codex`
 - Провайдеры секретов `vault`, `sops`, `1password`
 - Параллельное выполнение независимых ветвей DAG (параллелизм только внутри `foreach`)
@@ -293,6 +292,30 @@ on_failure: [ ... ]
 ```
 
 Если `steps.classify` — `llm`-шаг со схемой и поле — `enum`, валидация требует покрытия всех значений либо `default`.
+
+### 3.11 `gate`
+
+```yaml
+- id: approval
+  gate:
+    message: "Применить план для {{ .inputs.project }}?"
+    notify: ops            # необязательно: канал глобальной конфигурации
+- id: apply
+  needs: [approval]
+  when: 'steps.approval.result.decision == "approved"'
+  run: { ... }
+- id: cancel
+  needs: [approval]
+  when: 'steps.approval.result.decision == "rejected"'
+  notify: ops
+  message: "План для {{ .inputs.project }} отклонён"
+```
+
+`gate` останавливает прогон до решения человека. Прогон завершается со статусом `waiting`, полем `waiting_step` в `run.json` и кодом выхода 5; сам шаг записывается как `waiting` со своим хэшем `definition`, шаги после него не выполняются. Отрендеренное сообщение попадает в `input.json` шага и, если `notify` называет канал, в этот канал — с добавленной командой `baton resume <id> --approve | --reject`. Ненастроенный канал — ошибка `config`, а не ожидание: спросить было бы некого.
+
+`baton resume <id> --approve` или `--reject` продолжает прогон (раздел 10.4). Шаг завершается со статусом `success` и `result.decision`, равным `approved` или `rejected`; `--reason TEXT` записывается в `result.reason`. Отказ — не ошибка: следующие шаги ветвятся по решению через `when`, а сценарий, которому отказ должен провалить прогон, добавляет `assert`. Шаг `gate`, изменённый между двумя прогонами, — другой вопрос, и он ждёт заново (`step_changed`).
+
+`gate` бывает только шагом верхнего уровня: не внутри `foreach` или `until`, не в `fallback`. Он не принимает `retry`, `cache` и `dedupe_key`.
 
 ## 4. Валидация сценария
 
@@ -777,6 +800,7 @@ providers:
 | 2 | сработал `assert` |
 | 3 | ошибка конфигурации / валидации / секретов |
 | 4 | исчерпан бюджет |
+| 5 | прогон остановился на `gate` и ждёт `baton resume --approve` или `--reject` |
 | 130 | прерван сигналом |
 
 ### 9.6 Отмена
@@ -823,6 +847,8 @@ runs/<id>/
 
 Каждая успешная запись шага в `run.json` содержит `definition` — хэш определения шага без `id` и `when`. Шаг переигрывается только пока его текущее определение совпадает: шаг, изменённый после исходного прогона, выполняется заново с событием `step_changed`. Запись без `definition`, созданная старой версией baton, тоже выполняется заново.
 
+Прогон со статусом `waiting` (раздел 3.11) возобновляется с `--approve` или `--reject`, один из них обязателен; `--reason TEXT` необязателен. Решение применяется к шагу из `waiting_step`, пока его `definition` совпадает; дальше прогон продолжается за ним. Прогон, который не ждёт, эти флаги не принимает.
+
 ## 11. CLI
 
 ```
@@ -831,7 +857,7 @@ baton run <scenario.yaml> [-i key=val]... [--input-file f.json] [--run-id ID]
 baton validate <scenario.yaml> [--json]   # только валидация, код 0/3
 baton doctor <scenario.yaml>              # сценарий, конфиг, провайдеры, файлы: без запуска шагов
 baton init <directory>                    # самодостаточный пример сценария с его файлами
-baton resume <run-id> [--runs-dir DIR]
+baton resume <run-id> [--runs-dir DIR] [--approve | --reject] [--reason TEXT]
 baton runs list [--runs-dir DIR] [-n 20] [--json]
 baton runs show <run-id> [--json]         # сводка, стоимость, статусы шагов
 baton runs logs <run-id> [--step ID]      # stdout/stderr шага

@@ -115,7 +115,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 ## Status
 
-**Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until`, `file` and `switch` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
+**Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until`, `file`, `switch` and `gate` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
 
 **Outstanding.** The pack set in `apis/` covers `gitlab`, `github`, `gitea`, `jira` (Cloud), `jira-server` (Server/Data Center), `telegram` and `slack`; any other service still needs a pack of its own. GitLab does not implement its interface in full: it has no `post_review` endpoint that takes a batch of line comments.
 
@@ -192,7 +192,7 @@ The provider, the notification channels and the pricing table live in the global
 
 `baton help` lists every command; `baton help <command>` (or `<command> -h`/`--help`) prints that command's own usage and never has a side effect — `baton init -h` prints the template list and exits without writing a file.
 
-Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>` and `runs logs <id>`, and `runs prune --keep 50` or `--older-than 30d` deletes old ones; `baton resume <id>` continues a failed run. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached results, and `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given without running anything. `baton apis import|validate|call` generates a pack from an OpenAPI 3 document, replays its recorded examples, and calls one operation through a scenario's `apis` entry.
+Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>` and `runs logs <id>`, and `runs prune --keep 50` or `--older-than 30d` deletes old ones; `baton resume <id>` continues a failed run, and `resume <id> --approve` or `--reject` answers a `gate` step the run stopped at. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached results, and `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given without running anything. `baton apis import|validate|call` generates a pack from an OpenAPI 3 document, replays its recorded examples, and calls one operation through a scenario's `apis` entry.
 
 ## Documentation
 

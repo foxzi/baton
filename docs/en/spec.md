@@ -26,7 +26,6 @@ Goal: a working binary that can (a) run MR code review from CI on GitLab and Git
 
 - Docker sandbox and `exec.mode: shell` mode
 - `baton serve`, webhooks, built-in scheduling
-- The `gate` step waiting for a human
 - CLI agents other than `claude-code` and `codex`
 - Secret providers `vault`, `sops`, `1password`
 - Parallel execution of independent DAG branches (parallelism only inside `foreach`)
@@ -293,6 +292,30 @@ Sugar over `when`, expanded at load time:
 ```
 
 If `steps.classify` is an `llm` step with a schema and the field is an `enum`, validation requires coverage of all values or a `default`.
+
+### 3.11 `gate`
+
+```yaml
+- id: approval
+  gate:
+    message: "Apply the plan for {{ .inputs.project }}?"
+    notify: ops            # optional: a channel of the global configuration
+- id: apply
+  needs: [approval]
+  when: 'steps.approval.result.decision == "approved"'
+  run: { ... }
+- id: cancel
+  needs: [approval]
+  when: 'steps.approval.result.decision == "rejected"'
+  notify: ops
+  message: "Plan for {{ .inputs.project }} was rejected"
+```
+
+A gate stops the run until a person decides. The run ends with status `waiting`, `waiting_step` in `run.json` and exit code 5; the gate is recorded as `waiting` with its `definition` hash, the steps after it do not run. The rendered message goes to the step's `input.json` and, when `notify` names a channel, to that channel with the `baton resume <id> --approve | --reject` command appended. A channel that is not configured is a `config` error, not a wait: nobody would be asked.
+
+`baton resume <id> --approve` or `--reject` continues the run (section 10.4). The gate finishes with status `success` and `result.decision` set to `approved` or `rejected`; `--reason TEXT` is recorded as `result.reason`. A rejection is not a failure: the following steps branch on the decision with `when`, and a scenario that wants a rejection to fail the run adds an `assert`. A gate edited between the two runs is a different question and waits again (`step_changed`).
+
+A gate is a top-level step only: not inside `foreach` or `until`, not as a `fallback`. It takes no `retry`, `cache` or `dedupe_key`.
 
 ## 4. Scenario Validation
 
@@ -777,6 +800,7 @@ A step with a side effect is any `http` with a method other than `GET/HEAD`, a `
 | 2 | an `assert` triggered |
 | 3 | configuration / validation / secrets error |
 | 4 | budget exhausted |
+| 5 | the run stopped at a `gate` and waits for `baton resume --approve` or `--reject` |
 | 130 | interrupted by a signal |
 
 ### 9.6 Cancellation
@@ -823,6 +847,8 @@ By default `cache: true` for `llm` and `run` with `readonly: true`; `false` for 
 
 Every successful step record in `run.json` carries `definition`, the hash of the step definition without `id` and `when`. A step is replayed only while its current definition matches: a step edited since the original run is executed again and reported with the `step_changed` event. A record without `definition`, written by an older baton, is executed again as well.
 
+A run with status `waiting` (section 3.11) is resumed with `--approve` or `--reject`, one of which is required; `--reason TEXT` is optional. The decision is applied to the gate named by `waiting_step` while its `definition` still matches; the run then continues past it. A run that is not waiting takes neither flag.
+
 ## 11. CLI
 
 ```
@@ -831,7 +857,7 @@ baton run <scenario.yaml> [-i key=val]... [--input-file f.json] [--run-id ID]
 baton validate <scenario.yaml> [--json]   # validation only, code 0/3
 baton doctor <scenario.yaml>              # scenario, config, providers, files: no step runs
 baton init <directory>                    # a self-contained example scenario with its files
-baton resume <run-id> [--runs-dir DIR]
+baton resume <run-id> [--runs-dir DIR] [--approve | --reject] [--reason TEXT]
 baton runs list [--runs-dir DIR] [-n 20] [--json]
 baton runs show <run-id> [--json]         # summary, cost, step statuses
 baton runs logs <run-id> [--step ID]      # step stdout/stderr

@@ -260,7 +260,10 @@ Key facts, each pinned to code:
 - **Resume** (`cmd/baton/resume.go` + `Options.Resume`): steps already
   recorded as successful in a previous run's `run.json` are replayed from
   their stored output instead of re-executed; the engine marks them
-  `Resumed: true` in the new run's state.
+  `Resumed: true` in the new run's state. A run that stopped at a `gate`
+  is resumed the same way, with `Options.Decision` carrying the answer and
+  the gate's recorded `definition` hash; the gate re-executes and turns the
+  decision into `result.decision` instead of waiting again.
 - **Signals**: `run.go` wires `signal.NotifyContext(SIGINT, SIGTERM)`; a
   cancelled run maps to `exitcode.Interrupted` (130).
 
@@ -281,6 +284,7 @@ Each step kind is one function in `internal/engine`, dispatched from
 | `switch` | dispatch inside `engine.go` | picks one of several bodies by expr-lang match |
 | `assert` | `execAssert` | expr-lang boolean check, its own `assert` error class |
 | `notify` | `execNotify` | `internal/notify` channel send |
+| `gate` | `runGate` (`gate.go`) | stops the run as `waiting` (exit 5) until `resume --approve`/`--reject` brings an `Options.Decision`; optional `internal/notify` send |
 
 The HTTP/pack layer (`internal/httpx`, `internal/packs`, `internal/ifaces`)
 is the *only* built-in integration surface for external services: a pack is

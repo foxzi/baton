@@ -152,6 +152,7 @@ The fields of a step without the id rule, so that a foreach body (spec section 3
 | `foreach` | [foreach](#foreach) | no |  |
 | `until` | [until](#until) | no |  |
 | `file` | [file](#file) | no |  |
+| `gate` | [gate](#gate) | no |  |
 | `switch` | string | no | Subject expression of a switch; sugar over when, expanded at load (spec section 3.10). |
 | `cases` | map of name to [step](#step) | no | One step per value of the switch subject. At least fields: 1. |
 | `default` | [step](#step) | no | Step taken when no case matches. |
@@ -300,6 +301,17 @@ Repeats its body until the condition holds (spec section 3.8).
 | `condition` | string | yes | Checked after every iteration, with that iteration in iter. |
 | `max_iterations` | integer | yes | Minimum 1. |
 | `step` | [step-body](#step-body) | yes | The per-iteration body; it has no id of its own. |
+
+No other fields are allowed.
+
+### gate
+
+Stops the run until a person decides; baton resume --approve or --reject continues it and the following steps branch on result.decision (spec section 3.11).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message` | [template](#template) | yes | The question to ask, shown in the log and sent to notify. |
+| `notify` | string | no | Name of a channel of the global configuration to send the question to, with the resume command appended. |
 
 No other fields are allowed.
 

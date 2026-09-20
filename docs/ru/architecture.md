@@ -267,7 +267,10 @@ sequenceDiagram
 - **Resume** (`cmd/baton/resume.go` + `Options.Resume`): шаги, уже
   зафиксированные как успешные в `run.json` предыдущего прогона,
   воспроизводятся из сохранённого вывода вместо повторного выполнения;
-  движок помечает их `Resumed: true` в состоянии нового прогона.
+  движок помечает их `Resumed: true` в состоянии нового прогона. Прогон,
+  остановившийся на `gate`, возобновляется так же: `Options.Decision`
+  несёт ответ и записанный хэш `definition` шага; `gate` выполняется
+  заново и превращает решение в `result.decision`, а не ждёт снова.
 - **Сигналы**: `run.go` подключает
   `signal.NotifyContext(SIGINT, SIGTERM)`; отменённый прогон
   отображается в `exitcode.Interrupted` (130).
@@ -289,6 +292,7 @@ sequenceDiagram
 | `switch` | диспетчеризация внутри `engine.go` | выбирает одно из нескольких тел по совпадению expr-lang |
 | `assert` | `execAssert` | булева проверка expr-lang, собственный класс ошибки `assert` |
 | `notify` | `execNotify` | отправка в канал `internal/notify` |
+| `gate` | `runGate` (`gate.go`) | останавливает прогон как `waiting` (код 5), пока `resume --approve`/`--reject` не принесёт `Options.Decision`; необязательная отправка через `internal/notify` |
 
 Слой HTTP/паков (`internal/httpx`, `internal/packs`, `internal/ifaces`) —
 *единственная* встроенная поверхность интеграции с внешними сервисами:
