@@ -805,6 +805,8 @@ runs/<id>/
   steps/<foreach-id>/<n>/...   foreach elements
 ```
 
+The directory grows with every run and nothing removes runs on its own. `baton runs prune --keep N` and `--older-than 30d` delete the runs outside the newest N or older than the age, either condition alone being enough; both can be combined, and `--dry-run` lists the candidates first. A run still marked `running` is kept by `--keep` and removed only once it is older than `--older-than`, since a run that old is a crash that never wrote its end. Directories without a readable `run.json` are never touched.
+
 ### 10.2 State
 
 `run.json` is updated after every step with an atomic write (temp + rename). The format is JSON with a schema version.
@@ -833,6 +835,7 @@ baton resume <run-id> [--runs-dir DIR]
 baton runs list [--runs-dir DIR] [-n 20] [--json]
 baton runs show <run-id> [--json]         # summary, cost, step statuses
 baton runs logs <run-id> [--step ID]      # step stdout/stderr
+baton runs prune [--keep N] [--older-than 30d] [--dry-run]   # delete old runs; running ones only by age
 baton tools <scenario.yaml> --step ID     # what the agent will see: names, schemas, descriptions
 baton schema                              # scenario JSON Schema on stdout
 baton apis import --openapi f --ops a,b   # pack stub from OpenAPI (section 7.4.7)
@@ -921,7 +924,7 @@ Done: a scenario from `run` → `http: { op: gitlab.post_comment }` → `assert`
 
 ### M2 — LLM and Reports (2 weeks)
 
-The `Provider` interface, implementations `anthropic`, `openai`, `openai_compatible` (+ `openrouter` as its configuration), message and tool-call normalization, three levels of structured output, `fallback_models`, cost accounting; the `llm` step, schemas, `schema`-retry, `foreach`, cache, `resume`, `on_failure`, notification channels, global config, `runs list/show/logs`.
+The `Provider` interface, implementations `anthropic`, `openai`, `openai_compatible` (+ `openrouter` as its configuration), message and tool-call normalization, three levels of structured output, `fallback_models`, cost accounting; the `llm` step, schemas, `schema`-retry, `foreach`, cache, `resume`, `on_failure`, notification channels, global config, `runs list/show/logs/prune`.
 Done: a weekly report across 5 repositories from cron with a Telegram notification; the same scenario runs on `anthropic/…`, `openai/…` and `openrouter/…` with no changes beyond the `model` string; a repeated run spends no tokens.
 
 Order within the milestone: `openai_compatible` first (simplest transport and covers OpenRouter), then `anthropic`, then `openai` with strict JSON Schema.

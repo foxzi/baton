@@ -805,6 +805,8 @@ runs/<id>/
   steps/<foreach-id>/<n>/...   элементы foreach
 ```
 
+Каталог растёт с каждым прогоном, и сам по себе никто его не чистит. `baton runs prune --keep N` и `--older-than 30d` удаляют прогоны за пределами N новейших или старше указанного возраста — достаточно любого из условий; их можно сочетать, а `--dry-run` сначала показывает кандидатов. Прогон со статусом `running` `--keep` не трогает, его удаляет только возраст больше `--older-than`: настолько старый прогон — это упавший процесс, который не записал свой конец. Каталоги без читаемого `run.json` не трогаются никогда.
+
 ### 10.2 Состояние
 
 `run.json` обновляется после каждого шага атомарной записью (temp + rename). Формат — JSON с версией схемы.
@@ -833,6 +835,7 @@ baton resume <run-id> [--runs-dir DIR]
 baton runs list [--runs-dir DIR] [-n 20] [--json]
 baton runs show <run-id> [--json]         # сводка, стоимость, статусы шагов
 baton runs logs <run-id> [--step ID]      # stdout/stderr шага
+baton runs prune [--keep N] [--older-than 30d] [--dry-run]   # удалить старые прогоны; running — только по возрасту
 baton tools <scenario.yaml> --step ID     # что увидит агент: имена, схемы, описания
 baton schema                              # JSON Schema сценария на stdout
 baton apis import --openapi f --ops a,b   # заготовка пака из OpenAPI (раздел 7.4.7)
@@ -921,7 +924,7 @@ mcp_servers:
 
 ### M2 — LLM и отчёты (2 недели)
 
-Интерфейс `Provider`, реализации `anthropic`, `openai`, `openai_compatible` (+ `openrouter` как его конфигурация), нормализация сообщений и tool-calls, три уровня structured output, `fallback_models`, учёт стоимости; `llm`-шаг, схемы, `schema`-retry, `foreach`, кеш, `resume`, `on_failure`, каналы уведомлений, глобальный конфиг, `runs list/show/logs`.
+Интерфейс `Provider`, реализации `anthropic`, `openai`, `openai_compatible` (+ `openrouter` как его конфигурация), нормализация сообщений и tool-calls, три уровня structured output, `fallback_models`, учёт стоимости; `llm`-шаг, схемы, `schema`-retry, `foreach`, кеш, `resume`, `on_failure`, каналы уведомлений, глобальный конфиг, `runs list/show/logs/prune`.
 Готово: еженедельный отчёт по 5 репозиториям из cron с уведомлением в Telegram; один и тот же сценарий проходит на `anthropic/…`, `openai/…` и `openrouter/…` без правок кроме строки `model`; повторный запуск не тратит токены.
 
 Порядок внутри этапа: сначала `openai_compatible` (самый простой транспорт и покрывает OpenRouter), потом `anthropic`, потом `openai` со `strict` JSON Schema.

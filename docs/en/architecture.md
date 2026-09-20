@@ -371,7 +371,9 @@ runs/<run-id>/
   default, `cache/`), keyed by a hash of a step's rendered input; it is not
   part of the run directory and survives across runs on purpose.
 - `baton runs list|show|logs` (`cmd/baton/runs.go` + `internal/runstore/read.go`)
-  only read this directory back; they add no new state.
+  only read this directory back; they add no new state. `baton runs prune`
+  (`internal/runstore/prune.go`) is the one command that deletes from it, by
+  count or age.
 - `baton resume <id>` re-loads the target run's `run.json`, replays its
   successful steps as `Options.Resume`, and creates a *new* run directory
   (`ResumeOf` pointing at the old one) rather than mutating the original.

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/foxzi/baton/internal/exitcode"
 )
@@ -238,5 +239,85 @@ func TestRunsShowJSON(t *testing.T) {
 	}
 	if _, ok := out["cost"]; !ok {
 		t.Fatalf("cost field missing: %v", out)
+	}
+}
+
+func TestRunsPruneKeep(t *testing.T) {
+	runsDir, first := makeRun(t, helloScenario)
+	second := "20240102-120000-abcd"
+	captureOutput(t, func() {
+		runCmd([]string{filepath.Join(filepath.Dir(runsDir), "s.yaml"), "--runs-dir", runsDir, "--run-id", second})
+	})
+
+	var code int
+	stdout, stderr := captureOutput(t, func() {
+		code = runsCmd([]string{"prune", "--runs-dir", runsDir, "--keep", "1"})
+	})
+	if code != exitcode.OK {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr)
+	}
+	if strings.TrimSpace(stdout) != first {
+		t.Errorf("stdout = %q, want the pruned id %q", stdout, first)
+	}
+	if !strings.Contains(stderr, "removed 1 run") {
+		t.Errorf("stderr = %q", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(runsDir, first)); !os.IsNotExist(err) {
+		t.Errorf("%s still exists: %v", first, err)
+	}
+	if _, err := os.Stat(filepath.Join(runsDir, second, "run.json")); err != nil {
+		t.Errorf("newest run was removed: %v", err)
+	}
+}
+
+func TestRunsPruneDryRunAndAge(t *testing.T) {
+	runsDir, runID := makeRun(t, helloScenario)
+
+	var code int
+	stdout, stderr := captureOutput(t, func() {
+		code = runsCmd([]string{"prune", "--runs-dir", runsDir, "--older-than", "1s", "--dry-run"})
+	})
+	// The run just finished; 1s has not necessarily passed, so only the
+	// dry-run wording is certain.
+	if code != exitcode.OK || !strings.Contains(stderr, "would remove") {
+		t.Fatalf("exit code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(runsDir, runID, "run.json")); err != nil {
+		t.Errorf("dry run removed the run: %v", err)
+	}
+
+	stdout, _ = captureOutput(t, func() {
+		code = runsCmd([]string{"prune", "--runs-dir", runsDir, "--older-than", "30d"})
+	})
+	if code != exitcode.OK || stdout != "" {
+		t.Errorf("30d: exit code = %d, stdout = %q, want nothing removed", code, stdout)
+	}
+}
+
+func TestRunsPruneRejectsBadArguments(t *testing.T) {
+	for _, args := range [][]string{
+		{"prune", "--runs-dir", "x"},
+		{"prune", "--runs-dir", "x", "--older-than", "yesterday"},
+		{"prune", "--runs-dir", "x", "--older-than", "-1d"},
+	} {
+		var code int
+		captureOutput(t, func() { code = runsCmd(args) })
+		if code != exitcode.Config {
+			t.Errorf("%v: exit code = %d, want %d", args, code, exitcode.Config)
+		}
+	}
+}
+
+func TestParseAge(t *testing.T) {
+	for text, want := range map[string]time.Duration{"30d": 30 * 24 * time.Hour, "12h": 12 * time.Hour, "90m": 90 * time.Minute} {
+		got, err := parseAge(text)
+		if err != nil || got != want {
+			t.Errorf("parseAge(%q) = %v, %v; want %v", text, got, err, want)
+		}
+	}
+	for _, text := range []string{"", "d", "0d", "1.5d", "soon", "-2h"} {
+		if _, err := parseAge(text); err == nil {
+			t.Errorf("parseAge(%q) = nil error, want error", text)
+		}
 	}
 }

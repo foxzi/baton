@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,17 +18,25 @@ const runsUsage = `Usage:
   baton runs list [--runs-dir DIR] [-n 20] [--json]
   baton runs show <run-id> [--runs-dir DIR] [--json]
   baton runs logs <run-id> [--runs-dir DIR] [--step ID]
+  baton runs prune [--runs-dir DIR] [--keep N] [--older-than DUR] [--dry-run]
 
 Options:
-  --runs-dir DIR   Directory holding the runs (default: $BATON_RUNS_DIR or ./runs)
-  -n N, --limit N  Number of runs to list (default 20)
-  --step ID        Show the logs of this step only
-  --json           Print JSON instead of text
+  --runs-dir DIR    Directory holding the runs (default: $BATON_RUNS_DIR or ./runs)
+  -n N, --limit N   Number of runs to list (default 20)
+  --step ID         Show the logs of this step only
+  --json            Print JSON instead of text
+  --keep N          prune: keep the newest N runs
+  --older-than DUR  prune: remove runs that ended more than DUR ago (30d, 12h, 90m)
+  --dry-run         prune: list what would be removed without removing it
+
+prune needs --keep, --older-than or both; a run matching either is removed.
+A run still marked running is kept by --keep and removed only once it is
+older than --older-than, which treats it as a crash that never finished.
 `
 
 // runsSubcommands lists runs's subcommands, for suggesting a close match on
 // an unknown one.
-var runsSubcommands = []string{"list", "show", "logs"}
+var runsSubcommands = []string{"list", "show", "logs", "prune"}
 
 // runsCmd implements `baton runs` (spec section 11).
 func runsCmd(args []string) int {
@@ -42,6 +51,8 @@ func runsCmd(args []string) int {
 		return runsShowCmd(args[1:])
 	case "logs":
 		return runsLogsCmd(args[1:])
+	case "prune":
+		return runsPruneCmd(args[1:])
 	case "-h", "--help", "help":
 		fmt.Print(runsUsage)
 		return exitcode.OK
@@ -299,4 +310,67 @@ func usd(value *float64) string {
 		return "$?"
 	}
 	return fmt.Sprintf("$%.4f", *value)
+}
+
+func runsPruneCmd(args []string) int {
+	var (
+		runsDir   string
+		keep      int
+		olderThan string
+		dryRun    bool
+	)
+	flags := flag.NewFlagSet("runs prune", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	flags.Usage = func() { fmt.Fprint(os.Stderr, runsUsage) }
+	flags.StringVar(&runsDir, "runs-dir", "", "run directory root")
+	flags.IntVar(&keep, "keep", 0, "keep the newest N runs")
+	flags.StringVar(&olderThan, "older-than", "", "remove runs older than this")
+	flags.BoolVar(&dryRun, "dry-run", false, "list without removing")
+	positional, err := parseFlags(flags, args)
+	if err != nil {
+		return flagsExitCode(err)
+	}
+	if len(positional) != 0 || (keep <= 0 && olderThan == "") {
+		fmt.Fprint(os.Stderr, runsUsage)
+		return exitcode.Config
+	}
+	opts := runstore.PruneOptions{Keep: keep, DryRun: dryRun}
+	if olderThan != "" {
+		if opts.OlderThan, err = parseAge(olderThan); err != nil {
+			fmt.Fprintf(os.Stderr, "baton: --older-than: %v\n", err)
+			return exitcode.Config
+		}
+	}
+
+	removed, err := runstore.Prune(runsDirFlag(runsDir), opts)
+	for _, id := range removed {
+		fmt.Println(id)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baton: %v\n", err)
+		return exitcode.Config
+	}
+	verb := "removed"
+	if dryRun {
+		verb = "would remove"
+	}
+	fmt.Fprintf(os.Stderr, "%s %d run(s)\n", verb, len(removed))
+	return exitcode.OK
+}
+
+// parseAge reads a duration for --older-than. Go durations stop at hours,
+// and an age is most naturally written in days, so a trailing d is allowed.
+func parseAge(text string) (time.Duration, error) {
+	if days, ok := strings.CutSuffix(text, "d"); ok {
+		n, err := strconv.Atoi(days)
+		if err != nil || n <= 0 {
+			return 0, fmt.Errorf("%q is not an age like 30d or 12h", text)
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	age, err := time.ParseDuration(text)
+	if err != nil || age <= 0 {
+		return 0, fmt.Errorf("%q is not an age like 30d or 12h", text)
+	}
+	return age, nil
 }

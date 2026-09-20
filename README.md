@@ -192,7 +192,7 @@ The provider, the notification channels and the pricing table live in the global
 
 `baton help` lists every command; `baton help <command>` (or `<command> -h`/`--help`) prints that command's own usage and never has a side effect — `baton init -h` prints the template list and exits without writing a file.
 
-Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>` and `runs logs <id>`; `baton resume <id>` continues a failed run. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached results, and `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given without running anything. `baton apis import|validate|call` generates a pack from an OpenAPI 3 document, replays its recorded examples, and calls one operation through a scenario's `apis` entry.
+Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>` and `runs logs <id>`, and `runs prune --keep 50` or `--older-than 30d` deletes old ones; `baton resume <id>` continues a failed run. `--dry-run` prints the plan, `--json` prints events as JSONL, `--no-cache` ignores cached results, and `baton tools <scenario.yaml> --step ID` prints the tools an agent step would be given without running anything. `baton apis import|validate|call` generates a pack from an OpenAPI 3 document, replays its recorded examples, and calls one operation through a scenario's `apis` entry.
 
 ## Documentation
 
