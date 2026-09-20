@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -229,6 +230,54 @@ steps:
       argv: ["echo", "hi"]
 `,
 			wantWarn: "ignored unless on_error is fallback",
+		},
+		{
+			name: "fallback body is validated like any other body",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    on_error: fallback
+    fallback:
+      run:
+        argv: []
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: "steps[0].fallback.run.argv",
+		},
+		{
+			name: "fallback with no body at all",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    on_error: fallback
+    fallback:
+      timeout: 5s
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: "must declare one of run, http, llm, agent, foreach, until, file, assert, gate",
+		},
+		{
+			name: "fallback with an id of its own",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    on_error: fallback
+    fallback:
+      id: b
+      run:
+        argv: ["echo", "x"]
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: "a fallback runs under the id of the step it replaces",
 		},
 		{
 			name: "on_error garbage value",
@@ -1497,6 +1546,215 @@ steps:
 				}
 				if scn.Steps[0].Kind() != KindGate {
 					t.Errorf("Kind() = %q, want %q", scn.Steps[0].Kind(), KindGate)
+				}
+				return
+			}
+			if res.OK() || !diagnosticsContain(res.Errors, tc.wantErr) {
+				t.Fatalf("Errors = %v, want one containing %q", res.Errors, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidateScenarioFiles covers specification section 4, check 4: the
+// files a scenario names outright have to be there before the run starts.
+func TestValidateScenarioFiles(t *testing.T) {
+	const scenario = `
+version: 1
+name: files
+steps:
+  - id: classify
+    llm:
+      model: openai/gpt-4o
+      prompt: "say something"
+      schema: schemas/classify.json
+  - id: review
+    agent:
+      engine: claude-code
+      prompt: "review it"
+      result: schemas/review.json
+      skills: [skills/review]
+`
+
+	cases := []struct {
+		name    string
+		write   []string
+		wantErr string
+	}{
+		{
+			name:  "every file is there",
+			write: []string{"schemas/classify.json", "schemas/review.json", "skills/review/SKILL.md"},
+		},
+		{
+			name:    "missing llm schema",
+			write:   []string{"schemas/review.json", "skills/review/SKILL.md"},
+			wantErr: "file schemas/classify.json not found",
+		},
+		{
+			name:    "missing agent result schema",
+			write:   []string{"schemas/classify.json", "skills/review/SKILL.md"},
+			wantErr: "file schemas/review.json not found",
+		},
+		{
+			name:    "skill without a SKILL.md",
+			write:   []string{"schemas/classify.json", "schemas/review.json"},
+			wantErr: "file skills/review/SKILL.md not found",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "scenario.yaml")
+			if err := os.WriteFile(path, []byte(scenario), 0o600); err != nil {
+				t.Fatalf("write the scenario: %v", err)
+			}
+			for _, name := range tc.write {
+				full := filepath.Join(dir, name)
+				if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+					t.Fatalf("create %s: %v", name, err)
+				}
+				if err := os.WriteFile(full, []byte("{}"), 0o600); err != nil {
+					t.Fatalf("write %s: %v", name, err)
+				}
+			}
+
+			scn, err := Parse([]byte(scenario), path)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			res := Validate(scn)
+
+			if tc.wantErr == "" {
+				if !res.OK() {
+					t.Fatalf("OK() = false, Errors = %v", res.Errors)
+				}
+				return
+			}
+			if res.OK() || !diagnosticsContain(res.Errors, tc.wantErr) {
+				t.Fatalf("Errors = %v, want one containing %q", res.Errors, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidatePromptFile covers the prompt half of specification section 4,
+// check 4: a prompt that reads as a path to a file that is not there is
+// reported, because the engine would otherwise send the path itself.
+func TestValidatePromptFile(t *testing.T) {
+	cases := []struct {
+		name     string
+		prompt   string
+		write    bool
+		wantWarn string
+	}{
+		{
+			name:   "inline text is left alone",
+			prompt: "review the change and report",
+		},
+		{
+			name:   "a one-word prompt is not a path",
+			prompt: "review",
+		},
+		{
+			name:   "a prompt file that is there",
+			prompt: "prompts/review.md",
+			write:  true,
+		},
+		{
+			name:     "a prompt file that is not",
+			prompt:   "prompts/review.md",
+			wantWarn: "file prompts/review.md not found",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "scenario.yaml")
+			text := "version: 1\nname: prompts\nsteps:\n  - id: review\n    llm:\n      model: openai/gpt-4o\n      prompt: " +
+				strconv.Quote(tc.prompt) + "\n      schema: schema.json\n"
+			if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+				t.Fatalf("write the scenario: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "schema.json"), []byte("{}"), 0o600); err != nil {
+				t.Fatalf("write the schema: %v", err)
+			}
+			if tc.write {
+				full := filepath.Join(dir, tc.prompt)
+				if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+					t.Fatalf("create the prompt directory: %v", err)
+				}
+				if err := os.WriteFile(full, []byte("review it"), 0o600); err != nil {
+					t.Fatalf("write the prompt: %v", err)
+				}
+			}
+
+			scn, err := Parse([]byte(text), path)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			res := Validate(scn)
+			if !res.OK() {
+				t.Fatalf("OK() = false, Errors = %v", res.Errors)
+			}
+			if tc.wantWarn == "" {
+				if len(res.Warnings) != 0 {
+					t.Fatalf("Warnings = %v, want none", res.Warnings)
+				}
+				return
+			}
+			if !diagnosticsContain(res.Warnings, tc.wantWarn) {
+				t.Fatalf("Warnings = %v, want one containing %q", res.Warnings, tc.wantWarn)
+			}
+		})
+	}
+}
+
+// TestValidateArgvInputs covers specification section 4, check 8: a string
+// input that reaches a command argument has to carry a pattern.
+func TestValidateArgvInputs(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		argv    string
+		wantErr string
+	}{
+		{
+			name:  "a constrained string is fine",
+			input: "{type: string, pattern: '^[a-z]+$'}",
+			argv:  `["echo", "{{ .inputs.branch }}"]`,
+		},
+		{
+			name:  "a type that cannot carry anything is fine",
+			input: "{type: int}",
+			argv:  `["echo", "{{ .inputs.branch }}"]`,
+		},
+		{
+			name:  "an unconstrained string that stays out of argv is fine",
+			input: "{type: string}",
+			argv:  `["echo", "hello"]`,
+		},
+		{
+			name:    "an unconstrained string in argv",
+			input:   "{type: string}",
+			argv:    `["echo", "{{ .inputs.branch }}"]`,
+			wantErr: `input "branch" reaches a command argument, so it needs a pattern`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			text := "version: 1\nname: argv\ninputs:\n  branch: " + tc.input +
+				"\nsteps:\n  - id: build\n    run:\n      argv: " + tc.argv + "\n"
+			scn, err := Parse([]byte(text), "test.yaml")
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			res := Validate(scn)
+			if tc.wantErr == "" {
+				if !res.OK() {
+					t.Fatalf("OK() = false, Errors = %v", res.Errors)
 				}
 				return
 			}

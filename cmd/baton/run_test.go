@@ -266,6 +266,7 @@ inputs:
   who:
     type: string
     required: true
+    pattern: "^[a-z]+$"
 steps:
   - id: greet
     run:
@@ -402,6 +403,7 @@ inputs:
   who:
     type: string
     default: world
+    pattern: "^[a-z]+$"
 steps:
   - id: greet
     run:

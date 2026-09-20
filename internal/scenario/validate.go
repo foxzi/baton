@@ -2,6 +2,8 @@ package scenario
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -230,7 +232,7 @@ func validateSteps(scn *Scenario, steps []Step, prefix string, declared map[stri
 		})
 		validateStepID(step, path, declared, res)
 		validateStepBody(scn, step, path, res)
-		validateStepControl(step, path, declared, res)
+		validateStepControl(scn, step, path, declared, res)
 		validateExpr(path+".when", step.When, step.Line, res)
 		res.enterStep(nil)
 	}
@@ -343,7 +345,9 @@ func validateRun(scn *Scenario, step *Step, path string, res *Result) {
 		res.errorf(path+".max_output_bytes", step.Line, "must not be negative")
 	}
 	for i, arg := range run.Argv {
-		validateTemplate(fmt.Sprintf("%s.argv[%d]", path, i), arg, step.Line, res)
+		argPath := fmt.Sprintf("%s.argv[%d]", path, i)
+		validateTemplate(argPath, arg, step.Line, res)
+		validateArgvInputs(scn, argPath, arg, step.Line, res)
 	}
 	validateTemplate(path+".stdin", run.Stdin, step.Line, res)
 	validateTemplate(path+".cwd", run.Cwd, step.Line, res)
@@ -352,6 +356,26 @@ func validateRun(scn *Scenario, step *Step, path string, res *Result) {
 	// retried automatically unless the run is idempotent.
 	if !run.Readonly && step.DedupeKey == "" && step.Retry != nil {
 		res.warnf(path, step.Line, "retry on a step without readonly: true or dedupe_key may repeat side effects")
+	}
+}
+
+// inputRefPattern matches a reference to a scenario input inside an
+// expression: inputs.<name>.
+var inputRefPattern = regexp.MustCompile(`\binputs\.([a-z][a-z0-9_]*)`)
+
+// validateArgvInputs checks the second half of specification section 4, check
+// 8: a string input that reaches argv has to be constrained by a pattern, the
+// same way a command argument is. A string is the only input type that can
+// carry anything at all, and argv is where it becomes part of a command.
+func validateArgvInputs(scn *Scenario, path, arg string, line int, res *Result) {
+	for _, action := range templateActionPattern.FindAllStringSubmatch(arg, -1) {
+		for _, m := range inputRefPattern.FindAllStringSubmatch(action[1], -1) {
+			input, ok := scn.Inputs[m[1]]
+			if !ok || input.Type != TypeString || input.Pattern != "" {
+				continue
+			}
+			res.errorf(path, line, "input %q reaches a command argument, so it needs a pattern", m[1])
+		}
 	}
 }
 
@@ -567,10 +591,14 @@ func validateLLM(scn *Scenario, step *Step, path string, res *Result) {
 	// schema is required (spec section 3.5).
 	if strings.TrimSpace(llm.Schema) == "" {
 		res.errorf(path+".schema", step.Line, "must not be empty")
+	} else {
+		validateScenarioFile(scn, path+".schema", llm.Schema, step.Line, res)
 	}
 
 	validateTemplate(path+".system", llm.System, step.Line, res)
 	validateTemplate(path+".prompt", llm.Prompt, step.Line, res)
+	validatePromptFile(scn, path+".system", llm.System, step.Line, res)
+	validatePromptFile(scn, path+".prompt", llm.Prompt, step.Line, res)
 	for _, name := range sortedKeys(llm.With) {
 		validateTemplate(path+".with."+name, llm.With[name], step.Line, res)
 	}
@@ -651,10 +679,14 @@ func validateAgent(scn *Scenario, step *Step, path string, res *Result) {
 	// schema to validate against (spec section 3.6).
 	if strings.TrimSpace(agent.Result) == "" {
 		res.errorf(path+".result", step.Line, "must name the schema submit_result validates against")
+	} else {
+		validateScenarioFile(scn, path+".result", agent.Result, step.Line, res)
 	}
 
 	validateTemplate(path+".prompt", agent.Prompt, step.Line, res)
 	validateTemplate(path+".system", agent.System, step.Line, res)
+	validatePromptFile(scn, path+".prompt", agent.Prompt, step.Line, res)
+	validatePromptFile(scn, path+".system", agent.System, step.Line, res)
 	for _, name := range sortedKeys(agent.With) {
 		validateTemplate(path+".with."+name, agent.With[name], step.Line, res)
 	}
@@ -671,7 +703,11 @@ func validateAgent(scn *Scenario, step *Step, path string, res *Result) {
 	for i, skill := range agent.Skills {
 		if strings.TrimSpace(skill) == "" {
 			res.errorf(fmt.Sprintf("%s.skills[%d]", path, i), step.Line, "must not be empty")
+			continue
 		}
+		// A skill is a directory holding a SKILL.md, which is what the engine
+		// looks for when it links the skill into the workspace.
+		validateScenarioFile(scn, fmt.Sprintf("%s.skills[%d]", path, i), filepath.Join(skill, "SKILL.md"), step.Line, res)
 	}
 	validateEnv(scn, agent.Env, path+".env", step.Line, res)
 
@@ -961,7 +997,7 @@ func validateFile(step *Step, path string, res *Result) {
 	}
 }
 
-func validateStepControl(step *Step, path string, declared map[string]bool, res *Result) {
+func validateStepControl(scn *Scenario, step *Step, path string, declared map[string]bool, res *Result) {
 	for i, need := range step.Needs {
 		needPath := fmt.Sprintf("%s.needs[%d]", path, i)
 		switch {
@@ -983,8 +1019,15 @@ func validateStepControl(step *Step, path string, declared map[string]bool, res 
 		// Specification section 4, check 11.
 		if step.Fallback == nil {
 			res.errorf(path+".fallback", step.Line, "on_error: fallback requires a fallback body")
+			break
 		}
 		validateNoGate(step.Fallback, path+".fallback", res)
+		// The fallback replaces the step that failed and reports under its
+		// id, so it has none of its own, like the body of a foreach.
+		if step.Fallback.ID != "" {
+			res.errorf(path+".fallback.id", step.Fallback.Line, "a fallback runs under the id of the step it replaces")
+		}
+		validateStepBody(scn, step.Fallback, path+".fallback", res)
 	default:
 		res.errorf(path+".on_error", step.Line, "unknown value %q, want fail, continue or fallback", step.OnError)
 	}
@@ -1021,6 +1064,65 @@ func joinKinds(kinds []Kind) string {
 		names[i] = string(kind)
 	}
 	return strings.Join(names, ", ")
+}
+
+// promptFileSuffixes are the extensions a prompt file is expected to carry.
+// A prompt value ending in one of them is meant as a path, not as the text of
+// the prompt itself.
+var promptFileSuffixes = []string{".md", ".txt", ".tmpl", ".prompt"}
+
+// validatePromptFile checks the prompt half of specification section 4, check
+// 4. A prompt is either a path or the text itself, and the engine tells them
+// apart by looking on disk (internal/engine, promptText), so a mistyped path
+// quietly becomes the prompt. Rather than guess, this reports the values that
+// read as a path and name nothing: a value with no spaces that ends in a
+// prompt file extension. A missing file is only a warning, because sending
+// such a string to a model is legal, just never what was meant.
+func validatePromptFile(scn *Scenario, path, value string, line int, res *Result) {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.ContainsAny(value, " \n\t{") {
+		return
+	}
+	named := false
+	for _, suffix := range promptFileSuffixes {
+		if strings.HasSuffix(value, suffix) {
+			named = true
+			break
+		}
+	}
+	if !named || !scenarioFileMissing(scn, value) {
+		return
+	}
+	res.warnf(path, line, "file %s not found, so the value is sent as the prompt itself", value)
+}
+
+// validateScenarioFile checks specification section 4, check 4: a file the
+// scenario names outright must exist.
+func validateScenarioFile(scn *Scenario, path, file string, line int, res *Result) {
+	if scenarioFileMissing(scn, file) {
+		res.errorf(path, line, "file %s not found", file)
+	}
+}
+
+// scenarioFileMissing reports whether file, resolved the way the engine
+// resolves it, is not on disk. The path resolves against the scenario's own
+// directory, so the check only runs for a scenario that was itself read from
+// disk: one built in memory, or named after a file that does not exist, has
+// no directory to resolve against. A path carrying a template action is left
+// alone too, since it only takes its final shape at run time.
+func scenarioFileMissing(scn *Scenario, file string) bool {
+	if strings.Contains(file, "{{") {
+		return false
+	}
+	if _, err := os.Stat(scn.Path); err != nil {
+		return false
+	}
+	full := file
+	if !filepath.IsAbs(full) {
+		full = filepath.Join(filepath.Dir(scn.Path), full)
+	}
+	_, err := os.Stat(full)
+	return err != nil
 }
 
 // validateExpr checks specification section 4, check 3: source must compile
