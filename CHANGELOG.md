@@ -8,6 +8,25 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+### Added
+
+- A `gate` step: the run stops at it and waits for a person. The run
+  ends with exit code 5 in the `waiting` state; `baton resume --approve`
+  or `--reject` writes the decision into `steps.<id>.result.decision`
+  and the run continues, a rejection included.
+- `baton runs prune` deletes old runs, either by count (`--keep N`) or
+  by age (`--older-than DURATION`).
+- A `make check` target: the checks CI runs, in one command.
+
+### Changed
+
+- Scenario validation now covers the four checks of specification
+  section 4 it used to leave out: the body of an `on_error: fallback` is
+  validated like any other step body, the files a scenario names
+  (`llm.schema`, `agent.result`, a skill's `SKILL.md`) have to exist, a
+  prompt that reads as a path to a missing file is reported as a
+  warning, and a string input that reaches `run.argv` needs a `pattern`.
+
 ## [0.4.0] - 2026-09-19
 
 ### Added
