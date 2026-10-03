@@ -129,7 +129,7 @@ request для этого API — тот же issue, поэтому путь и�
 | `project` | path | | |
 | `id` | path | | |
 | `summary` | body | 65000 символов, необязателен | Уходит на проводе как `body` |
-| `comments` | body | | Каждый элемент — `{ path, line, body }` |
+| `comments` | body | | Каждый элемент — `{ path, line, body }`, форма, которую фиксирует `forge/v1` |
 | `event` | body | | Одно из `COMMENT`, `APPROVE`, `REQUEST_CHANGES`; по умолчанию `COMMENT` |
 
 ```json

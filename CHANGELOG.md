@@ -13,6 +13,10 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 - `http.args`: an argument written as a lone template action that names
   a list or an object keeps that value instead of its text form, so
   `post_review.comments` can come straight from a step result.
+- `params.<name>.items` in packs: the fields of each element of a list
+  argument, renamed for the wire with `name`. `forge/v1.post_review` fixes
+  its comments as `{path, line, body}`; the `github` and `gitea` packs
+  declare them, Gitea sending `line` as `new_position`.
 - The `gitlab` pack gains `post_discussion`, a comment on one line of a
   merge request's diff, and `get_change` exposes `start` next to `base`
   and `head`, the third sha GitLab needs to anchor it.

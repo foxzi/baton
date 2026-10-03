@@ -88,6 +88,14 @@ func (o *Op) BindArgs(args map[string]any) (*BoundArgs, error) {
 				bound.Form[param.Wire(name)] = text
 			}
 		default:
+			if param.Items != nil {
+				items, err := param.bindItems(name, value)
+				if err != nil {
+					problems = append(problems, err)
+					continue
+				}
+				value = items
+			}
 			if err := setBody(bound.Body, param.WirePath(name), value); err != nil {
 				problems = append(problems, fmt.Errorf("args.%s: %w", name, err))
 			}
@@ -151,6 +159,61 @@ func (p *Param) check(name string, value any) error {
 		return fmt.Errorf("args.%s: must be one of %s: %w", name, strings.Join(p.Enum, ", "), ErrConstraint)
 	}
 	return nil
+}
+
+// bindItems checks the elements of a list argument against items and
+// renames their fields for the wire. Each element must be an object whose
+// keys are declared fields; a required field that is missing or an
+// undeclared key is a configuration error, and a field's constraints are
+// applied the way a top-level argument's are.
+func (p *Param) bindItems(name string, value any) ([]any, error) {
+	list, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("args.%s: items are declared, but the value is %T, not a list", name, value)
+	}
+
+	fields := sortedParamNames(p.Items)
+	var problems []error
+	out := make([]any, 0, len(list))
+	for i, element := range list {
+		object, ok := element.(map[string]any)
+		if !ok {
+			problems = append(problems, fmt.Errorf("args.%s[%d]: not an object", name, i))
+			continue
+		}
+		keys := make([]string, 0, len(object))
+		for key := range object {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		for _, key := range keys {
+			if _, ok := p.Items[key]; !ok {
+				problems = append(problems, fmt.Errorf("args.%s[%d].%s: no such field", name, i, key))
+			}
+		}
+
+		renamed := make(map[string]any, len(object))
+		for _, key := range fields {
+			field := p.Items[key]
+			v, given := object[key]
+			if !given || v == nil {
+				if field.IsRequired() {
+					problems = append(problems, fmt.Errorf("args.%s[%d].%s: required", name, i, key))
+				}
+				continue
+			}
+			if err := field.check(fmt.Sprintf("%s[%d].%s", name, i, key), v); err != nil {
+				problems = append(problems, err)
+				continue
+			}
+			renamed[field.Wire(key)] = v
+		}
+		out = append(out, renamed)
+	}
+	if err := errors.Join(problems...); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ExpandPath substitutes the path arguments into the operation path.

@@ -134,7 +134,7 @@ summary and line comments in one batch.
 | `project` | path | | |
 | `id` | path | | |
 | `summary` | body | 65000 chars, optional | Sent on the wire as `body` |
-| `comments` | body | | Each entry is `{ path, body, new_position }` |
+| `comments` | body | | Each entry is `{ path, line, body }`, the shape `forge/v1` fixes; the pack sends `line` as `new_position` |
 | `event` | body | | One of `COMMENT`, `APPROVED`, `REQUEST_CHANGES`; defaults to `COMMENT` |
 
 ```json

@@ -563,6 +563,7 @@ Operation fields:
 - `readonly` — determines whether the operation is available to the agent. Not derived from the HTTP method: RPC-style APIs (Outline) do reads via `POST`
 - `params.<name>`: `pattern` (required for anything that ends up in the path or query), `max_len`, `enum`, `in: path | query | body | form` (default: a path placeholder → `path`, `GET` → `query`, otherwise `body`), `encode: path` for segments containing `/`, `required` (default true), `default`
 - `params.<name>.name` — the name the argument is sent under when it differs from the name the scenario writes; for a body argument a dotted name nests the value: `name: fields.project.key` sends `{ "fields": { "project": { "key": … } } }`
+- `params.<name>.items` — the fields of each element of a list argument that goes into the body: `items: { path: {}, line: { name: new_position } }` checks every element is an object with those keys, applies each field's `pattern`, `max_len`, `enum` and `required`, and renames a field for the wire the way `name` does for an argument. It is how one interface shape, such as the comments of `forge/v1.post_review`, is sent to services that name the fields differently
 - `encode` — body encoding: `json` (default), `form`
 - `paginate: true` — apply the pack's strategy or the operation's own in `pagination`; the result before the transform is a concatenated array of pages
 - `transform` — a jq expression (gojq), applied after the envelope and pagination; the transform must be pure, without `input`/`env`/`$__loc__`
@@ -614,7 +615,7 @@ Common: `max_pages` (default 20), `items: <jq>` — where the page body's list i
 
 An interface is a contract made of several operations with a fixed argument and result shape (JSON Schema). The interface registry is built into the binary and versioned; in v1 there are three:
 
-`forge/v1`: `get_change(project, id)`, `list_files(project, id)`, `get_file(project, path, ref)`, `post_comment(project, id, body)`, `post_review(project, id, summary, comments[])`.
+`forge/v1`: `get_change(project, id)`, `list_files(project, id)`, `get_file(project, path, ref)`, `post_comment(project, id, body)`, `post_review(project, id, summary, comments[{path, line, body}])`.
 
 `tracker/v1`: `get_issue(key)`, `search(query, limit)`, `create_issue(project, title, body, type)`, `comment(key, body)`.
 

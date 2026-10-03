@@ -298,6 +298,12 @@ type Param struct {
 	Required *bool    `yaml:"required"`
 	Default  any      `yaml:"default"`
 
+	// Items declares the fields of each element of a list argument, so a
+	// pack can rename them the way it renames a top-level argument: Gitea
+	// calls the line of a review comment new_position. Only a body
+	// argument takes items; an element is an object with these keys.
+	Items map[string]*Param `yaml:"items"`
+
 	pattern *regexp.Regexp
 }
 

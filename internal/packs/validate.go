@@ -404,6 +404,9 @@ func (p *Pack) resolveParams(op *Op) []error {
 		if param.MaxLen < 0 {
 			problems = append(problems, fmt.Errorf("%s: max_len: must not be negative", prefix))
 		}
+		if param.Items != nil {
+			problems = append(problems, checkItems(prefix, param)...)
+		}
 	}
 
 	for name := range placeholders {
@@ -412,6 +415,62 @@ func (p *Pack) resolveParams(op *Op) []error {
 		}
 	}
 	slices.SortFunc(problems, func(a, b error) int { return strings.Compare(a.Error(), b.Error()) })
+	return problems
+}
+
+// checkItems validates the item fields of a list argument. A field takes
+// the same constraints as an argument, but it is always a key of the
+// element, so it has no placement, encoding or default of its own, and the
+// elements are one level deep.
+func checkItems(prefix string, param *Param) []error {
+	var problems []error
+	if param.In != InBody {
+		return []error{fmt.Errorf("%s: items: only a body argument is a list of objects", prefix)}
+	}
+
+	wires := make(map[string]string, len(param.Items))
+	for _, name := range sortedParamNames(param.Items) {
+		field := param.Items[name]
+		fieldPrefix := fmt.Sprintf("%s.items.%s", prefix, name)
+		if field == nil {
+			field = &Param{}
+			param.Items[name] = field
+		}
+		if !identRe.MatchString(name) {
+			problems = append(problems, fmt.Errorf("%s: %q is not a field name", fieldPrefix, name))
+		}
+		if field.In != InUnset {
+			problems = append(problems, fmt.Errorf("%s: in: an item field is always in the element", fieldPrefix))
+		}
+		if field.Encode != EncodeUnset {
+			problems = append(problems, fmt.Errorf("%s: encode: not a value here", fieldPrefix))
+		}
+		if field.Default != nil {
+			problems = append(problems, fmt.Errorf("%s: default: not a value here", fieldPrefix))
+		}
+		if field.Items != nil {
+			problems = append(problems, fmt.Errorf("%s: items: one level only", fieldPrefix))
+		}
+		wire := field.Wire(name)
+		if strings.Contains(wire, ".") {
+			problems = append(problems, fmt.Errorf("%s: name: an item field is one key", fieldPrefix))
+		}
+		if other, taken := wires[wire]; taken {
+			problems = append(problems, fmt.Errorf("%s: name: %q is already sent for items.%s", fieldPrefix, wire, other))
+		} else {
+			wires[wire] = name
+		}
+		if field.Pattern != "" {
+			compiled, err := regexp.Compile(field.Pattern)
+			if err != nil {
+				problems = append(problems, fmt.Errorf("%s: pattern: %w", fieldPrefix, err))
+			}
+			field.pattern = compiled
+		}
+		if field.MaxLen < 0 {
+			problems = append(problems, fmt.Errorf("%s: max_len: must not be negative", fieldPrefix))
+		}
+	}
 	return problems
 }
 

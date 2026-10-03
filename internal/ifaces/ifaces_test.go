@@ -198,3 +198,23 @@ func TestArgNamesAndOpNamesSorted(t *testing.T) {
 		t.Errorf("ArgNames() = %v, want %v", argNames, want)
 	}
 }
+
+// TestPostReviewCommentItems checks the interface fixes the shape of a
+// review comment, so a pack renames fields instead of choosing them.
+func TestPostReviewCommentItems(t *testing.T) {
+	_, op, err := Lookup("forge/v1.post_review")
+	if err != nil {
+		t.Fatalf("Lookup() error = %v", err)
+	}
+	comments := op.Args["comments"]
+	got := comments.ItemNames()
+	want := []string{"body", "line", "path"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("comments.ItemNames() = %v, want %v", got, want)
+	}
+	for _, name := range want {
+		if !comments.Items[name].Required {
+			t.Errorf("comments.Items[%s].Required = false, want true", name)
+		}
+	}
+}

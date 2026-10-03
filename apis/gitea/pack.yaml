@@ -83,9 +83,14 @@ ops:
       project: { pattern: '^[\w.-]+/[\w.-]+$' }
       id: { pattern: '^\d+$' }
       summary: { name: body, max_len: 65000, required: false, in: body }
-      # Each entry of comments is { path, body, new_position }, the shape
-      # Gitea's pull request review API wants for a single-line comment.
-      comments: { in: body }
+      # Each entry of comments is { path, line, body }, the shape forge/v1
+      # fixes. Gitea calls the line new_position, so the pack renames it.
+      comments:
+        in: body
+        items:
+          path: { pattern: '^[^\s?#]+$' }
+          line: { name: new_position, pattern: '^\d+$' }
+          body: { max_len: 65000 }
       event: { pattern: '^[A-Z_]+$', enum: [COMMENT, APPROVED, REQUEST_CHANGES], default: COMMENT, in: body }
     transform: '{ id, url: .html_url }'
     implements: forge/v1.post_review

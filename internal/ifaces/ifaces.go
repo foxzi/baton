@@ -82,6 +82,20 @@ func (o *Op) ValidateResult(result any) error {
 type Arg struct {
 	Type     string
 	Required bool
+
+	// Items names the fields of each element of an array argument. Nil
+	// when the interface leaves the element shape to the pack.
+	Items map[string]*Arg
+}
+
+// ItemNames returns the item field names of the argument, sorted.
+func (a *Arg) ItemNames() []string {
+	names := make([]string, 0, len(a.Items))
+	for name := range a.Items {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // rawFile is the on-disk shape of one data/*.json file.
@@ -99,8 +113,21 @@ type rawOp struct {
 
 // rawArg is the on-disk shape of one argument entry.
 type rawArg struct {
-	Type     string `json:"type"`
-	Required bool   `json:"required"`
+	Type     string            `json:"type"`
+	Required bool              `json:"required"`
+	Items    map[string]rawArg `json:"items"`
+}
+
+// newArg converts an on-disk argument entry, item fields included.
+func newArg(ra rawArg) *Arg {
+	arg := &Arg{Type: ra.Type, Required: ra.Required}
+	if len(ra.Items) > 0 {
+		arg.Items = make(map[string]*Arg, len(ra.Items))
+		for name, item := range ra.Items {
+			arg.Items[name] = newArg(item)
+		}
+	}
+	return arg
 }
 
 // registry maps interface name to Interface, loaded once from the embedded
@@ -161,7 +188,7 @@ func parseFile(fileName string, data []byte) (*Interface, error) {
 	for opName, rop := range raw.Ops {
 		args := make(map[string]*Arg, len(rop.Args))
 		for argName, ra := range rop.Args {
-			args[argName] = &Arg{Type: ra.Type, Required: ra.Required}
+			args[argName] = newArg(ra)
 		}
 
 		schemaName := raw.Interface + "." + opName

@@ -67,6 +67,27 @@ func (p *Pack) checkOpImplements(op *Op) error {
 			add("implements %s: interface argument %q is optional but the pack requires it", op.Implements, argName)
 		}
 	}
+	for _, argName := range ifaceOp.ArgNames() {
+		arg := ifaceOp.Args[argName]
+		param, ok := op.Params[argName]
+		if len(arg.Items) == 0 || !ok {
+			continue
+		}
+		if param.Items == nil {
+			add("implements %s: interface argument %q is a list of {%s} but params.%s declares no items", op.Implements, argName, strings.Join(arg.ItemNames(), ", "), argName)
+			continue
+		}
+		for _, field := range arg.ItemNames() {
+			if _, ok := param.Items[field]; arg.Items[field].Required && !ok {
+				addParam(argName, "implements %s: item field %q is missing from items", op.Implements, field)
+			}
+		}
+		for _, field := range sortedParamNames(param.Items) {
+			if _, ok := arg.Items[field]; !ok && param.Items[field].IsRequired() {
+				addParam(argName, "implements %s: items.%s is required but is not a field of the interface", op.Implements, field)
+			}
+		}
+	}
 	for _, paramName := range sortedParamNames(op.Params) {
 		param := op.Params[paramName]
 		if !param.IsRequired() {

@@ -365,3 +365,65 @@ func TestCheckImplementsPaginatedExampleAlreadyJoined(t *testing.T) {
 		t.Errorf("CheckImplements() error = %q, want mention of pagination.items", err)
 	}
 }
+
+// forgePostReviewOps is a post_review operation; comments is the body of the
+// comments param, so a test can leave it out or change it.
+func forgePostReviewOps(comments string) string {
+	return `ops:
+  post_review:
+    post: /repos/{project}/pulls/{id}/reviews
+    encode: json
+    params:
+      project: { pattern: '^[\w.-]+/[\w.-]+$' }
+      id: { pattern: '^\d+$' }
+      summary: { in: body, required: false }
+      comments: ` + comments + `
+    transform: '{ id }'
+    implements: forge/v1.post_review
+`
+}
+
+func TestCheckImplementsItems(t *testing.T) {
+	cases := map[string]struct {
+		comments string
+		want     string
+	}{
+		"no items": {
+			comments: "{ in: body }",
+			want:     `interface argument "comments" is a list of {body, line, path} but params.comments declares no items`,
+		},
+		"missing field": {
+			comments: "{ in: body, items: { path: {}, body: {} } }",
+			want:     `item field "line" is missing from items`,
+		},
+		"extra required field": {
+			comments: "{ in: body, items: { path: {}, line: {}, body: {}, side: {} } }",
+			want:     "items.side is required but is not a field of the interface",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			pack := writeForgePack(t, dir, "demo", forgePostReviewOps(tc.comments))
+			writeExample(t, dir, "post_review", `{ "id": 1 }`)
+
+			err := pack.CheckImplements()
+			if err == nil {
+				t.Fatalf("CheckImplements() error = nil, want error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("CheckImplements() error = %q, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckImplementsItemsValid(t *testing.T) {
+	dir := t.TempDir()
+	pack := writeForgePack(t, dir, "demo", forgePostReviewOps("{ in: body, items: { path: {}, line: { name: new_position }, body: {} } }"))
+	writeExample(t, dir, "post_review", `{ "id": 1 }`)
+
+	if err := pack.CheckImplements(); err != nil {
+		t.Fatalf("CheckImplements() error = %v", err)
+	}
+}

@@ -94,7 +94,15 @@
         "project": { "type": "string", "required": true },
         "id": { "type": "string", "required": true },
         "summary": { "type": "string", "required": false },
-        "comments": { "type": "array", "required": true }
+        "comments": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "path": { "type": "string", "required": true },
+            "line": { "type": "integer", "required": true },
+            "body": { "type": "string", "required": true }
+          }
+        }
       },
       "result": {
         "type": "object",

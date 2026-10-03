@@ -95,9 +95,14 @@ ops:
       project: { pattern: '^[\w.-]+/[\w.-]+$' }
       id: { pattern: '^\d+$' }
       summary: { name: body, max_len: 65000, required: false, in: body }
-      # Each entry of comments is { path, line, body }, the shape GitHub's
-      # pull request review API wants for a single-line comment.
-      comments: { in: body }
+      # Each entry of comments is { path, line, body }, the shape forge/v1
+      # fixes and GitHub's pull request review API wants as it is.
+      comments:
+        in: body
+        items:
+          path: { pattern: '^[^\s?#]+$' }
+          line: { pattern: '^\d+$' }
+          body: { max_len: 65000 }
       event: { pattern: '^[A-Z_]+$', enum: [COMMENT, APPROVE, REQUEST_CHANGES], default: COMMENT, in: body }
     transform: '{ id, url: .html_url }'
     implements: forge/v1.post_review

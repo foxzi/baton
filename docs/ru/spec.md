@@ -563,6 +563,7 @@ ops:
 - `readonly` — определяет, доступна ли операция агенту. Не выводится из HTTP-метода: у RPC-стиля (Outline) чтение идёт через `POST`
 - `params.<name>`: `pattern` (обязателен для всего, что попадает в путь или query), `max_len`, `enum`, `in: path | query | body | form` (по умолчанию: плейсхолдер пути → `path`, `GET` → `query`, иначе `body`), `encode: path` для сегментов с `/`, `required` (по умолчанию true), `default`
 - `params.<name>.name` — имя, под которым аргумент уходит на провод, если оно отличается от имени в сценарии; для аргумента тела имя с точками вкладывает значение: `name: fields.project.key` отправляет `{ "fields": { "project": { "key": … } } }`
+- `params.<name>.items` — поля каждого элемента списочного аргумента, который уходит в тело: `items: { path: {}, line: { name: new_position } }` проверяет, что каждый элемент — объект с этими ключами, применяет `pattern`, `max_len`, `enum` и `required` каждого поля и переименовывает поле для провода так же, как `name` переименовывает аргумент. Так одна форма интерфейса, например комментарии `forge/v1.post_review`, отправляется сервисам, которые называют поля по-разному
 - `encode` — кодирование тела: `json` (по умолчанию), `form`
 - `paginate: true` — применить стратегию пака или свою в `pagination` операции; результат до трансформа — конкатенированный массив страниц
 - `transform` — jq-выражение (gojq), применяется после конверта и пагинации; трансформ обязан быть чистым, без `input`/`env`/`$__loc__`
@@ -614,7 +615,7 @@ auth:
 
 Интерфейс — контракт из нескольких операций с фиксированной формой аргументов и результата (JSON Schema). Реестр интерфейсов встроен в бинарник и версионируется; в v1 три:
 
-`forge/v1`: `get_change(project, id)`, `list_files(project, id)`, `get_file(project, path, ref)`, `post_comment(project, id, body)`, `post_review(project, id, summary, comments[])`.
+`forge/v1`: `get_change(project, id)`, `list_files(project, id)`, `get_file(project, path, ref)`, `post_comment(project, id, body)`, `post_review(project, id, summary, comments[{path, line, body}])`.
 
 `tracker/v1`: `get_issue(key)`, `search(query, limit)`, `create_issue(project, title, body, type)`, `comment(key, body)`.
 
