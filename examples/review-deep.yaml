@@ -5,8 +5,9 @@ description: >
   changed files into groups a reviewer would read together; each group gets
   its own agent with the read-only profile, running in parallel, and a group
   whose agent fails falls back to a diff-only review by a plain model. One
-  comment collects the verdicts; the run exits with code 2 when any area
-  blocks, so the CI job turns red. Like review.yaml it runs from CI in a
+  comment collects the verdicts, and each finding that names a line becomes
+  a discussion on that line of the diff; the run exits with code 2 when any
+  area blocks, so the CI job turns red. Like review.yaml it runs from CI in a
   checkout of the merge request's branch, and the forge token never reaches
   an agent.
 
@@ -159,10 +160,36 @@ steps:
       condition: 'steps.publish.result.url != ""'
       message: "the review was posted but the comment carries no url"
 
+  # GitLab has no batch review call, so each finding with a line number is
+  # its own discussion. A template writes text, hence the list is spelled
+  # out as JSON; the finding carries its file and line, and the diff refs
+  # that anchor it come from the change itself.
+  - id: inline
+    needs: [posted]
+    foreach:
+      items: |
+        [{{ $sep := "" }}{{ range .steps.areas.items }}{{ if eq .status "success" }}{{ range .result.findings }}{{ if .line }}{{ $sep }}{{ toJSON . }}{{ $sep = "," }}{{ end }}{{ end }}{{ end }}{{ end }}]
+      as: finding
+      on_item_error: continue
+      min_success: 0
+      step:
+        http:
+          op: forge.post_discussion
+          args:
+            project: "{{ .inputs.project }}"
+            id: "{{ .inputs.mr }}"
+            path: "{{ .finding.file }}"
+            line: "{{ .finding.line }}"
+            base_sha: "{{ .steps.changes.result.base }}"
+            head_sha: "{{ .steps.changes.result.head }}"
+            start_sha: "{{ .steps.changes.result.start }}"
+            body: "**{{ .finding.severity }}**: {{ .finding.message }}"
+        dedupe_key: "review-deep-{{ .inputs.project }}-{{ .inputs.mr }}-{{ .steps.changes.result.head }}-{{ .finding.file }}:{{ .finding.line }}"
+
   # A blocking area fails the run after the comment is up: exit code 2,
   # no on_failure, the pipeline shows red next to the comment.
   - id: verdict
-    needs: [posted]
+    needs: [inline]
     assert:
       condition: 'none(steps.areas.items, .status == "success" && .result.verdict == "block")'
       message: "at least one area blocks the merge"

@@ -460,7 +460,7 @@ rough order of complexity:
 | `weekly-report.yaml` | a parallel `foreach` over projects, digested and sent to a channel |
 | `triage.yaml` | classification against an `enum`, labels, a comment, paging the on-call only when critical |
 | `review.yaml` | an `agent` step working over a checkout |
-| `review-deep.yaml` | a `foreach` with a multi-step body: one agent per area of a large change, a diff-only `fallback`, one comment, exit code 2 on a block |
+| `review-deep.yaml` | a `foreach` with a multi-step body: one agent per area of a large change, a diff-only `fallback`, one comment plus a discussion per line finding, exit code 2 on a block |
 | `jira-report.yaml` | pagination and aggregation inside the pack, an HTML report rendered to a file |
 | `jira-quality.yaml` | a `foreach` asking the model to score every issue of a board against a schema, collected into an HTML report |
 

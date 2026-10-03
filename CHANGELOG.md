@@ -8,6 +8,22 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+### Added
+
+- `http.args`: an argument written as a lone template action that names
+  a list or an object keeps that value instead of its text form, so
+  `post_review.comments` can come straight from a step result.
+- The `gitlab` pack gains `post_discussion`, a comment on one line of a
+  merge request's diff, and `get_change` exposes `start` next to `base`
+  and `head`, the third sha GitLab needs to anchor it.
+- `examples/review-deep.yaml` posts each finding that names a line as a
+  discussion on that line.
+
+### Fixed
+
+- The JSON Schema accepted no valid `fallback`: it required an `id`
+  there, which `baton validate` forbids.
+
 ## [0.5.0] - 2026-10-03
 
 ### Added
