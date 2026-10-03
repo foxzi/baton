@@ -140,7 +140,7 @@ The fields of a step without the id rule, so that a foreach body (spec section 3
 | `timeout` | [duration](#duration) | no |  |
 | `retry` | [retry](#retry) | no |  |
 | `on_error` | `fail`, `continue`, `fallback` | no |  |
-| `fallback` | [step](#step) | no |  |
+| `fallback` | [step-body](#step-body) | no | A step-body without an id: a fallback runs under the id of the step it replaces (spec section 9.2). |
 | `cache` | boolean | no |  |
 | `dedupe_key` | [template](#template) | no |  |
 | `message` | [template](#template) | no |  |

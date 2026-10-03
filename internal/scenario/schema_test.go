@@ -246,7 +246,6 @@ steps:
       on: ["transient"]
     on_error: fallback
     fallback:
-      id: fb
       run: echo fallback
     run: echo hi
 `,

@@ -140,7 +140,7 @@
 | `timeout` | [duration](#duration) | нет |  |
 | `retry` | [retry](#retry) | нет |  |
 | `on_error` | `fail`, `continue`, `fallback` | нет |  |
-| `fallback` | [step](#step) | нет |  |
+| `fallback` | [step-body](#step-body) | нет | A step-body without an id: a fallback runs under the id of the step it replaces (spec section 9.2). |
 | `cache` | boolean | нет |  |
 | `dedupe_key` | [template](#template) | нет |  |
 | `message` | [template](#template) | нет |  |

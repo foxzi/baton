@@ -337,7 +337,19 @@
           ]
         },
         "fallback": {
-          "$ref": "#/$defs/step"
+          "description": "A step-body without an id: a fallback runs under the id of the step it replaces (spec section 9.2).",
+          "allOf": [
+            {
+              "$ref": "#/$defs/step-body"
+            },
+            {
+              "not": {
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          ]
         },
         "cache": {
           "type": "boolean"
