@@ -215,6 +215,13 @@ func (c *Client) build(ctx context.Context, api *API, req *Request) (*http.Reque
 	if err != nil {
 		return nil, wrapf(ClassConfig, err, "http: cannot build the request")
 	}
+	// The pack's headers come first, so that a request can still override
+	// one of them.
+	if api != nil {
+		for name, value := range api.Pack.Headers {
+			built.Header.Set(name, value)
+		}
+	}
 	for name, value := range req.Headers {
 		built.Header.Set(name, value)
 	}

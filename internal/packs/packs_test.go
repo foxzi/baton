@@ -171,6 +171,28 @@ func TestParseValidate(t *testing.T) {
 			yaml:    packYAML("auth:\n  kind: bearer\n"),
 			checkOK: true,
 		},
+
+		// headers.
+		{
+			name:    "headers ok",
+			yaml:    packYAML("headers:\n  Accept: application/json\n  X-Api-Version: \"2\"\n"),
+			checkOK: true,
+		},
+		{
+			name:    "headers bad name",
+			yaml:    packYAML("headers:\n  \"X Bad\": v\n"),
+			wantErr: "is not a header name",
+		},
+		{
+			name:    "headers carry credentials",
+			yaml:    packYAML("headers:\n  authorization: Bearer x\n"),
+			wantErr: "headers.authorization: credentials go through auth, not headers",
+		},
+		{
+			name:    "headers multi-line value",
+			yaml:    packYAML("headers:\n  Accept: \"a\\nb\"\n"),
+			wantErr: "headers.Accept: the value must be one line",
+		},
 		{
 			name:    "auth path ok",
 			yaml:    packYAML("auth:\n  kind: path\n"),

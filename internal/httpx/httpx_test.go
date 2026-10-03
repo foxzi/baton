@@ -282,6 +282,41 @@ config:
 	}
 }
 
+func TestDoPackHeadersSentAndOverridable(t *testing.T) {
+	var accept, version string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accept = r.Header.Get("Accept")
+		version = r.Header.Get("X-Api-Version")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pack := mustPack(t, `pack: demo
+version: 1
+config:
+  base_url: {}
+headers:
+  Accept: application/json
+  X-Api-Version: "2"
+`+simpleOpsYAML)
+	api := mustAPI(t, pack, map[string]string{"base_url": server.URL}, values.Secret{})
+
+	client := New(0)
+	_, err := client.Do(context.Background(), api, &Request{
+		Path:    "/things",
+		Headers: map[string]string{"X-Api-Version": "3"},
+	})
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	if accept != "application/json" {
+		t.Errorf("Accept = %q, want the pack's application/json", accept)
+	}
+	if version != "3" {
+		t.Errorf("X-Api-Version = %q, want the request's 3", version)
+	}
+}
+
 func TestDoExpectStatusSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)

@@ -498,6 +498,9 @@ auth:
   kind: header                 # header | bearer | basic | query | path | exchange
   name: PRIVATE-TOKEN
 
+headers:                       # optional, sent with every request
+  Accept: application/json
+
 rate_limit:
   remaining_header: RateLimit-Remaining
   retry_after_header: Retry-After
@@ -551,6 +554,8 @@ ops:
     params: { q: { max_len: 500 } }
     transform: '.data.search.nodes'
 ```
+
+`headers` are sent by the pack with every request (for example, `Accept: application/json` for an API that answers with HTML without it). A request header of the same name overrides the pack's, and auth is applied last. No secrets go here: `Authorization`, `Proxy-Authorization` and `Cookie` are rejected, credentials go through `auth`. A value is one line.
 
 Operation fields:
 

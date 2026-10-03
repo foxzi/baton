@@ -27,6 +27,10 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 - The argv templates of `commands` see the run's inputs as `.inputs`
   next to `.args`; a string input there needs a `pattern`, as in
   `run.argv`.
+- Pack-level `headers`: headers the pack sends with every request, such
+  as `Accept: application/json`. A request header of the same name
+  overrides them; `Authorization`, `Proxy-Authorization` and `Cookie`
+  are rejected, credentials go through `auth`.
 
 ### Changed
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,6 +21,7 @@ var (
 	identRe       = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	placeholderRe = regexp.MustCompile(`\{([a-z][a-z0-9_]*)\}`)
 	implementsRe  = regexp.MustCompile(`^[a-z][a-z0-9_]*/v[0-9]+\.[a-z][a-z0-9_]*$`)
+	headerNameRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*$`)
 )
 
 // validate checks the pack and fills in the fields derived from it: the HTTP
@@ -45,6 +47,7 @@ func (p *Pack) validate() error {
 	if err := p.validateAuth(); err != nil {
 		problems = append(problems, err)
 	}
+	problems = append(problems, p.validateHeaders()...)
 	if err := p.Envelope.compile(); err != nil {
 		problems = append(problems, err)
 	}
@@ -63,6 +66,33 @@ func (p *Pack) validate() error {
 		}
 	}
 	return errors.Join(problems...)
+}
+
+// credentialHeaders are the headers a pack may not set: the auth scheme sends
+// them with the secret the scenario names.
+var credentialHeaders = map[string]bool{
+	"authorization":       true,
+	"cookie":              true,
+	"proxy-authorization": true,
+}
+
+// validateHeaders checks the headers the pack sends with every request. A
+// pack carries no secrets, so the headers that carry credentials belong to
+// the auth scheme rather than to this list.
+func (p *Pack) validateHeaders() []error {
+	var problems []error
+	for _, name := range slices.Sorted(maps.Keys(p.Headers)) {
+		value := p.Headers[name]
+		switch {
+		case !headerNameRe.MatchString(name):
+			problems = append(problems, fmt.Errorf("headers.%s: %q is not a header name", name, name))
+		case credentialHeaders[strings.ToLower(name)]:
+			problems = append(problems, fmt.Errorf("headers.%s: credentials go through auth, not headers", name))
+		case strings.ContainsAny(value, "\r\n"):
+			problems = append(problems, fmt.Errorf("headers.%s: the value must be one line", name))
+		}
+	}
+	return problems
 }
 
 // validateAuth checks the authorisation scheme of the pack.

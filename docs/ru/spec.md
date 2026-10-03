@@ -498,6 +498,9 @@ auth:
   kind: header                 # header | bearer | basic | query | path | exchange
   name: PRIVATE-TOKEN
 
+headers:                       # опционально, уходят с каждым запросом
+  Accept: application/json
+
 rate_limit:
   remaining_header: RateLimit-Remaining
   retry_after_header: Retry-After
@@ -551,6 +554,8 @@ ops:
     params: { q: { max_len: 500 } }
     transform: '.data.search.nodes'
 ```
+
+`headers` — заголовки, которые пак отправляет с каждым запросом (например, `Accept: application/json` для API, отвечающего HTML без него). Заголовок запроса с тем же именем переопределяет заголовок пака, авторизация применяется последней. Секретов здесь быть не может: `Authorization`, `Proxy-Authorization` и `Cookie` запрещены, учётные данные идут через `auth`. Значение — одна строка.
 
 Поля операции:
 

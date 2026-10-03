@@ -28,6 +28,7 @@ type Pack struct {
 	Description string                 `yaml:"description"`
 	Config      map[string]ConfigField `yaml:"config"`
 	Auth        *Auth                  `yaml:"auth"`
+	Headers     map[string]string      `yaml:"headers"`
 	RateLimit   *RateLimit             `yaml:"rate_limit"`
 	Envelope    *Envelope              `yaml:"envelope"`
 	Pagination  *Pagination            `yaml:"pagination"`
