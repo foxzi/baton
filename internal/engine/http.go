@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -201,7 +202,10 @@ func (e *Engine) buildRawRequest(step *scenario.Step) (*httpx.Request, *Error) {
 }
 
 // renderArgs renders the templates inside operation arguments. Only strings
-// carry templates; numbers, booleans and nested values pass through.
+// carry templates; numbers, booleans and nested values pass through. A
+// string that is a lone action naming a list or an object, such as the
+// items of a review step, keeps that value instead of its text form, so an
+// argument like post_review.comments can come straight from a step result.
 func (e *Engine) renderArgs(stepID string, args map[string]any) (map[string]any, *Error) {
 	rendered := make(map[string]any, len(args))
 	for _, name := range sortedKeys(args) {
@@ -217,6 +221,11 @@ func (e *Engine) renderArgs(stepID string, args map[string]any) (map[string]any,
 func (e *Engine) renderArg(name string, value any) (any, *Error) {
 	switch typed := value.(type) {
 	case string:
+		if structured, ok, stepErr := e.renderStructured(name, typed); stepErr != nil {
+			return nil, stepErr
+		} else if ok {
+			return structured, nil
+		}
 		return e.render(name, typed)
 	case []any:
 		items := make([]any, 0, len(typed))
@@ -429,4 +438,27 @@ func packDigest(api *httpx.API) map[string]string {
 		return nil
 	}
 	return map[string]string{"pack": api.Pack.Digest}
+}
+
+// renderStructured evaluates a lone action and reports whether it produced
+// a list or an object. Scalars are left to the text rendering, so a path or
+// query argument still meets its pattern as text.
+func (e *Engine) renderStructured(name, text string) (any, bool, *Error) {
+	inner, ok := loneAction(text)
+	if !ok {
+		return nil, false, nil
+	}
+	rendered, stepErr := e.render(name, "{{ "+inner+" | toJSON }}")
+	if stepErr != nil {
+		return nil, false, stepErr
+	}
+	var value any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(rendered)), &value); err != nil {
+		return nil, false, nil
+	}
+	switch value.(type) {
+	case []any, map[string]any:
+		return value, true, nil
+	}
+	return nil, false, nil
 }

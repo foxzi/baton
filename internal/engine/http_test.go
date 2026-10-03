@@ -302,6 +302,12 @@ ops:
       id: { pattern: '^\d+$' }
       body: {}
     encode: json
+  create_review:
+    post: /projects/{id}/reviews
+    params:
+      id: { pattern: '^\d+$' }
+      comments: { in: body }
+    encode: json
 `
 
 // 6. The operation form of an http step calls a pack whose base_url points at
@@ -571,5 +577,59 @@ steps:
 	}
 	if !strings.Contains(failMessage, "does not implement forge/v1") {
 		t.Errorf("step_failed message = %q, want it to mention %q", failMessage, "does not implement forge/v1")
+	}
+}
+
+// An argument written as a lone action that names a list arrives in the
+// body as that list, not as its text form, so a review's comments can be
+// handed to post_review straight from the step that produced them.
+func TestRun_HTTPOp_ListArgKeepsShape(t *testing.T) {
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 1024)
+		n, _ := r.Body.Read(buf)
+		gotBody = string(buf[:n])
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`{"id":7}`))
+	}))
+	defer server.Close()
+
+	yamlText := fmt.Sprintf(`
+version: 1
+name: op-list-arg
+apis:
+  gitlab:
+    pack: gitlab
+    from: ./apis/
+    config:
+      base_url: %q
+steps:
+  - id: found
+    run:
+      argv: ["echo", "[{\"path\":\"a.go\",\"line\":3,\"body\":\"x\"}]"]
+      parse: json
+  - id: review
+    dedupe_key: "review-1"
+    http:
+      op: gitlab.create_review
+      args:
+        id: "1"
+        comments: "{{ .steps.found.result }}"
+`, server.URL)
+
+	eng, _, dir := newTestEngine(t, yamlText, nil)
+	writePack(t, dir, "gitlab", gitlabLikePack)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q, want success (error=%+v)", result.Status, result.Error)
+	}
+	want := `{"comments":[{"body":"x","line":3,"path":"a.go"}]}`
+	if strings.TrimSpace(gotBody) != want {
+		t.Errorf("body = %s, want %s", gotBody, want)
 	}
 }
