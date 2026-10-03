@@ -1027,3 +1027,55 @@ calls:
 		t.Errorf("a file call was audited as an error:\n%s", audit)
 	}
 }
+
+// agent.workspace points the agent at a directory an earlier step names, so
+// its file tools work there and not in the run's workspace.
+func TestAgent_WorkspaceFromTemplate(t *testing.T) {
+	yamlText := `
+version: 1
+name: agent-workspace
+steps:
+  - id: pick
+    run:
+      argv: [echo, '{"dir": "wt/fix"}']
+      parse: json
+  - id: review
+    agent:
+      engine: fake
+      script: script.yaml
+      prompt: work
+      profile: fix
+      workspace: "{{ .steps.pick.result.dir }}"
+      result: result.json
+`
+	script := `
+calls:
+  - tool: fs.write
+    args: { path: "note.txt", content: "in the worktree\n" }
+  - tool: submit_result
+    args: { verdict: "ok" }
+`
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "wt", "fix"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	eng, _, dir := newTestEngine(t, yamlText, func(o *Options) {
+		o.Workspace = workspace
+	})
+	writeAgentFiles(t, dir, agentSchema, script)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("Status = %q (%v), want success", result.Status, result.Error)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "wt", "fix", "note.txt")); err != nil {
+		t.Errorf("the agent did not write in agent.workspace: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "note.txt")); err == nil {
+		t.Errorf("the agent wrote in the run's workspace")
+	}
+}

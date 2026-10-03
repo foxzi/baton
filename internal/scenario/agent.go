@@ -46,6 +46,11 @@ type AgentStep struct {
 	// It is required: a step ends successfully only through submit_result.
 	Result string `yaml:"result"`
 
+	// Workspace is the directory the agent works in, a template taken
+	// relative to the run's workspace like run.cwd. Empty means the run's
+	// workspace (spec section 7.1).
+	Workspace string `yaml:"workspace"`
+
 	// Script is the behaviour file of the fake engine (spec section 8.4) and
 	// is rejected for any other engine.
 	Script string `yaml:"script"`

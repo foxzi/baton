@@ -30,10 +30,12 @@ import (
 // their tools, the engines already built and the workspace preparation that
 // happens once (spec sections 7.1 and 7.7).
 type agentRuntime struct {
-	mu        sync.Mutex
-	gateway   *gateway.Gateway
-	engines   map[string]agent.Engine
-	workspace string
+	mu      sync.Mutex
+	gateway *gateway.Gateway
+	engines map[string]agent.Engine
+	// workspaces maps a requested directory to its prepared root, so each
+	// directory is prepared once per run.
+	workspaces map[string]string
 }
 
 // execAgent hands a prompt to an agent engine and returns the result the
@@ -173,7 +175,11 @@ func (e *Engine) runAgent(ctx context.Context, step *scenario.Step, path string,
 	if err != nil {
 		return expr.Step{}, wrapf(ClassConfig, err, "step %s: run directory", step.ID)
 	}
-	root, stepErr := e.agentWorkspace(path)
+	wsDir, stepErr := e.resolveDir(step.ID, "agent.workspace", step.Agent.Workspace)
+	if stepErr != nil {
+		return expr.Step{}, stepErr
+	}
+	root, stepErr := e.agentWorkspace(path, wsDir)
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
@@ -507,20 +513,20 @@ func (e *Engine) agentFailure(ctx context.Context, step *scenario.Step, err erro
 	return wrapf(ClassCommand, err, "step %s: agent", step.ID)
 }
 
-// agentWorkspace prepares the workspace once per run and reports what it had
+// agentWorkspace prepares a workspace once per run and reports what it had
 // to rewrite (section 7.1).
-func (e *Engine) agentWorkspace(path string) (string, *Error) {
+func (e *Engine) agentWorkspace(path, dir string) (string, *Error) {
 	e.agents.mu.Lock()
 	defer e.agents.mu.Unlock()
 
-	if e.agents.workspace != "" {
-		return e.agents.workspace, nil
+	if root, ok := e.agents.workspaces[dir]; ok {
+		return root, nil
 	}
-	info, err := workspace.Prepare(e.opts.Workspace)
+	info, err := workspace.Prepare(dir)
 	if err != nil {
 		return "", wrapf(ClassConfig, err, "prepare the workspace")
 	}
-	e.agents.workspace = info.Root
+	e.agents.workspaces[dir] = info.Root
 	if len(info.Changed) > 0 {
 		e.emit(Event{Type: "workspace_prepared", Step: path, Message: info.Root, Fields: map[string]any{
 			"changed": info.Changed,

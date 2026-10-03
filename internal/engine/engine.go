@@ -205,7 +205,7 @@ func New(opts Options) (*Engine, error) {
 		hits:      map[string]bool{},
 		apis:      map[string]*httpx.API{},
 		providers: map[string]provider.Provider{},
-		agents:    &agentRuntime{engines: map[string]agent.Engine{}},
+		agents:    &agentRuntime{engines: map[string]agent.Engine{}, workspaces: map[string]string{}},
 	}, nil
 }
 

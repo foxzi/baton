@@ -201,6 +201,7 @@ Hands a prompt to an agent engine that works via tool calls until it submits a r
 | `inherit_auth` | boolean | no | Reuse the credentials the CLI stored in the user's home directory instead of an API key from env, so a subscription login works (spec section 8.2); supported by the codex engine only. |
 | `result` | string | yes |  |
 | `script` | string | no | The fake engine's behaviour file (spec section 8.4); rejected for any engine other than fake. |
+| `workspace` | string | no | The directory the agent works in, a template taken relative to the run's workspace like run.cwd; empty means the run's workspace (spec section 7.1). |
 
 No other fields are allowed.
 

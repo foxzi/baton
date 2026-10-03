@@ -32,7 +32,7 @@ func (e *Engine) execRun(ctx context.Context, step *scenario.Step, path string) 
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
-	cwd, stepErr := e.resolveCwd(step.ID, body.Cwd)
+	cwd, stepErr := e.resolveDir(step.ID, "run.cwd", body.Cwd)
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
@@ -182,15 +182,15 @@ func (e *Engine) renderArgv(stepID string, argv []string) ([]string, *Error) {
 	return rendered, nil
 }
 
-// resolveCwd resolves the working directory of a command. The default and the
-// literal "workspace" both mean the workspace; anything else is taken
-// relative to it (section 3.3).
-func (e *Engine) resolveCwd(stepID, cwd string) (string, *Error) {
+// resolveDir resolves a step's directory, run.cwd or agent.workspace. The
+// default and the literal "workspace" both mean the workspace; anything else
+// is taken relative to it (sections 3.3 and 7.1).
+func (e *Engine) resolveDir(stepID, field, dir string) (string, *Error) {
 	workspace := e.opts.Workspace
-	if cwd == "" || cwd == "workspace" {
+	if dir == "" || dir == "workspace" {
 		return workspace, nil
 	}
-	rendered, err := e.render(fmt.Sprintf("%s.run.cwd", stepID), cwd)
+	rendered, err := e.render(fmt.Sprintf("%s.%s", stepID, field), dir)
 	if err != nil {
 		return "", err
 	}

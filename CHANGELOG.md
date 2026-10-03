@@ -21,6 +21,9 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
   every item. Each step sees the item and the earlier steps of the same
   item as `steps.<id>`; every entry of `items` records them under
   `steps`.
+- `agent.workspace`: the directory an agent step works in, a template
+  resolved like `run.cwd`, so an agent can work in a git worktree an
+  earlier step created.
 
 ### Changed
 

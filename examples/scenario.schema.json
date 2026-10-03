@@ -605,6 +605,10 @@
         "script": {
           "description": "The fake engine's behaviour file (spec section 8.4); rejected for any engine other than fake.",
           "type": "string"
+        },
+        "workspace": {
+          "description": "The directory the agent works in, a template taken relative to the run's workspace like run.cwd; empty means the run's workspace (spec section 7.1).",
+          "type": "string"
         }
       }
     },

@@ -414,6 +414,8 @@ Before the first `agent` step the runner:
 - Rewrites `.git/config`: strips credentials from all remote URLs, removes the `extraheader` with authorization
 - Does not delete files; deny-lists are enforced at the tool level
 
+A step may set `agent.workspace` to work elsewhere, for example in a git worktree an earlier `run` step created. The value is a template resolved like `run.cwd`: relative to the workspace, or absolute. Each directory is prepared once per run, the first time a step asks for it.
+
 ### 7.2 Profiles
 
 | Profile | fs.read | fs.write | git | exec | apis | fetch | mcp | state |

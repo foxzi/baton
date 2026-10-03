@@ -675,6 +675,7 @@ func validateAgent(scn *Scenario, step *Step, path string, res *Result) {
 	if strings.TrimSpace(agent.Prompt) == "" {
 		res.errorf(path+".prompt", step.Line, "must not be empty")
 	}
+	validateTemplate(path+".workspace", agent.Workspace, step.Line, res)
 	// A step ends successfully only through submit_result, which needs a
 	// schema to validate against (spec section 3.6).
 	if strings.TrimSpace(agent.Result) == "" {

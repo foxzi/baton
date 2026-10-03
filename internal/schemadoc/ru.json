@@ -15,6 +15,7 @@
   "Hands a prompt to an agent engine that works via tool calls until it submits a result (spec section 3.6).": "Передаёт промпт агентскому движку, который работает через вызовы инструментов, пока не сдаст результат (ТЗ, раздел 3.6).",
   "Reuse the credentials the CLI stored in the user's home directory instead of an API key from env, so a subscription login works (spec section 8.2); supported by the codex engine only.": "Использовать учётные данные, сохранённые CLI в домашнем каталоге пользователя, вместо API-ключа из env, чтобы работал вход по подписке (ТЗ, раздел 8.2); поддерживает только движок codex.",
   "The fake engine's behaviour file (spec section 8.4); rejected for any engine other than fake.": "Файл поведения движка fake (ТЗ, раздел 8.4); для любого другого движка отвергается.",
+  "The directory the agent works in, a template taken relative to the run's workspace like run.cwd; empty means the run's workspace (spec section 7.1).": "Каталог, в котором работает агент: шаблон, разрешаемый относительно workspace прогона, как run.cwd; пусто значит workspace прогона (ТЗ, раздел 7.1).",
   "Overrides single fields of the step's profile (spec section 7.3).": "Переопределяет отдельные поля профиля шага (ТЗ, раздел 7.3).",
   "Caps how much an agent step may ask of the gateway (spec section 7.3).": "Ограничивает, сколько агентский шаг может запросить у шлюза (ТЗ, раздел 7.3).",
   "Runs its body once per item of a list (spec section 3.7).": "Выполняет своё тело по одному разу на каждый элемент списка (ТЗ, раздел 3.7).",
