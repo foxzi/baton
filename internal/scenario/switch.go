@@ -199,6 +199,20 @@ func checkSwitchControl(step *Step) error {
 // checkNestedSwitch rejects a switch used as the body of a foreach or an
 // until: those hold one step, and a switch expands into several.
 func checkNestedSwitch(step *Step) error {
+	if step.Foreach != nil {
+		var errs []error
+		for i := range step.Foreach.Steps {
+			body := &step.Foreach.Steps[i]
+			if body.Switch != "" {
+				errs = append(errs, fmt.Errorf("line %d: a switch cannot be in the steps of a foreach; use when: on the steps", body.Line))
+				continue
+			}
+			errs = append(errs, checkNestedSwitch(body))
+		}
+		if err := errors.Join(errs...); err != nil {
+			return err
+		}
+	}
 	var nested *Step
 	switch {
 	case step.Foreach != nil && step.Foreach.Step != nil:

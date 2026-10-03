@@ -422,3 +422,126 @@ func TestLoneAction(t *testing.T) {
 		}
 	}
 }
+
+// A body of several steps runs them in order for every item; each step sees
+// the item and the steps of the same item before it, and the item records
+// every step under its id.
+func TestRun_ForeachSteps(t *testing.T) {
+	eng, store, _ := newTestEngine(t, `
+name: foreach-steps
+version: 1
+steps:
+  - id: prefix
+    run:
+      argv: ["printf", "n"]
+  - id: work
+    foreach:
+      items: '["a", "b"]'
+      as: item
+      steps:
+        - id: first
+          run:
+            argv: ["printf", "{{ .steps.prefix.stdout }}-{{ .item }}"]
+        - id: skipped
+          when: steps.first.stdout == "never"
+          run:
+            argv: ["false"]
+        - id: second
+          run:
+            argv: ["sh", "-c", "printf '{\"v\":\"%s\"}' {{ .steps.first.stdout }}"]
+            parse: json
+  - id: after
+    run:
+      argv: ["printf", "{{ (index .steps.work.items 1).result.v }}"]
+`, nil)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("run failed: %v", result.Error)
+	}
+
+	items := eng.steps["work"].Items
+	if got := itemStatuses(t, items); strings.Join(got, ",") != "success,success" {
+		t.Fatalf("statuses = %v", got)
+	}
+	entry := items[0].(map[string]any)
+	if got := entry["result"].(map[string]any)["v"]; got != "n-a" {
+		t.Errorf("item 0 result = %v, want the last step's", got)
+	}
+	bodies := entry["steps"].(map[string]any)
+	if got := bodies["skipped"].(map[string]any)["status"]; got != "skipped" {
+		t.Errorf("skipped step status = %v", got)
+	}
+	if got := bodies["first"].(map[string]any)["status"]; got != "success" {
+		t.Errorf("first step status = %v", got)
+	}
+	if got := eng.steps["after"].Stdout; got != "n-b" {
+		t.Errorf("after stdout = %q, want n-b", got)
+	}
+
+	// Body steps do not leak into the run's own results.
+	if _, ok := eng.steps["first"]; ok {
+		t.Error("a body step is visible as a run step")
+	}
+	// Each body step has its own directory under the item.
+	path := filepath.Join(store.Dir(), "steps", "work", "1", "first", "stdout.log")
+	if got := readFile(t, path); got != "n-b" {
+		t.Errorf("item 1 first stdout = %q", got)
+	}
+}
+
+// A failing body step stops its item; the steps after it do not run, and
+// on_item_error decides about the other items.
+func TestRun_ForeachStepsItemFailure(t *testing.T) {
+	eng, _, _ := newTestEngine(t, `
+name: foreach-steps-fail
+version: 1
+steps:
+  - id: work
+    foreach:
+      items: '["ok", "bad", "ok"]'
+      as: item
+      on_item_error: continue
+      steps:
+        - id: check
+          run:
+            argv: ["test", "{{ .item }}", "=", "ok"]
+        - id: soft
+          on_error: continue
+          run:
+            argv: ["false"]
+        - id: done
+          run:
+            argv: ["printf", "done"]
+`, nil)
+
+	result, err := eng.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != runstore.StatusSuccess {
+		t.Fatalf("run failed: %v", result.Error)
+	}
+	items := eng.steps["work"].Items
+	if got := itemStatuses(t, items); strings.Join(got, ",") != "success,failed,success" {
+		t.Fatalf("statuses = %v", got)
+	}
+	failed := items[1].(map[string]any)
+	if failed["error"] == nil {
+		t.Error("failed item has no error")
+	}
+	bodies := failed["steps"].(map[string]any)
+	if _, ran := bodies["done"]; ran {
+		t.Error("a step after the failed one ran")
+	}
+	ok := items[0].(map[string]any)["steps"].(map[string]any)
+	if got := ok["soft"].(map[string]any)["status"]; got != "failed" {
+		t.Errorf("soft status = %v, want failed", got)
+	}
+	if got := ok["done"].(map[string]any)["status"]; got != "success" {
+		t.Errorf("done status = %v, want success past a continued failure", got)
+	}
+}

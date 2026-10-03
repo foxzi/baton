@@ -17,6 +17,10 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 - `baton runs prune` deletes old runs, either by count (`--keep N`) or
   by age (`--older-than DURATION`).
 - A `make check` target: the checks CI runs, in one command.
+- `foreach.steps`: a body of several steps with ids, run in order for
+  every item. Each step sees the item and the earlier steps of the same
+  item as `steps.<id>`; every entry of `items` records them under
+  `steps`.
 
 ### Changed
 

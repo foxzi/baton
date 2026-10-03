@@ -255,6 +255,27 @@ The step succeeds only through a call to `submit_result` with valid JSON. An age
 
 The `items` result — a list of `{ status, result, error }` in input order. With `on_item_error: fail` the first error cancels the rest via context cancellation and fails the step.
 
+When one item needs several steps, `steps` replaces `step`:
+
+```yaml
+- id: per_ticket
+  foreach:
+    items: "{{ .steps.tickets.result }}"
+    as: ticket
+    steps:                                 # instead of step
+      - id: classify
+        llm: { ... }
+      - id: create_issue
+        when: steps.classify.result.is_bug
+        run: { argv: ["gh", "issue", "create", "..."] }
+```
+
+- Every step has an id and runs in order for each item; `when`, `retry`, `on_error` and `fallback` work as on top-level steps. A gate and a switch are not allowed
+- A body step sees the item under its `as` name, the steps of the run declared before the `foreach`, and the steps of the same item before it, all as `steps.<id>`. Body ids must not repeat any step id of the scenario, and body steps are not visible after the `foreach`
+- A failing step ends its item (unless it has `on_error: continue`); `on_item_error` decides about the other items as before
+- Each entry of `items` gains `steps`: `{ <id>: { status, result, exit_code, error } }`. The item's `result` is the result of its last successful step
+- Step directories: `steps/<foreach id>/<item index>/<body id>/`
+
 ### 3.8 `until`
 
 ```yaml

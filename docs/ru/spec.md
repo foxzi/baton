@@ -255,6 +255,27 @@ on_failure: [ ... ]
 
 Результат `items` — список `{ status, result, error }` в порядке входа. При `on_item_error: fail` первая ошибка отменяет остальные через context cancellation и роняет шаг.
 
+Если одному элементу нужно несколько шагов, вместо `step` пишется `steps`:
+
+```yaml
+- id: per_ticket
+  foreach:
+    items: "{{ .steps.tickets.result }}"
+    as: ticket
+    steps:                                 # вместо step
+      - id: classify
+        llm: { ... }
+      - id: create_issue
+        when: steps.classify.result.is_bug
+        run: { argv: ["gh", "issue", "create", "..."] }
+```
+
+- У каждого шага есть id, шаги выполняются по порядку для каждого элемента; `when`, `retry`, `on_error` и `fallback` работают как у шагов верхнего уровня. `gate` и `switch` запрещены
+- Шаг тела видит элемент под именем из `as`, шаги прогона, объявленные до `foreach`, и предыдущие шаги того же элемента — всё как `steps.<id>`. id шагов тела не должны повторять id шагов сценария, и после `foreach` шаги тела не видны
+- Упавший шаг завершает свой элемент (если у него нет `on_error: continue`); судьбу остальных элементов, как и раньше, решает `on_item_error`
+- В каждой записи `items` появляется `steps`: `{ <id>: { status, result, exit_code, error } }`. `result` элемента — результат его последнего успешного шага
+- Каталоги шагов: `steps/<id foreach>/<номер элемента>/<id шага тела>/`
+
 ### 3.8 `until`
 
 ```yaml

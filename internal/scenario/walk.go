@@ -23,6 +23,9 @@ func walkStep(step *Step, fn func(step *Step)) {
 	if step.Foreach != nil && step.Foreach.Step != nil {
 		walkStep(step.Foreach.Step, fn)
 	}
+	if step.Foreach != nil {
+		walkSteps(step.Foreach.Steps, fn)
+	}
 	if step.Until != nil && step.Until.Step != nil {
 		walkStep(step.Until.Step, fn)
 	}

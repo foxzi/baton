@@ -121,14 +121,15 @@ func conditionalSteps(scn *Scenario) map[string]bool {
 	return out
 }
 
-// stepIDs collects every step id of a sequence, for the on_failure scope.
+// stepIDs collects the step ids of a sequence, for the on_failure scope. The
+// steps of a foreach body are left out: their results live with the item.
 func stepIDs(steps []Step) map[string]bool {
 	out := map[string]bool{}
-	walkSteps(steps, func(step *Step) {
-		if step.ID != "" {
-			out[step.ID] = true
+	for i := range steps {
+		if steps[i].ID != "" {
+			out[steps[i].ID] = true
 		}
-	})
+	}
 	return out
 }
 

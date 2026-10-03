@@ -878,6 +878,145 @@ steps:
 			checkNoWarn: true,
 		},
 		{
+			name: "foreach steps valid",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: list
+    run:
+      argv: ["echo", "[1]"]
+      parse: json
+  - id: a
+    foreach:
+      items: "{{ .steps.list.result }}"
+      as: n
+      steps:
+        - id: first
+          run:
+            argv: ["echo", "{{ .n }}"]
+        - id: second
+          when: steps.first.exit_code == 0
+          run:
+            argv: ["echo", "{{ .steps.first.stdout }} {{ .steps.list.stdout }}"]
+`,
+			checkOK:     true,
+			checkNoWarn: true,
+		},
+		{
+			name: "foreach step and steps",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: '[1]'
+      as: n
+      step:
+        run:
+          argv: ["echo", "hi"]
+      steps:
+        - id: b
+          run:
+            argv: ["echo", "hi"]
+`,
+			wantErr: "declare either step or steps, not both",
+		},
+		{
+			name: "foreach steps need ids",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: '[1]'
+      as: n
+      steps:
+        - run:
+            argv: ["echo", "hi"]
+`,
+			wantErr: "foreach.steps[0].id: must not be empty",
+		},
+		{
+			name: "foreach steps id clashes with a scenario step",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: '[1]'
+      as: n
+      steps:
+        - id: after
+          run:
+            argv: ["echo", "hi"]
+  - id: after
+    run:
+      argv: ["echo", "hi"]
+`,
+			wantErr: `step id "after" is already used by a step of the scenario`,
+		},
+		{
+			name: "foreach steps reference a later body step",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: '[1]'
+      as: n
+      steps:
+        - id: first
+          run:
+            argv: ["echo", "{{ .steps.second.stdout }}"]
+        - id: second
+          run:
+            argv: ["echo", "hi"]
+`,
+			wantErr: `references step "second", which is not declared before this step`,
+		},
+		{
+			name: "foreach body step not visible after the foreach",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: '[1]'
+      as: n
+      steps:
+        - id: first
+          run:
+            argv: ["echo", "hi"]
+  - id: b
+    run:
+      argv: ["echo", "{{ .steps.first.stdout }}"]
+`,
+			wantErr: `references step "first", which is not declared before this step`,
+		},
+		{
+			name: "foreach steps reject a gate",
+			yaml: `
+version: 1
+name: valid
+steps:
+  - id: a
+    foreach:
+      items: '[1]'
+      as: n
+      steps:
+        - id: ask
+          gate:
+            message: ok?
+`,
+			wantErr: "a gate can only be a top-level step",
+		},
+		{
 			name: "foreach without items",
 			yaml: `
 version: 1

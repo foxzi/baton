@@ -905,8 +905,15 @@ func validateForeach(scn *Scenario, step *Step, path string, res *Result) {
 		}
 	}
 
+	if len(each.Steps) > 0 {
+		if each.Step != nil {
+			res.errorf(path, step.Line, "declare either step or steps, not both")
+		}
+		validateForeachSteps(scn, each.Steps, path+".steps", res)
+		return
+	}
 	if each.Step == nil {
-		res.errorf(path+".step", step.Line, "must declare a body")
+		res.errorf(path+".step", step.Line, "must declare a body: step or steps")
 		return
 	}
 	if each.Step.ID != "" {
@@ -915,6 +922,45 @@ func validateForeach(scn *Scenario, step *Step, path string, res *Result) {
 	validateNoGate(each.Step, path+".step", res)
 	validateStepBody(scn, each.Step, path+".step", res)
 	validateExpr(path+".step.when", each.Step.When, each.Step.Line, res)
+}
+
+// validateForeachSteps checks the steps of a foreach body. They see the steps
+// declared before the foreach and the body steps before them; their ids must
+// not repeat any step id of the scenario, so that steps.<id> means the same
+// thing wherever it is read.
+func validateForeachSteps(scn *Scenario, steps []Step, prefix string, res *Result) {
+	outer := res.scope
+	declared := map[string]bool{}
+	conditional, ordered := false, true
+	if outer != nil {
+		declared = cloneIDs(outer.earlier)
+		conditional, ordered = outer.conditional, outer.ordered
+	}
+	taken := stepIDs(scn.Steps)
+	for id := range stepIDs(scn.OnFailure) {
+		taken[id] = true
+	}
+
+	for i := range steps {
+		body := &steps[i]
+		path := fmt.Sprintf("%s[%d]", prefix, i)
+		res.enterStep(&stepScope{
+			path:        path,
+			id:          body.ID,
+			earlier:     cloneIDs(declared),
+			conditional: conditional || strings.TrimSpace(body.When) != "",
+			ordered:     ordered,
+		})
+		if taken[body.ID] && !declared[body.ID] {
+			res.errorf(path+".id", body.Line, "step id %q is already used by a step of the scenario", body.ID)
+		}
+		validateStepID(body, path, declared, res)
+		validateNoGate(body, path, res)
+		validateStepBody(scn, body, path, res)
+		validateStepControl(scn, body, path, declared, res)
+		validateExpr(path+".when", body.When, body.Line, res)
+	}
+	res.enterStep(outer)
 }
 
 // validateUntil checks an until body (spec section 3.8).

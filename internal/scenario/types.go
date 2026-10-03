@@ -446,6 +446,11 @@ type ForeachStep struct {
 	// Step is the per-item body. It has no id of its own; it is not a step
 	// in the scenario's own DAG.
 	Step *Step `yaml:"step"`
+
+	// Steps is the per-item body as a sequence, the alternative to Step.
+	// Each step has an id, run in order for every item, and sees the steps
+	// of the same item before it as steps.<id>.
+	Steps []Step `yaml:"steps,omitempty"`
 }
 
 // UntilStep repeats a body until a condition holds (spec section 3.8).

@@ -22,10 +22,12 @@ func (e *Engine) execForeach(ctx context.Context, step *scenario.Step, path stri
 		return expr.Step{}, errorf(ClassConfig, "step %s: foreach.items is required", step.ID)
 	case spec.As == "":
 		return expr.Step{}, errorf(ClassConfig, "step %s: foreach.as is required", step.ID)
-	case spec.Step == nil:
-		return expr.Step{}, errorf(ClassConfig, "step %s: foreach.step is required", step.ID)
+	case spec.Step == nil && len(spec.Steps) == 0:
+		return expr.Step{}, errorf(ClassConfig, "step %s: foreach.step or foreach.steps is required", step.ID)
+	case spec.Step != nil && len(spec.Steps) > 0:
+		return expr.Step{}, errorf(ClassConfig, "step %s: foreach takes step or steps, not both", step.ID)
 	}
-	if spec.Step.Kind() == scenario.KindNone {
+	if spec.Step != nil && spec.Step.Kind() == scenario.KindNone {
 		return expr.Step{}, errorf(ClassConfig, "step %s: foreach.step: exactly one body field must be set", step.ID)
 	}
 
@@ -56,7 +58,16 @@ func (e *Engine) execForeach(ctx context.Context, step *scenario.Step, path stri
 			results[index] = itemEntry(expr.StatusSkipped, expr.Step{}, nil)
 			return
 		}
-		out, itemErr := e.runItem(itemsCtx, spec, index, path, item)
+		var (
+			out     expr.Step
+			itemErr *Error
+			bodies  map[string]any
+		)
+		if len(spec.Steps) > 0 {
+			out, bodies, itemErr = e.runItemSteps(itemsCtx, spec, index, path, item)
+		} else {
+			out, itemErr = e.runItem(itemsCtx, spec, index, path, item)
+		}
 		status := out.Status
 		if itemErr != nil {
 			status = expr.StatusFailed
@@ -69,6 +80,9 @@ func (e *Engine) execForeach(ctx context.Context, step *scenario.Step, path stri
 			}
 		}
 		results[index] = itemEntry(status, out, itemErr)
+		if bodies != nil {
+			results[index].(map[string]any)["steps"] = bodies
+		}
 	}
 
 	if parallel == 1 {
@@ -157,6 +171,73 @@ func (e *Engine) runItem(ctx context.Context, spec *scenario.ForeachStep, index 
 	}
 	out.Status = expr.StatusSuccess
 	return out, nil
+}
+
+// runItemSteps executes a body of several steps for one item, in order. They
+// see the steps of the run and the steps of this item before them under
+// steps.<id>; nothing of the item reaches the run's own step results. The
+// result of the item is the result of its last step that succeeded, and the
+// returned map holds every body step under its id.
+func (e *Engine) runItemSteps(ctx context.Context, spec *scenario.ForeachStep, index int, path string, item any) (expr.Step, map[string]any, *Error) {
+	child := e.withVars(map[string]any{spec.As: item})
+	child.steps = make(map[string]expr.Step, len(e.steps)+len(spec.Steps))
+	for id, done := range e.steps {
+		child.steps[id] = done
+	}
+	itemPath := filepath.Join(path, strconv.Itoa(index))
+	bodies := make(map[string]any, len(spec.Steps))
+
+	var last expr.Step
+	for i := range spec.Steps {
+		body := spec.Steps[i]
+		ok, stepErr := child.shouldRun(&body)
+		if stepErr != nil {
+			return last, bodies, stepErr
+		}
+		if !ok {
+			child.steps[body.ID] = expr.Step{Status: expr.StatusSkipped}
+			bodies[body.ID] = bodyEntry(expr.Step{Status: expr.StatusSkipped}, nil)
+			continue
+		}
+
+		state := &runstore.StepState{Status: runstore.StatusRunning, StartedAt: e.opts.Now()}
+		out, stepErr := child.executeBody(ctx, &body, filepath.Join(itemPath, body.ID), state)
+		if stepErr != nil {
+			out.Status = expr.StatusFailed
+			out.Result = nil
+			child.steps[body.ID] = out
+			bodies[body.ID] = bodyEntry(out, stepErr)
+			// on_error: continue keeps the item going past this step, as it
+			// keeps the run going past a top-level one.
+			if body.OnError == scenario.OnErrorContinue && stepErr.Class != ClassAssert {
+				continue
+			}
+			return last, bodies, stepErr
+		}
+		out.Status = expr.StatusSuccess
+		child.steps[body.ID] = out
+		bodies[body.ID] = bodyEntry(out, nil)
+		last = out
+	}
+	last.Status = expr.StatusSuccess
+	return last, bodies, nil
+}
+
+// bodyEntry is one step of an item in steps.<id>.items[i].steps.
+func bodyEntry(out expr.Step, stepErr *Error) map[string]any {
+	entry := map[string]any{
+		"status":    out.Status,
+		"result":    out.Result,
+		"exit_code": out.ExitCode,
+		"error":     nil,
+	}
+	if stepErr != nil {
+		entry["error"] = map[string]any{
+			"class":   stepErr.Class,
+			"message": stepErr.Msg,
+		}
+	}
+	return entry
 }
 
 // itemEntry is one element of steps.<id>.items.

@@ -288,7 +288,8 @@ Runs its body once per item of a list (spec section 3.7).
 | `max_parallel` | integer | no | Minimum 0. |
 | `on_item_error` | `fail`, `continue` | no |  |
 | `min_success` | number | no | Minimum 0, Maximum 1. |
-| `step` | [step-body](#step-body) | yes | The per-item body; it has no id of its own. |
+| `step` | [step-body](#step-body) | no | The per-item body; it has no id of its own. |
+| `steps` | array of [step](#step) | no | The per-item body as a sequence of steps with ids, run in order; the alternative to step. At least items: 1. |
 
 No other fields are allowed.
 

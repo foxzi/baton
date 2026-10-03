@@ -265,7 +265,7 @@ func (l *LLMStep) UnmarshalYAML(node *yaml.Node) error {
 // foreachKeys are the field names accepted on a foreach body.
 var foreachKeys = map[string]bool{
 	"items": true, "as": true, "max_parallel": true, "on_item_error": true,
-	"min_success": true, "step": true,
+	"min_success": true, "step": true, "steps": true,
 }
 
 // UnmarshalYAML decodes a foreach body. The strict-field check of the
