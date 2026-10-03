@@ -533,11 +533,17 @@ func (f *FS) relSlash(p string) (string, error) {
 // clean, non-absolute, ..-free path can still point outside the workspace
 // once a symlink along it is followed.
 func (f *FS) resolvePath(name, cleaned string) (string, error) {
-	root, err := filepath.EvalSymlinks(f.workspace)
+	// Absolute first: EvalSymlinks keeps a relative workspace relative, and
+	// the prefix check below would then refuse every path.
+	base, err := filepath.Abs(f.workspace)
 	if err != nil {
 		return "", fmt.Errorf("fs: workspace %s: %w", f.workspace, err)
 	}
-	candidate := filepath.Join(f.workspace, filepath.FromSlash(cleaned))
+	root, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", fmt.Errorf("fs: workspace %s: %w", f.workspace, err)
+	}
+	candidate := filepath.Join(base, filepath.FromSlash(cleaned))
 
 	resolved, err := evalExisting(candidate)
 	if err != nil {

@@ -384,6 +384,28 @@ func TestRenderIncludesChildTemplate(t *testing.T) {
 	})
 }
 
+// TestRenderRelativeBaseDir checks render() with the base directory "." the
+// engine passes when a scenario is run from its own directory: a file inside
+// it must not be refused as leaving the scenario directory.
+func TestRenderRelativeBaseDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "templates"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "templates", "child.tmpl"), []byte("child"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Chdir(dir)
+
+	got, err := NewRenderer(".").Render("parent", `{{ render "templates/child.tmpl" . }}`, nil)
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+	if got != "child" {
+		t.Errorf("Render() = %q, want %q", got, "child")
+	}
+}
+
 // TestRenderRecursionDepthLimit checks that a template including itself fails
 // with a nesting-depth error instead of hanging or crashing.
 func TestRenderRecursionDepthLimit(t *testing.T) {

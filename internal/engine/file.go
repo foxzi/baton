@@ -254,11 +254,17 @@ func checkFilePath(value string) (string, error) {
 // repeats what resolvePath does for the fs tools, which are built around a
 // tool policy this step does not have.
 func resolveFilePath(workspace, cleaned string) (string, error) {
-	root, err := filepath.EvalSymlinks(workspace)
+	// Absolute first, for the reason resolveTemplatePath gives in
+	// internal/tmpl: a relative workspace would fail the prefix check.
+	base, err := filepath.Abs(workspace)
 	if err != nil {
 		return "", fmt.Errorf("workspace %s: %w", workspace, err)
 	}
-	candidate := filepath.Join(workspace, filepath.FromSlash(cleaned))
+	root, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", fmt.Errorf("workspace %s: %w", workspace, err)
+	}
+	candidate := filepath.Join(base, filepath.FromSlash(cleaned))
 	resolved, err := evalExistingPath(candidate)
 	if err != nil {
 		return "", err

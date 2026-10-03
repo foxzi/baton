@@ -125,11 +125,18 @@ func checkTemplatePath(value string) (string, error) {
 // reads, so a target that does not exist yet is left for os.ReadFile to
 // report as its usual "no such file" error.
 func (r *Renderer) resolveTemplatePath(cleaned string) (string, error) {
-	root, err := filepath.EvalSymlinks(r.baseDir)
+	// A relative base directory ("." when the scenario is run from its own
+	// directory) is made absolute first: EvalSymlinks keeps a relative path
+	// relative, and the prefix check below would then refuse every file.
+	base, err := filepath.Abs(r.baseDir)
 	if err != nil {
 		return "", fmt.Errorf("scenario directory %s: %w", r.baseDir, err)
 	}
-	candidate := filepath.Join(r.baseDir, filepath.FromSlash(cleaned))
+	root, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", fmt.Errorf("scenario directory %s: %w", r.baseDir, err)
+	}
+	candidate := filepath.Join(base, filepath.FromSlash(cleaned))
 	resolved, err := filepath.EvalSymlinks(candidate)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
