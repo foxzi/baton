@@ -8,6 +8,8 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-03
+
 ### Added
 
 - A `gate` step: the run stops at it and waits for a person. The run
@@ -31,6 +33,14 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
   as `Accept: application/json`. A request header of the same name
   overrides them; `Authorization`, `Proxy-Authorization` and `Cookie`
   are rejected, credentials go through `auth`.
+- `--json` for `baton validate`, `baton runs list` and `baton runs show`:
+  one JSON document on stdout, for CI scripts. `runs list` also takes
+  `--limit` as the long form of `-n`.
+- `baton resume` re-executes a step whose definition changed since the
+  original run: `run.json` records a definition hash for every
+  successful step, a step is replayed only while the hash still
+  matches, and an edited step, or a record from an older baton without
+  the hash, runs again and is reported with the `step_changed` event.
 
 ### Changed
 
@@ -40,6 +50,24 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
   (`llm.schema`, `agent.result`, a skill's `SKILL.md`) have to exist, a
   prompt that reads as a path to a missing file is reported as a
   warning, and a string input that reaches `run.argv` needs a `pattern`.
+
+### Fixed
+
+- Secrets containing quotes, backslashes, newlines or HTML characters
+  (a multi-line PEM key loaded from a file) reached `run.json`,
+  `output.json` and `events.jsonl` unmasked, because redaction ran on
+  the JSON-encoded bytes; the JSON string form of every secret is now
+  redacted too.
+- The step cache under `cache/` was written without redaction: a cached
+  `http` or `run` step whose output echoed a token kept it in plain
+  text in a directory that outlives the run.
+- A `run` step that timed out killed only its direct child; a command
+  that forked kept its children running, and a child holding the output
+  pipe kept the step waiting indefinitely. The step is now stopped with
+  its whole process group.
+- Events from parallel `foreach` bodies could reach `Options.Observer`
+  and `events.jsonl` in different orders; observer calls are now
+  serialized.
 
 ## [0.4.0] - 2026-09-19
 
@@ -173,7 +201,8 @@ agent gateway.
 - **Release.** goreleaser builds static binaries for linux/amd64 and
   linux/arm64 with checksums, published by pushing a `v*` tag.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/foxzi/baton/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/foxzi/baton/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/foxzi/baton/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/foxzi/baton/compare/v0.1.0...v0.2.0
