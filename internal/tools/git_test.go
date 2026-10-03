@@ -282,6 +282,38 @@ func TestGitCommit(t *testing.T) {
 	}
 }
 
+// 7a. git.commit takes new files along, with or without a path, and leaves
+// out the ones the deny list covers.
+func TestGitCommitNewFiles(t *testing.T) {
+	dir := newRepo(t)
+	for name, content := range map[string]string{"new.txt": "new\n", "other.txt": "other\n", ".env": "SECRET=1\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	g, err := NewGit(GitOptions{Workspace: dir, Policy: agent.Policy{GitCommit: true, FSDeny: agent.DefaultFSDeny()}})
+	if err != nil {
+		t.Fatalf("NewGit() error = %v", err)
+	}
+
+	resp := callGitOK(t, g, "git.commit", `{"message":"only new","path":"new.txt"}`)
+	if resp.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, Stderr = %q, want a commit of the new file", resp.ExitCode, resp.Stderr)
+	}
+	if files := runGit(t, dir, "show", "--name-only", "--format=", "HEAD"); strings.TrimSpace(files) != "new.txt" {
+		t.Errorf("files of the path commit = %q, want new.txt alone", files)
+	}
+
+	resp = callGitOK(t, g, "git.commit", `{"message":"the rest"}`)
+	if resp.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, Stderr = %q, want a commit of the rest", resp.ExitCode, resp.Stderr)
+	}
+	if files := runGit(t, dir, "show", "--name-only", "--format=", "HEAD"); strings.TrimSpace(files) != "other.txt" {
+		t.Errorf("files of the whole commit = %q, want other.txt without .env", files)
+	}
+}
+
 // 8. A revision that begins with - is refused before git runs, and so is a
 // path containing .. and a path the deny list covers.
 func TestGitRefusesUnsafeArguments(t *testing.T) {

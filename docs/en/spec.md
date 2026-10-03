@@ -452,7 +452,7 @@ limits:
   max_result_bytes: 64k
 ```
 
-`git.read: true` opens the tools `git.status`, `git.diff`, `git.log`, `git.show`, `git.blame`. `git.commit: true` additionally opens `git.commit` and implies `read`: a step allowed to commit cannot be denied reading.
+`git.read: true` opens the tools `git.status`, `git.diff`, `git.log`, `git.show`, `git.blame`. `git.commit: true` additionally opens `git.commit` and implies `read`: a step allowed to commit cannot be denied reading. `git.commit` stages the changes first, new files included and the paths of the deny list left out, so a fix that adds a test file commits it.
 
 ### 7.4 API Packs
 

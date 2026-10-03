@@ -276,15 +276,33 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 		return nil, err
 	}
 
-	var argv []string
+	pathspec := "."
 	if raw, ok := given["path"]; ok {
 		cleaned, err := g.checkPath("path", raw)
 		if err != nil {
 			return nil, err
 		}
-		argv = []string{"commit", "--message", message, "--", cleaned}
-	} else {
-		argv = []string{"commit", "--all", "--message", message}
+		pathspec = cleaned
+	}
+
+	// commit --all leaves new files out, and a new test is what most fixes
+	// add; so the changes are staged first, new files included and the deny
+	// list excluded, the way the fs tools would never have written them.
+	add := []string{"add", "--all", "--", pathspec}
+	for _, pattern := range g.deny {
+		add = append(add, ":(exclude,glob)"+pattern)
+	}
+	staged, err := g.run(ctx, add...)
+	if err != nil {
+		return nil, err
+	}
+	if resp, ok := staged.(Response); ok && resp.ExitCode != 0 {
+		return resp, nil
+	}
+
+	argv := []string{"commit", "--message", message}
+	if pathspec != "." {
+		argv = append(argv, "--", pathspec)
 	}
 	return g.run(ctx, argv...)
 }
@@ -470,7 +488,7 @@ const (
 		`"ref":{"type":"string","description":"Blame the file as of this revision, instead of the working tree."}` +
 		`},"required":["path"]}`
 
-	gitCommitDescription = "Commit the working tree's changes, optionally limited to one path."
+	gitCommitDescription = "Commit the working tree's changes, new files included, optionally limited to one path."
 	gitCommitSchema      = `{"type":"object","additionalProperties":false,"properties":{` +
 		`"message":{"type":"string","description":"The commit message."},` +
 		`"path":{"type":"string","description":"Limit the commit to this workspace-relative path, instead of every change."}` +
