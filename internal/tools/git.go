@@ -285,24 +285,40 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 		pathspec = cleaned
 	}
 
-	// commit --all leaves new files out, and a new test is what most fixes
-	// add; so the changes are staged first, new files included and the deny
-	// list excluded, the way the fs tools would never have written them.
-	add := []string{"add", "--all", "--", pathspec}
-	for _, pattern := range g.deny {
-		add = append(add, ":(exclude,glob)"+pattern)
-	}
-	staged, err := g.run(ctx, add...)
+	// commit --all and commit -- <path> leave untracked files out, and a new
+	// test is what most fixes add; so the new files are added first. The
+	// list comes from git with .gitignore applied, and the deny list is
+	// applied here, with the same matcher the fs tools use.
+	listed, err := g.run(ctx, "ls-files", "--others", "--exclude-standard", "-z", "--", pathspec)
 	if err != nil {
 		return nil, err
 	}
-	if resp, ok := staged.(Response); ok && resp.ExitCode != 0 {
-		return resp, nil
+	resp, ok := listed.(Response)
+	if !ok || resp.ExitCode != 0 {
+		return listed, nil
+	}
+	if resp.Truncated {
+		return nil, errors.New("too many new files to commit at once; commit them by path")
+	}
+	add := []string{"add", "--"}
+	for _, name := range strings.Split(resp.Stdout, "\x00") {
+		if name != "" && !denied(g.deny, name) {
+			add = append(add, name)
+		}
+	}
+	if len(add) > 2 {
+		staged, err := g.run(ctx, add...)
+		if err != nil {
+			return nil, err
+		}
+		if resp, ok := staged.(Response); ok && resp.ExitCode != 0 {
+			return resp, nil
+		}
 	}
 
-	argv := []string{"commit", "--message", message}
+	argv := []string{"commit", "--all", "--message", message}
 	if pathspec != "." {
-		argv = append(argv, "--", pathspec)
+		argv = []string{"commit", "--message", message, "--", pathspec}
 	}
 	return g.run(ctx, argv...)
 }

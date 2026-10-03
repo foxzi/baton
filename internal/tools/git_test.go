@@ -286,7 +286,8 @@ func TestGitCommit(t *testing.T) {
 // out the ones the deny list covers.
 func TestGitCommitNewFiles(t *testing.T) {
 	dir := newRepo(t)
-	for name, content := range map[string]string{"new.txt": "new\n", "other.txt": "other\n", ".env": "SECRET=1\n"} {
+	files := map[string]string{"new.txt": "new\n", "other.txt": "other\n", ".env": "SECRET=1\n", ".env.testing": "SECRET=2\n", ".gitignore": ".env\n"}
+	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
@@ -309,8 +310,8 @@ func TestGitCommitNewFiles(t *testing.T) {
 	if resp.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, Stderr = %q, want a commit of the rest", resp.ExitCode, resp.Stderr)
 	}
-	if files := runGit(t, dir, "show", "--name-only", "--format=", "HEAD"); strings.TrimSpace(files) != "other.txt" {
-		t.Errorf("files of the whole commit = %q, want other.txt without .env", files)
+	if files := runGit(t, dir, "show", "--name-only", "--format=", "HEAD"); strings.Join(strings.Fields(files), " ") != ".gitignore other.txt" {
+		t.Errorf("files of the whole commit = %q, want other.txt and .gitignore without the .env files", files)
 	}
 }
 
