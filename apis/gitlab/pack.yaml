@@ -3,9 +3,9 @@
 #
 # The pack implements four of the five operations of forge/v1. GitLab posts
 # one discussion per comment and has no batch review call, so post_review is
-# left out on purpose (spec section 7.4.5): a scenario walks post_comment in
-# a foreach instead, and a scenario that declares interface: forge/v1 is told
-# so during validation rather than at run time.
+# left out on purpose (spec section 7.4.5): a scenario walks post_discussion
+# in a foreach instead, and a scenario that declares interface: forge/v1 is
+# told so during validation rather than at run time.
 pack: gitlab
 version: 1
 description: GitLab REST API v4
@@ -45,6 +45,7 @@ ops:
     transform: |
       { id: .iid, title, description, author: .author.username,
         base: .diff_refs.base_sha, head: .diff_refs.head_sha,
+        start: .diff_refs.start_sha,
         files: [ .changes[] | { path: .new_path, diff, deleted: .deleted_file } ] }
     implements: forge/v1.get_change
     max_bytes: 500k
@@ -102,3 +103,27 @@ ops:
       body: { max_len: 65000, in: body }
     transform: '{ id, url: .web_url }'
     implements: forge/v1.post_comment
+
+  # GitLab's inline comment: a discussion anchored to a line of the diff.
+  # The three shas are the diff_refs of get_change, so a scenario passes
+  # base, head and start of that result through. Not part of forge/v1, which
+  # only knows the batch form.
+  post_discussion:
+    post: /projects/{project}/merge_requests/{id}/discussions
+    description: Comment on one line of a merge request's diff
+    encode: json
+    params:
+      project: { pattern: '^[\w./-]+$', encode: path }
+      id: { pattern: '^\d+$' }
+      body: { max_len: 65000, in: body }
+      path: { name: position.new_path, pattern: '^[^\s?#]+$', in: body }
+      line: { name: position.new_line, pattern: '^\d+$', in: body }
+      base_sha: { name: position.base_sha, pattern: '^[0-9a-f]{40}$', in: body }
+      head_sha: { name: position.head_sha, pattern: '^[0-9a-f]{40}$', in: body }
+      start_sha: { name: position.start_sha, pattern: '^[0-9a-f]{40}$', in: body }
+      # The only position type a line comment can have; the default sends
+      # it without the scenario naming it.
+      position_type: { name: position.position_type, enum: [text], default: text, in: body }
+    # A discussion has no web_url of its own; the note inside it is what
+    # the UI links to.
+    transform: '{ id, note_id: .notes[0].id }'

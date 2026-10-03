@@ -9,7 +9,7 @@ GitLab, GitHub or Gitea by changing which pack it loads.
 |---|---|
 | Pack | `gitlab`, version 1 |
 | API | GitLab REST API v4 |
-| Interface | `forge/v1` — `get_change`, `list_files`, `get_file`, `post_comment` |
+| Interface | `forge/v1` — `get_change`, `list_files`, `get_file`, `post_comment`; plus `post_discussion` outside the interface |
 | Extra operations | `list_merge_requests` |
 | Auth | `header`, `PRIVATE-TOKEN` |
 | Base URL | `https://gitlab.com/api/v4` by default |
@@ -66,7 +66,7 @@ Read-only. Implements `forge/v1.get_change`.
 
 ```json
 { "id": 42, "title": "...", "description": "...", "author": "user",
-  "base": "sha", "head": "sha",
+  "base": "sha", "head": "sha", "start": "sha",
   "files": [ { "path": "a.go", "diff": "@@ ...", "deleted": false } ] }
 ```
 
@@ -148,10 +148,31 @@ The type check comes first because a list endpoint answers with an array,
 which has no fields at all. Throttling is read from `RateLimit-Remaining` and
 `Retry-After`, so a retrying step waits as long as GitLab asks it to.
 
+### `post_discussion` — `POST /projects/{project}/merge_requests/{id}/discussions`
+
+Writes. Not part of `forge/v1`: a comment anchored to one line of the diff.
+Body is sent as JSON.
+
+| Argument | In | Limit | Notes |
+|---|---|---|---|
+| `project` | path | | |
+| `id` | path | | |
+| `body` | body | 65000 chars | The comment text, Markdown |
+| `path` | body | | File path on the head side |
+| `line` | body | | Line number on the head side |
+| `base_sha`, `head_sha`, `start_sha` | body | 40 hex chars | The `base`, `head` and `start` of `get_change` |
+
+```json
+{ "id": "6a9c17...", "note_id": 1126 }
+```
+
+GitLab requires all three shas to anchor a line, which is why `get_change`
+exposes `start` alongside `base` and `head`.
+
 ## What is not here, and why
 
 `post_review` is left out on purpose. GitLab posts one discussion per comment
-and has no batch review call, so a scenario walks `post_comment` in a
+and has no batch review call, so a scenario walks `post_discussion` in a
 `foreach` instead. Because the operation carries no `implements`, a scenario
 that declares `interface: forge/v1` is told during validation rather than at
 run time.

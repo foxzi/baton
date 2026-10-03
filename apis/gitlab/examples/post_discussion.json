@@ -1,0 +1,28 @@
+{
+  "id": "6a9c1750b37d513a43987b574953fceb50b03ce7",
+  "individual_note": false,
+  "notes": [
+    {
+      "id": 1126,
+      "type": "DiffNote",
+      "body": "This branch is never taken: the guard above already returns.",
+      "author": { "id": 42, "username": "baton" },
+      "created_at": "2024-05-14T09:20:11Z",
+      "system": false,
+      "noteable_type": "MergeRequest",
+      "noteable_iid": 42,
+      "resolvable": true,
+      "resolved": false,
+      "position": {
+        "base_sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        "start_sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        "head_sha": "9f8e7d6c5b4a9f8e7d6c5b4a9f8e7d6c5b4a9f8e",
+        "old_path": "internal/server/handler.go",
+        "new_path": "internal/server/handler.go",
+        "position_type": "text",
+        "old_line": null,
+        "new_line": 57
+      }
+    }
+  ]
+}

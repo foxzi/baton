@@ -9,7 +9,7 @@ GitLab, GitHub или Gitea — меняется только подключае
 |---|---|
 | Пак | `gitlab`, версия 1 |
 | API | GitLab REST API v4 |
-| Интерфейс | `forge/v1` — `get_change`, `list_files`, `get_file`, `post_comment` |
+| Интерфейс | `forge/v1` — `get_change`, `list_files`, `get_file`, `post_comment`; плюс `post_discussion` вне интерфейса |
 | Дополнительные операции | `list_merge_requests` |
 | Аутентификация | `header`, `PRIVATE-TOKEN` |
 | Base URL | по умолчанию `https://gitlab.com/api/v4` |
@@ -66,7 +66,7 @@ baton откажется загружать пак, который покрыв�
 
 ```json
 { "id": 42, "title": "...", "description": "...", "author": "user",
-  "base": "sha", "head": "sha",
+  "base": "sha", "head": "sha", "start": "sha",
   "files": [ { "path": "a.go", "diff": "@@ ...", "deleted": false } ] }
 ```
 
@@ -149,11 +149,32 @@ envelope:
 у которого полей нет вообще. Троттлинг читается из `RateLimit-Remaining` и
 `Retry-After`, так что шаг с повторами ждёт столько, сколько просит GitLab.
 
+### `post_discussion` — `POST /projects/{project}/merge_requests/{id}/discussions`
+
+Запись. Не входит в `forge/v1`: комментарий, привязанный к одной строке
+диффа. Тело уходит как JSON.
+
+| Аргумент | Где | Ограничение | Примечания |
+|---|---|---|---|
+| `project` | path | | |
+| `id` | path | | |
+| `body` | body | 65000 символов | Текст комментария, Markdown |
+| `path` | body | | Путь файла на стороне head |
+| `line` | body | | Номер строки на стороне head |
+| `base_sha`, `head_sha`, `start_sha` | body | 40 hex-символов | `base`, `head` и `start` из `get_change` |
+
+```json
+{ "id": "6a9c17...", "note_id": 1126 }
+```
+
+GitLab требует все три sha, чтобы привязать строку, поэтому `get_change`
+отдаёт `start` рядом с `base` и `head`.
+
 ## Чего здесь нет и почему
 
 `post_review` не реализован сознательно. GitLab создаёт по одной дискуссии на
 каждый комментарий и не имеет пакетного вызова ревью, поэтому сценарий
-вызывает `post_comment` в `foreach`. Поскольку у операции нет `implements`,
+вызывает `post_discussion` в `foreach`. Поскольку у операции нет `implements`,
 сценарию, объявившему `interface: forge/v1`, об этом сообщат на валидации, а
 не во время выполнения.
 
