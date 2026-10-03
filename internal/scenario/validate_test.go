@@ -1850,6 +1850,45 @@ func TestValidatePromptFile(t *testing.T) {
 	}
 }
 
+// TestValidateCommandArgvInputs holds a declared command to the same rule as
+// a run step: a string input in its argv needs a pattern.
+func TestValidateCommandArgvInputs(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		wantErr string
+	}{
+		{name: "a constrained string is fine", input: "{type: string, pattern: '^[a-z]+$'}"},
+		{
+			name:    "an unconstrained string",
+			input:   "{type: string}",
+			wantErr: `input "dir" reaches a command argument, so it needs a pattern`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			text := "version: 1\nname: argv\ninputs:\n  dir: " + tc.input +
+				"\ncommands:\n  test:\n    argv: [\"ls\", \"{{ .inputs.dir }}\"]\n" +
+				"steps:\n  - id: build\n    run:\n      argv: [\"true\"]\n"
+			scn, err := Parse([]byte(text), "test.yaml")
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			res := Validate(scn)
+			if tc.wantErr == "" {
+				if !res.OK() {
+					t.Fatalf("OK() = false, Errors = %v", res.Errors)
+				}
+				return
+			}
+			if res.OK() || !diagnosticsContain(res.Errors, tc.wantErr) {
+				t.Fatalf("Errors = %v, want one containing %q", res.Errors, tc.wantErr)
+			}
+		})
+	}
+}
+
 // TestValidateArgvInputs covers specification section 4, check 8: a string
 // input that reaches a command argument has to carry a pattern.
 func TestValidateArgvInputs(t *testing.T) {

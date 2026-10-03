@@ -48,6 +48,10 @@ type CommandOptions struct {
 	// a command's own env entry of the same name overrides it.
 	Env map[string]string
 
+	// Inputs are the run's bound inputs, which argv templates see as
+	// .inputs next to the call's .args.
+	Inputs map[string]any
+
 	// Budget is the wall clock all of the step's command calls share; the
 	// runner sets it to half the step's timeout (spec section 7.5).
 	Budget time.Duration
@@ -78,6 +82,7 @@ type Commands struct {
 	commands  map[string]scenario.Command
 	secrets   SecretSource
 	shared    map[string]string
+	inputs    map[string]any
 	renderer  *tmpl.Renderer
 	maxBytes  int64
 
@@ -123,6 +128,7 @@ func NewCommands(opts CommandOptions) (*Commands, error) {
 		commands:  selected,
 		secrets:   opts.Secrets,
 		shared:    opts.Env,
+		inputs:    opts.Inputs,
 		renderer:  tmpl.NewRenderer(opts.Workspace),
 		maxBytes:  maxBytes,
 		bounded:   opts.Budget > 0,
@@ -241,15 +247,15 @@ func (c *Commands) handler(id string, command scenario.Command) gateway.Handler 
 	}
 }
 
-// renderArgv fills the argv templates with the call's arguments. The
-// arguments are rendered into single argv entries and never split, so a value
-// with a space in it stays one argument.
+// renderArgv fills the argv templates with the call's arguments and the
+// run's inputs. The values are rendered into single argv entries and never
+// split, so a value with a space in it stays one argument.
 func (c *Commands) renderArgv(id string, argv []string, args map[string]string) ([]string, error) {
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("command %s has no argv", id)
 	}
 
-	data := map[string]any{"args": args}
+	data := map[string]any{"args": args, "inputs": c.inputs}
 	rendered := make([]string, 0, len(argv))
 	for i, entry := range argv {
 		value, err := c.renderer.Render(fmt.Sprintf("%s.argv[%d]", id, i), entry, data)

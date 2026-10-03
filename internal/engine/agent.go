@@ -261,6 +261,7 @@ func (e *Engine) agentToolSet(ctx context.Context, step *scenario.Step, call *ag
 		Policy:    call.policy,
 		Secrets:   e.secretSource(),
 		Env:       call.shared,
+		Inputs:    e.opts.Inputs,
 		// The commands of a step share half of its timeout (section 7.5).
 		Budget:         e.stepLimit(step) / 2,
 		MaxOutputBytes: call.policy.MaxResultBytes,

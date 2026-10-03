@@ -238,6 +238,32 @@ func TestCommandArgumentsBecomeSingleArgvEntries(t *testing.T) {
 	}
 }
 
+func TestCommandArgvSeesTheInputs(t *testing.T) {
+	bin := script(t, t.TempDir(), "argv.sh", `for a in "$@"; do echo "[$a]"; done`)
+
+	c, err := NewCommands(CommandOptions{
+		Workspace: t.TempDir(),
+		Declared: map[string]scenario.Command{
+			"echo": {Argv: []string{bin, "-w", "/srv/{{ .inputs.ticket }}", "{{ .args.filter }}"},
+				Args: map[string]scenario.CommandArg{"filter": {Pattern: `\w+`}}},
+		},
+		Policy: agent.Policy{ExecMode: scenario.ExecModeCommands},
+		Inputs: map[string]any{"ticket": "click-42"},
+	})
+	if err != nil {
+		t.Fatalf("NewCommands: %v", err)
+	}
+
+	response, err := call(t, c, "echo", `{"filter":"Login"}`)
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	want := "[-w]\n[/srv/click-42]\n[Login]\n"
+	if response.Stdout != want {
+		t.Errorf("stdout = %q, want %q", response.Stdout, want)
+	}
+}
+
 func TestCommandExitCodeIsData(t *testing.T) {
 	bin := script(t, t.TempDir(), "fail.sh", "echo out; echo err >&2; exit 7")
 

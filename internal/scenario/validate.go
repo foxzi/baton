@@ -810,7 +810,9 @@ func validateCommands(scn *Scenario, res *Result) {
 			res.errorf(path+".argv[0]", command.Line, "command must not be empty")
 		}
 		for i, arg := range command.Argv {
-			validateTemplate(fmt.Sprintf("%s.argv[%d]", path, i), arg, command.Line, res)
+			argPath := fmt.Sprintf("%s.argv[%d]", path, i)
+			validateTemplate(argPath, arg, command.Line, res)
+			validateArgvInputs(scn, argPath, arg, command.Line, res)
 		}
 		if !parseModes[command.Parse] {
 			res.errorf(path+".parse", command.Line, "unknown mode %q, want text, json or lines", command.Parse)

@@ -659,6 +659,8 @@ commands:
 
 Execution — by the runner (not the agent process), `exec` without a shell, `cwd` = workspace, env = a minimal allowlist (`PATH`, `HOME`, `GOCACHE`, `GOPATH`, `GOFLAGS`) plus declared ones. An argument starting with `/` or containing `..` is rejected before the `pattern` check. Tool response: `{ exit_code, stdout, stderr, truncated, duration_ms, result? }`. A nonzero exit code is data, not an error. The total time limit for commands within a step is half of the step's `timeout`.
 
+An argv template sees the call's arguments as `.args` and the run's inputs as `.inputs`, so a command can name a directory the run was started for. A string input there needs a `pattern`, as in `run.argv` (section 4).
+
 ### 7.6 Other gateway tools
 
 - `fetch(url)`: GET against a domain allowlist, no cookies, no following redirects outside the allowlist, text extraction from HTML, `max_bytes`

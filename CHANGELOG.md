@@ -24,6 +24,9 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 - `agent.workspace`: the directory an agent step works in, a template
   resolved like `run.cwd`, so an agent can work in a git worktree an
   earlier step created.
+- The argv templates of `commands` see the run's inputs as `.inputs`
+  next to `.args`; a string input there needs a `pattern`, as in
+  `run.argv`.
 
 ### Changed
 
