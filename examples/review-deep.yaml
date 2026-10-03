@@ -1,0 +1,178 @@
+version: 1
+name: review-deep
+description: >
+  Reviews a large merge request area by area. A cheap model splits the
+  changed files into groups a reviewer would read together; each group gets
+  its own agent with the read-only profile, running in parallel, and a group
+  whose agent fails falls back to a diff-only review by a plain model. One
+  comment collects the verdicts; the run exits with code 2 when any area
+  blocks, so the CI job turns red. Like review.yaml it runs from CI in a
+  checkout of the merge request's branch, and the forge token never reaches
+  an agent.
+
+inputs:
+  project:
+    type: string
+    pattern: '^[\w./-]+$'
+    required: true
+  mr:
+    type: string
+    pattern: '^\d+$'
+    required: true
+  api_url:
+    type: string
+    default: https://gitlab.com/api/v4
+    pattern: '^https?://[\w.:/-]+$'
+
+budget:
+  usd: 6
+  time: 40m
+
+secrets:
+  gitlab_rw: { from: env, key: GITLAB_TOKEN }
+  anthropic: { from: env, key: ANTHROPIC_API_KEY }
+
+apis:
+  forge:
+    pack: gitlab
+    from: ../apis/
+    config: { base_url: "{{ .inputs.api_url }}" }
+    auth: { secret: gitlab_rw }
+    timeout: 20s
+
+steps:
+  - id: changes
+    http:
+      op: forge.get_change
+      args:
+        project: "{{ .inputs.project }}"
+        id: "{{ .inputs.mr }}"
+
+  # Grouping is a reading task, not a reviewing one, so it goes to a small
+  # model that sees paths and diff sizes, not the diffs.
+  - id: scope
+    needs: [changes]
+    llm:
+      model: anthropic/claude-haiku-4-5
+      system: >
+        You split the files of a merge request into areas a reviewer would
+        read together: a feature and its tests, a migration and the code
+        that uses it, a renamed interface and its call sites. Answer with
+        JSON only.
+      prompt: |
+        Merge request "{{ .steps.changes.result.title }}" changed these files:
+        {{ range .steps.changes.result.files }}
+        - {{ .path }} ({{ len .diff }} bytes of diff{{ if .deleted }}, deleted{{ end }}){{ end }}
+
+        Group them into at most six areas. Every file goes into exactly one
+        area; put a file you cannot place with the area it is closest to.
+        Give each area a short lowercase name and say what its reviewer
+        should look for.
+      schema: schemas/review-scope.json
+      max_tokens: 1500
+      temperature: 0
+
+  - id: areas
+    needs: [scope]
+    foreach:
+      items: "{{ .steps.scope.result.areas }}"
+      as: area
+      max_parallel: 3
+      # One area the agent cannot finish does not lose the others; half of
+      # them failing means the review is not worth posting.
+      on_item_error: continue
+      min_success: 0.5
+      steps:
+        - id: review
+          agent:
+            engine: claude-code
+            model: claude-sonnet-4-6
+            prompt: prompts/review-area.md
+            with:
+              project: "{{ .inputs.project }}"
+              id: "{{ .inputs.mr }}"
+              title: "{{ .steps.changes.result.title }}"
+              base: "{{ .steps.changes.result.base }}"
+              head: "{{ .steps.changes.result.head }}"
+              area: "{{ .area.name }}"
+              focus: "{{ .area.focus }}"
+              files: "{{ range .area.files }}- {{ . }}\n{{ end }}"
+            profile: review
+            tools:
+              apis: [forge.get_change]
+            limits:
+              max_tool_calls: 60
+            max_turns: 20
+            budget_usd: 1
+            env:
+              ANTHROPIC_API_KEY: { secret: anthropic }
+            result: schemas/review.json
+          # When the agent runs out of turns or budget, a plain model reads
+          # the diff of the same files. The result has the same shape, so
+          # the comment and the verdict below do not care which one ran.
+          on_error: fallback
+          fallback:
+            llm:
+              model: anthropic/claude-sonnet-4-6
+              prompt: prompts/review-diff.md
+              with:
+                project: "{{ .inputs.project }}"
+                id: "{{ .inputs.mr }}"
+                title: "{{ .steps.changes.result.title }}"
+                area: "{{ .area.name }}"
+                focus: "{{ .area.focus }}"
+                diff: |
+                  {{ range $f := .steps.changes.result.files }}{{ range $.area.files }}{{ if eq . $f.path }}--- {{ $f.path }}
+                  {{ $f.diff }}
+                  {{ end }}{{ end }}{{ end }}
+              schema: schemas/review.json
+              max_tokens: 3000
+              temperature: 0
+
+  # items keeps the input order, so the area of an entry is the one of the
+  # same index in scope.
+  - id: publish
+    needs: [areas]
+    http:
+      op: forge.post_comment
+      args:
+        project: "{{ .inputs.project }}"
+        id: "{{ .inputs.mr }}"
+        body: |
+          **baton review of `{{ .steps.changes.result.head }}`**
+          {{ range $i, $item := .steps.areas.items }}{{ $area := index $.steps.scope.result.areas $i }}
+          ### {{ $area.name }}{{ if eq $item.status "success" }} — {{ $item.result.verdict }}
+
+          {{ $item.result.summary }}
+          {{ range $item.result.findings }}
+          - `{{ .file }}{{ if .line }}:{{ .line }}{{ end }}` **{{ .severity }}** {{ .message }}{{ end }}{{ else }} — not reviewed
+
+          The agent failed with a {{ $item.error.class }} error; read these files yourself:
+          {{ range $area.files }}
+          - `{{ . }}`{{ end }}{{ end }}
+          {{ end }}
+    dedupe_key: "review-deep-{{ .inputs.project }}-{{ .inputs.mr }}-{{ .steps.changes.result.head }}"
+
+  - id: posted
+    needs: [publish]
+    assert:
+      condition: 'steps.publish.result.url != ""'
+      message: "the review was posted but the comment carries no url"
+
+  # A blocking area fails the run after the comment is up: exit code 2,
+  # no on_failure, the pipeline shows red next to the comment.
+  - id: verdict
+    needs: [posted]
+    assert:
+      condition: 'none(steps.areas.items, .status == "success" && .result.verdict == "block")'
+      message: "at least one area blocks the merge"
+
+on_failure:
+  - id: note
+    http:
+      op: forge.post_comment
+      args:
+        project: "{{ .inputs.project }}"
+        id: "{{ .inputs.mr }}"
+        body: "baton could not finish the review: {{ .run.failed_step }} failed with {{ .run.error.class }}."
+    dedupe_key: "review-deep-failed-{{ .inputs.project }}-{{ .inputs.mr }}-{{ .run.id }}"

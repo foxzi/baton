@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["areas"],
+  "properties": {
+    "areas": {
+      "type": "array",
+      "description": "Groups of changed files a reviewer would read together",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "files", "focus"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Short label, lowercase, used in the comment",
+            "pattern": "^[a-z][a-z0-9-]{1,30}$"
+          },
+          "files": {
+            "type": "array",
+            "description": "Paths exactly as they appear in the change",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "focus": {
+            "type": "string",
+            "description": "What a reviewer of this group should look for",
+            "maxLength": 300
+          }
+        }
+      }
+    }
+  }
+}
