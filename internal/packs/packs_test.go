@@ -1,6 +1,7 @@
 package packs
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -1624,5 +1625,59 @@ ops:
 				t.Errorf("Parse() error = %q, want mention of %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// TestBindArgsRawPathDotSegments checks that a path argument which is not
+// percent-encoded (a file path GitHub routes on) cannot carry a . or ..
+// segment, while a plain nested path and an encoded one still pass.
+func TestBindArgsRawPathDotSegments(t *testing.T) {
+	pack, err := Parse([]byte(`pack: rawpath
+version: 1
+ops:
+  get_file:
+    get: /repos/{project}/contents/{path}
+    params:
+      project: { pattern: '^[\w.-]+/[\w.-]+$' }
+      path: { pattern: '^[^\s?#]+$' }
+  get_encoded:
+    get: /projects/{path}
+    params:
+      path: { pattern: '^[^\s?#]+$', encode: path }
+`), "test.yaml")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	op, err := pack.Op("get_file")
+	if err != nil {
+		t.Fatalf("Op(get_file) error = %v", err)
+	}
+	for _, bad := range []string{"../../user", "src/../../../user", "./x", "a/..", "src/./x"} {
+		_, err := op.BindArgs(map[string]any{"project": "o/r", "path": bad})
+		if err == nil || !strings.Contains(err.Error(), "args.path: a path argument cannot climb") {
+			t.Errorf("BindArgs(path=%q) error = %v, want a dot-segment constraint", bad, err)
+		}
+		if err != nil && !errors.Is(err, ErrConstraint) {
+			t.Errorf("BindArgs(path=%q) error is not ErrConstraint: %v", bad, err)
+		}
+	}
+	bound, err := op.BindArgs(map[string]any{"project": "o/r", "path": "src/.hidden/..config.yaml"})
+	if err != nil {
+		t.Fatalf("BindArgs(nested path) error = %v", err)
+	}
+	if bound.Path["path"] != "src/.hidden/..config.yaml" {
+		t.Errorf("Path[path] = %q", bound.Path["path"])
+	}
+
+	encoded, err := pack.Op("get_encoded")
+	if err != nil {
+		t.Fatalf("Op(get_encoded) error = %v", err)
+	}
+	bound, err = encoded.BindArgs(map[string]any{"path": "../x"})
+	if err != nil {
+		t.Fatalf("BindArgs(encoded ..) error = %v: an escaped value cannot climb", err)
+	}
+	if bound.Path["path"] != "..%2Fx" {
+		t.Errorf("Path[path] = %q, want ..%%2Fx", bound.Path["path"])
 	}
 }

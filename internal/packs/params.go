@@ -74,6 +74,9 @@ func (o *Op) BindArgs(args map[string]any) (*BoundArgs, error) {
 			}
 			if param.Encode == EncodePath {
 				text = escapeSegment(text)
+			} else if hasDotSegment(text) {
+				problems = append(problems, fmt.Errorf("args.%s: a path argument cannot climb with . or ..: %w", name, ErrConstraint))
+				continue
 			}
 			bound.Path[name] = text
 		case InQuery, InForm:
@@ -253,6 +256,17 @@ func scalar(name string, value any) (string, error) {
 	default:
 		return "", fmt.Errorf("args.%s: %T cannot go into a path, query or form", name, value)
 	}
+}
+
+// hasDotSegment reports whether a raw path value carries a . or .. segment,
+// which would let a templated argument reach another endpoint of the API.
+func hasDotSegment(value string) bool {
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "." || segment == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 // escapeSegment percent-encodes a value that stands for a whole path
