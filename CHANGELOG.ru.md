@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Исправлено
+
+- `claude-code`: шаг, который входит через `CLAUDE_CODE_OAUTH_TOKEN` без
+  `ANTHROPIC_API_KEY`, запускается без `--bare`. В bare-режиме Claude Code
+  2.1 читает только API-ключ, и такой шаг падал с "Not logged in".
+
 ## [0.6.0] - 2026-10-04
 
 ### Добавлено

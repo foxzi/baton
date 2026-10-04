@@ -208,7 +208,12 @@ func (e *Engine) argv(req agent.Request, mcpPath, settingsPath string) []string 
 
 	// Bare mode drops what would make two runs of the same step differ:
 	// hooks, plugins, auto-discovered CLAUDE.md files and keychain reads.
-	argv = e.appendIfSupported(argv, "--bare")
+	// It also reads no OAuth token, so a step signed in with one runs
+	// without it; the home of its own and restricted mode still keep the
+	// user's configuration out.
+	if !oauthOnly(req.Env) {
+		argv = e.appendIfSupported(argv, "--bare")
+	}
 
 	// The built-in set the step is allowed, so that a tool outside the
 	// policy is not merely unapproved but absent.

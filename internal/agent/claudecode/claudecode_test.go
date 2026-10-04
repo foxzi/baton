@@ -549,6 +549,37 @@ func TestRunPassesSupportedLimits(t *testing.T) {
 	}
 }
 
+func TestRunDropsBareModeForOAuth(t *testing.T) {
+	flags := []string{"--restricted", "--bare"}
+	cases := []struct {
+		name     string
+		env      map[string]string
+		wantBare bool
+	}{
+		{"api key", map[string]string{"ANTHROPIC_API_KEY": "sk-test"}, true},
+		{"oauth token", map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "oauth-test"}, false},
+		{"both", map[string]string{"ANTHROPIC_API_KEY": "sk-test", "CLAUDE_CODE_OAUTH_TOKEN": "oauth-test"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, req, record := fixture(t, stub{flags: flags, report: successReport})
+			req.Env = tc.env
+
+			if _, err := engine.Run(context.Background(), req); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+
+			got := readCall(t, record)
+			if got.has("--bare") != tc.wantBare {
+				t.Errorf("args = %q, want bare mode %v", got.Args, tc.wantBare)
+			}
+			if !got.has("--restricted") {
+				t.Errorf("args = %q, want restricted mode", got.Args)
+			}
+		})
+	}
+}
+
 func TestRunKeepsEnvironmentSmall(t *testing.T) {
 	t.Setenv("SECRET_FROM_RUNNER", "leaked")
 	t.Setenv("PATH", os.Getenv("PATH"))

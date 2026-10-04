@@ -8,6 +8,12 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- `claude-code`: a step signed in with `CLAUDE_CODE_OAUTH_TOKEN` and no
+  `ANTHROPIC_API_KEY` runs without `--bare`. Claude Code 2.1 reads only
+  an API key in bare mode, so such a step stopped with "Not logged in".
+
 ## [0.6.0] - 2026-10-04
 
 ### Added

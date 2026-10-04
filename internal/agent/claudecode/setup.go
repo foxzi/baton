@@ -200,6 +200,12 @@ func environ(home string, extra map[string]string) []string {
 	return env
 }
 
+// oauthOnly reports whether the step signs the CLI in with a Claude Code
+// OAuth token and no API key.
+func oauthOnly(env map[string]string) bool {
+	return env["CLAUDE_CODE_OAUTH_TOKEN"] != "" && env["ANTHROPIC_API_KEY"] == ""
+}
+
 // writeJSON writes a configuration file the CLI reads. The files hold a
 // per-run token, so they are readable by their owner only.
 func writeJSON(path string, value any) error {
