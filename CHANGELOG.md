@@ -8,6 +8,8 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-04
+
 ### Added
 
 - `http.args`: an argument written as a lone template action that names
@@ -27,6 +29,14 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 - The JSON Schema accepted no valid `fallback`: it required an `id`
   there, which `baton validate` forbids.
+- The cache key of a `run` step covered the names of its `env` but not
+  their rendered values, so a readonly step was replayed after a
+  templated value changed. The values reach the key as a digest and
+  still stay out of `input.json`.
+- A raw path argument of a pack operation (one without `encode: path`,
+  such as `github.get_file.path`) accepted `.` and `..` segments, which
+  let a templated value reach another endpoint of the API. They are now
+  a constraint violation.
 
 ## [0.5.0] - 2026-10-03
 
@@ -221,7 +231,8 @@ agent gateway.
 - **Release.** goreleaser builds static binaries for linux/amd64 and
   linux/arm64 with checksums, published by pushing a `v*` tag.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/foxzi/baton/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/foxzi/baton/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/foxzi/baton/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/foxzi/baton/compare/v0.2.0...v0.3.0

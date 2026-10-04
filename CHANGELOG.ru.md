@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-04
+
 ### Добавлено
 
 - `http.args`: аргумент, записанный одним действием шаблона, которое
@@ -28,6 +30,14 @@
 
 - JSON Schema не принимала ни один корректный `fallback`: она требовала в
   нём `id`, который `baton validate` запрещает.
+- Ключ кэша шага `run` учитывал имена его `env`, но не отрендеренные
+  значения, поэтому readonly-шаг воспроизводился из кэша после смены
+  шаблонного значения. Значения попадают в ключ дайджестом и по-прежнему
+  не пишутся в `input.json`.
+- Сырой path-аргумент операции пака (без `encode: path`, например
+  `github.get_file.path`) принимал сегменты `.` и `..`, через которые
+  шаблонное значение могло попасть на другой эндпоинт API. Теперь это
+  нарушение constraint.
 
 ## [0.5.0] - 2026-10-03
 
@@ -223,7 +233,8 @@
 - **Релиз.** goreleaser собирает статические бинарники для linux/amd64 и
   linux/arm64 с контрольными суммами, публикация — пушем тега `v*`.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/foxzi/baton/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/foxzi/baton/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/foxzi/baton/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/foxzi/baton/compare/v0.2.0...v0.3.0
