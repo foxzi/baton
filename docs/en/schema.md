@@ -245,6 +245,7 @@ No other fields are allowed.
 |---|---|---|---|
 | `read` | boolean | no |  |
 | `commit` | boolean | no |  |
+| `repos` | array of string | no |  |
 
 No other fields are allowed.
 

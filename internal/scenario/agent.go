@@ -106,6 +106,10 @@ const (
 type GitTools struct {
 	Read   *bool `yaml:"read"`
 	Commit *bool `yaml:"commit"`
+
+	// Repos are other repositories inside the workspace, as relative
+	// paths, that the git tools may work in through their repo argument.
+	Repos []string `yaml:"repos"`
 }
 
 // ExecTools is the command policy of an agent step.

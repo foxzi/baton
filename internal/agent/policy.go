@@ -14,6 +14,9 @@ type Policy struct {
 	GitRead   bool
 	GitCommit bool
 
+	// GitRepos are the nested repositories the git tools may also use.
+	GitRepos []string
+
 	ExecMode scenario.ExecMode
 
 	// ExecCommands names the commands the agent may run; empty means every
@@ -161,6 +164,7 @@ func applyTools(p *Policy, tools *scenario.Tools) {
 		if git.Commit != nil {
 			p.GitCommit = *git.Commit
 		}
+		p.GitRepos = git.Repos
 	}
 
 	if exec := tools.Exec; exec != nil {

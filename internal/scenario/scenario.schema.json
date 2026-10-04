@@ -659,6 +659,12 @@
             },
             "commit": {
               "type": "boolean"
+            },
+            "repos": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         },

@@ -739,6 +739,14 @@ func validateTools(scn *Scenario, tools *Tools, path string, line int, res *Resu
 		}
 	}
 
+	if git := tools.Git; git != nil {
+		for i, repo := range git.Repos {
+			if !isWorkspaceDir(repo) {
+				res.errorf(fmt.Sprintf("%s.git.repos[%d]", path, i), line, "%q must be a relative path inside the workspace", repo)
+			}
+		}
+	}
+
 	if exec := tools.Exec; exec != nil {
 		if !execModes[exec.Mode] {
 			res.errorf(path+".exec.mode", line, "unknown value %q, want none or commands", exec.Mode)
@@ -1208,4 +1216,13 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// isWorkspaceDir reports whether dir names a directory below the workspace
+// root: relative, already clean and not reaching out through .. .
+func isWorkspaceDir(dir string) bool {
+	if dir == "" || filepath.IsAbs(dir) || filepath.Clean(dir) != dir || dir == "." {
+		return false
+	}
+	return dir != ".." && !strings.HasPrefix(dir, "../")
 }

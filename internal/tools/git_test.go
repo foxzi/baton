@@ -418,3 +418,58 @@ func TestGitBlameNamesTheAuthor(t *testing.T) {
 		t.Error("git.blame with a ref starting with -: error = nil, want it refused")
 	}
 }
+
+// A repo argument runs the tool in a nested repository the policy lists,
+// with paths relative to it and the deny list still in force; any other
+// directory is refused.
+func TestGitNestedRepo(t *testing.T) {
+	dir := newRepo(t)
+	nested := newRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	if err := os.Rename(nested, filepath.Join(dir, "sub", "app")); err != nil {
+		t.Fatalf("move the nested repository: %v", err)
+	}
+	app := filepath.Join(dir, "sub", "app")
+	for name, content := range map[string]string{"a.txt": "two\n", "b.txt": "new\n", ".env": "SECRET=1\n"} {
+		if err := os.WriteFile(filepath.Join(app, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	g, err := NewGit(GitOptions{Workspace: dir, Policy: agent.Policy{
+		GitCommit: true,
+		GitRepos:  []string{"sub/app"},
+		FSDeny:    append(agent.DefaultFSDeny(), "sub/app/secret/**"),
+	}})
+	if err != nil {
+		t.Fatalf("NewGit() error = %v", err)
+	}
+
+	if _, err := callGit(t, g, "git.status", `{"repo":"sub"}`); err == nil {
+		t.Error("git.status in a repository outside git.repos: error = nil, want it refused")
+	}
+	if _, err := callGit(t, g, "git.diff", `{"repo":"sub/app","path":".env"}`); err == nil {
+		t.Error("git.diff of .env in the nested repository: error = nil, want it denied")
+	}
+	if _, err := callGit(t, g, "git.diff", `{"repo":"sub/app","path":"secret/key"}`); err == nil {
+		t.Error("git.diff of a path the workspace deny list covers: error = nil, want it denied")
+	}
+
+	resp := callGitOK(t, g, "git.diff", `{"repo":"sub/app","path":"a.txt"}`)
+	if !strings.Contains(resp.Stdout, "+two") {
+		t.Errorf("git.diff in the nested repository = %q, want the change of a.txt", resp.Stdout)
+	}
+
+	resp = callGitOK(t, g, "git.commit", `{"repo":"sub/app","message":"nested"}`)
+	if resp.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, Stderr = %q, want a commit in the nested repository", resp.ExitCode, resp.Stderr)
+	}
+	if files := runGit(t, app, "show", "--name-only", "--format=", "HEAD"); strings.Join(strings.Fields(files), " ") != "a.txt b.txt" {
+		t.Errorf("files of the nested commit = %q, want a.txt and b.txt without .env", files)
+	}
+	if count := strings.TrimSpace(runGit(t, dir, "rev-list", "--count", "HEAD")); count != "1" {
+		t.Errorf("commits in the workspace repository = %s, want it untouched", count)
+	}
+}

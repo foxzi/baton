@@ -8,6 +8,13 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+### Added
+
+- `tools.git.repos`: nested repositories inside the workspace that the git
+  tools may work in. Every git tool takes a `repo` argument naming one of
+  them, so one agent step can fix and commit in two checkouts; any other
+  directory is refused and the deny list still holds.
+
 ## [0.6.1] - 2026-10-04
 
 ### Fixed

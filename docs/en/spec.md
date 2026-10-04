@@ -437,6 +437,7 @@ tools:
   git:
     read: true
     commit: false
+    repos: [.baton/app]            # nested repositories the git tools may name
   exec:
     mode: none | commands
     commands: [test, lint]         # subset of commands:, or all
@@ -453,6 +454,8 @@ limits:
 ```
 
 `git.read: true` opens the tools `git.status`, `git.diff`, `git.log`, `git.show`, `git.blame`. `git.commit: true` additionally opens `git.commit` and implies `read`: a step allowed to commit cannot be denied reading. `git.commit` adds new files first, except those `.gitignore` or the deny list covers, so a fix that adds a test file commits it.
+
+`git.repos` lists nested repositories inside the workspace, as relative paths, such as a second checkout a step clones next to the code. Every git tool then takes a `repo` argument naming one of them; paths in that call are relative to the nested repository, and the deny list holds both as written and against the workspace path. A `repo` outside the list is refused; without the argument the tools run in the workspace, as before.
 
 ### 7.4 API Packs
 

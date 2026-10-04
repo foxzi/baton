@@ -434,6 +434,16 @@ steps:
 			wantErr: `unknown value "write"`,
 		},
 		{
+			name: "git repo outside the workspace",
+			body: `      engine: claude-code
+      prompt: p
+      result: r.json
+      tools:
+        git: { read: true, repos: [.baton/app, ../other] }
+`,
+			wantErr: `git.repos[1]: "../other" must be a relative path inside the workspace`,
+		},
+		{
 			name: "negative limit",
 			body: `      engine: claude-code
       prompt: p

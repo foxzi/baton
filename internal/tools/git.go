@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -40,6 +41,7 @@ const (
 // Git is the git tool set of one step.
 type Git struct {
 	workspace string
+	repos     map[string]bool
 	read      bool
 	commit    bool
 	deny      []string
@@ -62,8 +64,13 @@ func NewGit(opts GitOptions) (*Git, error) {
 	if maxBytes <= 0 {
 		maxBytes = agent.DefaultMaxResultBytes
 	}
+	repos := make(map[string]bool, len(opts.Policy.GitRepos))
+	for _, repo := range opts.Policy.GitRepos {
+		repos[repo] = true
+	}
 	return &Git{
 		workspace: opts.Workspace,
+		repos:     repos,
 		// Committing implies reading: an agent that cannot see what it
 		// changed would commit blind.
 		read:     opts.Policy.GitRead || opts.Policy.GitCommit,
@@ -128,10 +135,14 @@ func (g *Git) status(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnknownArgs(given); err != nil {
+	if err := checkUnknownArgs(given, "repo"); err != nil {
 		return nil, err
 	}
-	return g.run(ctx, "status", "--porcelain=v1", "--branch")
+	repo, err := g.repo(given)
+	if err != nil {
+		return nil, err
+	}
+	return repo.run(ctx, "status", "--porcelain=v1", "--branch")
 }
 
 func (g *Git) diff(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -139,7 +150,11 @@ func (g *Git) diff(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnknownArgs(given, "ref", "path"); err != nil {
+	if err := checkUnknownArgs(given, "ref", "path", "repo"); err != nil {
+		return nil, err
+	}
+	repo, err := g.repo(given)
+	if err != nil {
 		return nil, err
 	}
 
@@ -151,13 +166,13 @@ func (g *Git) diff(ctx context.Context, raw json.RawMessage) (any, error) {
 		argv = append(argv, ref)
 	}
 	if raw, ok := given["path"]; ok {
-		cleaned, err := g.checkPath("path", raw)
+		cleaned, err := repo.checkPath("path", raw)
 		if err != nil {
 			return nil, err
 		}
 		argv = append(argv, "--", cleaned)
 	}
-	return g.run(ctx, argv...)
+	return repo.run(ctx, argv...)
 }
 
 func (g *Git) log(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -165,7 +180,11 @@ func (g *Git) log(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnknownArgs(given, "ref", "path", "max_count"); err != nil {
+	if err := checkUnknownArgs(given, "ref", "path", "max_count", "repo"); err != nil {
+		return nil, err
+	}
+	repo, err := g.repo(given)
+	if err != nil {
 		return nil, err
 	}
 
@@ -191,13 +210,13 @@ func (g *Git) log(ctx context.Context, raw json.RawMessage) (any, error) {
 		argv = append(argv, ref)
 	}
 	if raw, ok := given["path"]; ok {
-		cleaned, err := g.checkPath("path", raw)
+		cleaned, err := repo.checkPath("path", raw)
 		if err != nil {
 			return nil, err
 		}
 		argv = append(argv, "--", cleaned)
 	}
-	return g.run(ctx, argv...)
+	return repo.run(ctx, argv...)
 }
 
 func (g *Git) show(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -205,7 +224,11 @@ func (g *Git) show(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnknownArgs(given, "ref", "path"); err != nil {
+	if err := checkUnknownArgs(given, "ref", "path", "repo"); err != nil {
+		return nil, err
+	}
+	repo, err := g.repo(given)
+	if err != nil {
 		return nil, err
 	}
 
@@ -219,13 +242,13 @@ func (g *Git) show(ctx context.Context, raw json.RawMessage) (any, error) {
 
 	target := ref
 	if raw, ok := given["path"]; ok {
-		cleaned, err := g.checkPath("path", raw)
+		cleaned, err := repo.checkPath("path", raw)
 		if err != nil {
 			return nil, err
 		}
 		target = ref + ":" + cleaned
 	}
-	return g.run(ctx, "show", target)
+	return repo.run(ctx, "show", target)
 }
 
 // blame is git.blame's handler: who last touched every line of one file.
@@ -234,7 +257,11 @@ func (g *Git) blame(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnknownArgs(given, "ref", "path"); err != nil {
+	if err := checkUnknownArgs(given, "ref", "path", "repo"); err != nil {
+		return nil, err
+	}
+	repo, err := g.repo(given)
+	if err != nil {
 		return nil, err
 	}
 
@@ -242,7 +269,7 @@ func (g *Git) blame(ctx context.Context, raw json.RawMessage) (any, error) {
 	if !ok {
 		return nil, errors.New(`argument "path" is required`)
 	}
-	cleaned, err := g.checkPath("path", rawPath)
+	cleaned, err := repo.checkPath("path", rawPath)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +282,7 @@ func (g *Git) blame(ctx context.Context, raw json.RawMessage) (any, error) {
 		argv = append(argv, ref)
 	}
 	argv = append(argv, "--", cleaned)
-	return g.run(ctx, argv...)
+	return repo.run(ctx, argv...)
 }
 
 // commitCall is git.commit's handler.
@@ -264,7 +291,11 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnknownArgs(given, "message", "path"); err != nil {
+	if err := checkUnknownArgs(given, "message", "path", "repo"); err != nil {
+		return nil, err
+	}
+	repo, err := g.repo(given)
+	if err != nil {
 		return nil, err
 	}
 
@@ -278,7 +309,7 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 
 	pathspec := "."
 	if raw, ok := given["path"]; ok {
-		cleaned, err := g.checkPath("path", raw)
+		cleaned, err := repo.checkPath("path", raw)
 		if err != nil {
 			return nil, err
 		}
@@ -289,7 +320,7 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 	// test is what most fixes add; so the new files are added first. The
 	// list comes from git with .gitignore applied, and the deny list is
 	// applied here, with the same matcher the fs tools use.
-	listed, err := g.run(ctx, "ls-files", "--others", "--exclude-standard", "-z", "--", pathspec)
+	listed, err := repo.run(ctx, "ls-files", "--others", "--exclude-standard", "-z", "--", pathspec)
 	if err != nil {
 		return nil, err
 	}
@@ -302,12 +333,12 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 	}
 	add := []string{"add", "--"}
 	for _, name := range strings.Split(resp.Stdout, "\x00") {
-		if name != "" && !denied(g.deny, name) {
+		if name != "" && !repo.denied(name) {
 			add = append(add, name)
 		}
 	}
 	if len(add) > 2 {
-		staged, err := g.run(ctx, add...)
+		staged, err := repo.run(ctx, add...)
 		if err != nil {
 			return nil, err
 		}
@@ -320,7 +351,7 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 	if pathspec != "." {
 		argv = []string{"commit", "--message", message, "--", pathspec}
 	}
-	return g.run(ctx, argv...)
+	return repo.run(ctx, argv...)
 }
 
 // run executes one git call and turns it into the answer the agent sees. A
@@ -329,15 +360,15 @@ func (g *Git) commitCall(ctx context.Context, raw json.RawMessage) (any, error) 
 // to read, not something the runner should swallow. Only a timeout, a
 // cancelled context or a git binary that could not be started at all come
 // back as an error.
-func (g *Git) run(ctx context.Context, argv ...string) (any, error) {
+func (r gitRepo) run(ctx context.Context, argv ...string) (any, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 
-	stdout := &cappedBuffer{limit: g.maxBytes}
-	stderr := &cappedBuffer{limit: g.maxBytes}
+	stdout := &cappedBuffer{limit: r.maxBytes}
+	stderr := &cappedBuffer{limit: r.maxBytes}
 
 	cmd := exec.CommandContext(ctx, "git", argv...)
-	cmd.Dir = g.workspace
+	cmd.Dir = r.dir
 	cmd.Env = gitEnv()
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -436,8 +467,48 @@ func checkRevision(name, value string) error {
 // touch: no leading slash, no .. segment, no control character, and not on
 // the deny list of spec section 7.3. checkWorkspacePath in paths.go is the
 // shared implementation; fs.go calls it too.
-func (g *Git) checkPath(name, value string) (string, error) {
-	return checkWorkspacePath(name, value, g.deny)
+func (r gitRepo) checkPath(name, value string) (string, error) {
+	cleaned, err := checkWorkspacePath(name, value, r.deny)
+	if err != nil {
+		return "", err
+	}
+	if r.denied(cleaned) {
+		return "", gateway.Refusef("path %q is denied", cleaned)
+	}
+	return cleaned, nil
+}
+
+// gitRepo is the repository one call runs in: the workspace itself, or one
+// of the nested repositories the step's policy lists in git.repos.
+type gitRepo struct {
+	dir      string
+	prefix   string
+	deny     []string
+	maxBytes int64
+}
+
+// repo picks the repository named by the call's repo argument. A repository
+// outside the policy's list is refused: the list is what keeps the tools
+// away from any other checkout that happens to sit in the workspace.
+func (g *Git) repo(given map[string]string) (gitRepo, error) {
+	r := gitRepo{dir: g.workspace, deny: g.deny, maxBytes: g.maxBytes}
+	name, ok := given["repo"]
+	if !ok || name == "." {
+		return r, nil
+	}
+	if !g.repos[name] {
+		return gitRepo{}, gateway.Refusef("repository %q is not one of the step's git.repos", name)
+	}
+	r.dir = filepath.Join(g.workspace, name)
+	r.prefix = name + "/"
+	return r, nil
+}
+
+// denied applies the deny list to a path relative to the repository twice:
+// as it is, so that .git/** and .env* hold in a nested repository too, and
+// as a workspace path, which is what a step writes its own patterns against.
+func (r gitRepo) denied(name string) bool {
+	return denied(r.deny, name) || denied(r.deny, r.prefix+name)
 }
 
 // checkMaxCount holds git.log's max_count to a positive number no larger
@@ -477,36 +548,47 @@ func checkCommitMessage(value string) error {
 // value, since these tools have no scenario-declared shape to read it from.
 const (
 	gitStatusDescription = "Show the working tree's status: modified, staged and untracked files, with the current branch."
-	gitStatusSchema      = `{"type":"object","additionalProperties":false,"properties":{}}`
+	gitStatusSchema      = `{"type":"object","additionalProperties":false,"properties":{` +
+		gitRepoProperty +
+		`}}`
 
 	gitDiffDescription = "Show the working tree's changes, optionally against a revision and limited to one path."
 	gitDiffSchema      = `{"type":"object","additionalProperties":false,"properties":{` +
 		`"ref":{"type":"string","description":"A revision or range to diff against, such as HEAD~1 or main...HEAD."},` +
-		`"path":{"type":"string","description":"Limit the diff to this workspace-relative path."}` +
+		`"path":{"type":"string","description":"Limit the diff to this workspace-relative path."},` +
+		gitRepoProperty +
 		`}}`
 
 	gitLogDescription = "Show the commit history, optionally starting from a revision and limited to a path."
 	gitLogSchema      = `{"type":"object","additionalProperties":false,"properties":{` +
 		`"ref":{"type":"string","description":"A revision or range to start from, such as HEAD or main..feature."},` +
 		`"path":{"type":"string","description":"Limit the history to this workspace-relative path."},` +
-		`"max_count":{"type":"string","description":"How many commits to show, as decimal digits. Default 20, at most 200."}` +
+		`"max_count":{"type":"string","description":"How many commits to show, as decimal digits. Default 20, at most 200."},` +
+		gitRepoProperty +
 		`}}`
 
 	gitShowDescription = "Show a commit, or a file's content as of a revision."
 	gitShowSchema      = `{"type":"object","additionalProperties":false,"properties":{` +
 		`"ref":{"type":"string","description":"The revision to show."},` +
-		`"path":{"type":"string","description":"A workspace-relative path to show as of that revision, instead of the whole commit."}` +
+		`"path":{"type":"string","description":"A workspace-relative path to show as of that revision, instead of the whole commit."},` +
+		gitRepoProperty +
 		`},"required":["ref"]}`
 
 	gitBlameDescription = "Show who last changed every line of a file, with the commit and date."
 	gitBlameSchema      = `{"type":"object","additionalProperties":false,"properties":{` +
 		`"path":{"type":"string","description":"The workspace-relative path to blame."},` +
-		`"ref":{"type":"string","description":"Blame the file as of this revision, instead of the working tree."}` +
+		`"ref":{"type":"string","description":"Blame the file as of this revision, instead of the working tree."},` +
+		gitRepoProperty +
 		`},"required":["path"]}`
 
 	gitCommitDescription = "Commit the working tree's changes, new files included, optionally limited to one path."
 	gitCommitSchema      = `{"type":"object","additionalProperties":false,"properties":{` +
 		`"message":{"type":"string","description":"The commit message."},` +
-		`"path":{"type":"string","description":"Limit the commit to this workspace-relative path, instead of every change."}` +
+		`"path":{"type":"string","description":"Limit the commit to this workspace-relative path, instead of every change."},` +
+		gitRepoProperty +
 		`},"required":["message"]}`
+
+	// gitRepoProperty is the repo argument every git tool takes. Paths in
+	// a call that names a repository are relative to that repository.
+	gitRepoProperty = `"repo":{"type":"string","description":"Run in this nested repository, one of the step's git.repos, instead of the workspace; paths are then relative to it."}`
 )
