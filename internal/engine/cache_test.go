@@ -407,3 +407,44 @@ ops:
 		t.Errorf("second result = %#v, want the transformed name", results[1])
 	}
 }
+
+// A readonly run step whose environment carries a rendered value is keyed
+// by that value: the same argv with another env is another command.
+func TestCache_EnvValuesChangeTheKey(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	dir := t.TempDir()
+	yamlText := `
+version: 1
+name: probe
+inputs:
+  who:
+    type: string
+    default: world
+steps:
+  - id: probe
+    run:
+      argv: ["sh", "-c", "printf \"$WHO\""]
+      env:
+        WHO: "{{ .inputs.who }}"
+      parse: text
+      readonly: true
+`
+	call := func(who string) string {
+		eng, store, _ := newTestEngine(t, yamlText, func(opts *Options) {
+			opts.Inputs = map[string]any{"who": who}
+			opts.Workspace = dir
+			opts.Cache = cache.Open(cacheDir)
+		})
+		if _, err := eng.Run(context.Background()); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		out := readStepJSON(t, filepath.Join(store.Dir(), "steps", "probe", "output.json"))
+		return fmt.Sprint(out["result"])
+	}
+	if got := call("world"); got != "world" {
+		t.Fatalf("result = %q", got)
+	}
+	if got := call("mars"); got != "mars" {
+		t.Fatalf("result = %q, want mars: the cache answered for another env", got)
+	}
+}

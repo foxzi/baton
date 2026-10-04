@@ -36,7 +36,7 @@ func (e *Engine) execRun(ctx context.Context, step *scenario.Step, path string) 
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
-	env, envNames, stepErr := e.buildEnv(step.ID, body.Env)
+	env, envNames, envDigest, stepErr := e.buildEnv(step.ID, body.Env)
 	if stepErr != nil {
 		return expr.Step{}, stepErr
 	}
@@ -58,7 +58,9 @@ func (e *Engine) execRun(ctx context.Context, step *scenario.Step, path string) 
 	}
 	e.writeStepJSON(path, "input.json", input)
 
-	cacheKey, cached, hit := e.cacheGet(step, path, input, nil)
+	// The environment values are part of the command but not of input.json,
+	// where they could expose a secret: they travel in the key as a digest.
+	cacheKey, cached, hit := e.cacheGet(step, path, input, map[string]string{"env": envDigest})
 	if hit {
 		return cached, nil
 	}
@@ -200,19 +202,24 @@ func (e *Engine) resolveDir(stepID, field, dir string) (string, *Error) {
 	return filepath.Join(workspace, rendered), nil
 }
 
-// buildEnv builds the child environment and the list of names to record in
-// input.json. Secret values reach the child process and nothing else: they
-// are never rendered, logged or written to the run directory (section 6).
-func (e *Engine) buildEnv(stepID string, declared map[string]scenario.EnvValue) ([]string, []string, *Error) {
+// buildEnv builds the child environment, the list of names to record in
+// input.json and a digest of the values for the cache key. Secret values
+// reach the child process and nothing else: they are never rendered, logged
+// or written to the run directory (section 6).
+func (e *Engine) buildEnv(stepID string, declared map[string]scenario.EnvValue) ([]string, []string, string, *Error) {
 	vals, names, stepErr := e.stepEnv(stepID, "run.env", declared)
 	if stepErr != nil {
-		return nil, nil, stepErr
+		return nil, nil, "", stepErr
 	}
 	env := os.Environ()
+	var material []byte
 	for _, name := range sortedKeys(vals) {
-		env = append(env, name+"="+vals[name])
+		entry := name + "=" + vals[name]
+		env = append(env, entry)
+		material = append(material, entry...)
+		material = append(material, 0)
 	}
-	return env, names, nil
+	return env, names, hashBytes(material), nil
 }
 
 // stepEnv resolves the environment of a step's process: the scenario-wide
