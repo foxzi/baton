@@ -8,6 +8,8 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-04
+
 ### Added
 
 - `tools.git.repos`: nested repositories inside the workspace that the git
@@ -246,7 +248,8 @@ agent gateway.
 - **Release.** goreleaser builds static binaries for linux/amd64 and
   linux/arm64 with checksums, published by pushing a `v*` tag.
 
-[Unreleased]: https://github.com/foxzi/baton/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/foxzi/baton/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/foxzi/baton/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/foxzi/baton/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/foxzi/baton/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/foxzi/baton/compare/v0.4.0...v0.5.0
