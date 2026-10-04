@@ -1,5 +1,5 @@
-# Jira Cloud REST API pack. It implements three operations of tracker/v1:
-# get_issue, search and comment.
+# Jira Cloud REST API pack. It implements four operations of tracker/v1:
+# get_issue, search, comment and create_issue.
 #
 # Jira Cloud offers two REST API generations at once: v3 speaks the Atlassian
 # Document Format for rich text, v2 still accepts and returns plain text for

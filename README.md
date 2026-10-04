@@ -9,7 +9,7 @@ Tasks shaped like *collect data with a script → hand it to a model for interpr
 ## Key features
 
 - **Scenarios are YAML in git.** Typed inputs with defaults and patterns, steps with explicit dependencies, `when:` conditions in expr-lang, static reference checking — `baton validate` reports every problem before anything runs, and `--dry-run` prints the plan.
-- **Nine step types.** `run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `assert` — see [the table below](#step-types).
+- **Ten step types.** `run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `gate`, `assert` — see [the table below](#step-types).
 - **Model calls with a contract.** Anthropic, OpenAI and any OpenAI-compatible endpoint (OpenRouter included). Every `llm` step returns JSON validated against a schema, with a fallback model chain and the structured-output mode negotiated per provider.
 - **Coding agents as one step.** Claude Code or Codex, driven through a built-in MCP gateway: the runner prepares the workspace, serves exactly the tools the step's profile allows and takes the answer from `submit_result`.
 - **Capability instead of access.** No shell, no `curl`, no ambient network. An agent gets declared argv commands with validated arguments, workspace-scoped file writes with path deny-lists, git history and local commits, `fetch` on a domain allowlist, read-only pack operations, cross-run `state` and proxied third-party MCP servers. The `review`, `fix` and `research` profiles pick the set.
@@ -95,6 +95,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 | `until` | A bounded loop with an exit condition, e.g. "keep fixing until the tests pass" |
 | `file` | Reading, writing and listing files in the workspace |
 | `switch` | Branch on the value of an expression: one step per case, sugar over `when:` |
+| `gate` | Pause the run for a human decision; the run exits with code 5 and continues with `baton resume --approve` or `--reject` |
 | `assert` | Fail the run deliberately with a distinct exit code, to block a merge in CI |
 
 ## Use cases
@@ -117,7 +118,7 @@ The agent in the `review` step can read the repository and call read-only forge 
 
 **Runnable.** The `run`, `assert`, `http`, `llm`, `foreach`, `notify`, `agent`, `until`, `file`, `switch` and `gate` steps execute end to end, together with the cache, `resume`, budgets, `fallback`, `dedupe_key`, `fetch`, `state`, signal handling, the MCP gateway with proxied third-party servers, packs from git with interface checks and the `baton apis` commands. The [weekly report example](examples/weekly-report.yaml) is the current acceptance scenario — a foreach over projects through the GitLab pack, a model digest against a JSON schema and a notification, cached so a repeated run of the same week spends no tokens.
 
-**Outstanding.** The pack set in `apis/` covers `gitlab`, `github`, `gitea`, `jira` (Cloud), `jira-server` (Server/Data Center), `telegram` and `slack`; any other service still needs a pack of its own. GitLab does not implement its interface in full: it has no `post_review` endpoint that takes a batch of line comments.
+**Outstanding.** The pack set in `apis/` covers `gitlab`, `github`, `gitea`, `jira` (Cloud), `jira-server` (Server/Data Center), `telegram` and `slack`; any other service still needs a pack of its own. GitLab does not implement its interface in full: it has no `post_review` endpoint that takes a batch of line comments. Its pack offers `post_discussion` instead, one line comment per call, which `examples/review-deep.yaml` walks.
 
 Roadmap, per [the specification](docs/ru/spec.md) (section 15):
 
@@ -179,7 +180,7 @@ baton run examples/weekly-report.yaml \
     -i 'projects=["acme/web", "acme/api"]' -i since=2026-01-01
 ```
 
-`examples/` holds the scenarios the tests run: `hello.yaml`, `mr-comment.yaml`, `review.yaml`, `weekly-report.yaml`, `triage.yaml` and `llm-smoke.yaml`. The last one needs no forge and no repository token, only a provider key, so it is the shortest way to see that a key, a model name, the structured output mode and the cost accounting all work against the real service:
+`examples/` holds the scenarios the tests run: `hello.yaml`, `mr-comment.yaml`, `review.yaml`, `review-deep.yaml`, `weekly-report.yaml`, `triage.yaml`, `jira-report.yaml`, `jira-quality.yaml` and `llm-smoke.yaml`. The last one needs no forge and no repository token, only a provider key, so it is the shortest way to see that a key, a model name, the structured output mode and the cost accounting all work against the real service:
 
 ```sh
 export OPENROUTER_API_KEY=...
@@ -201,9 +202,10 @@ Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>
 - [Architecture](docs/en/architecture.md) — package map, execution lifecycle, config/secrets boundaries
 - [Specification for v1](docs/en/spec.md) — the authoritative technical document
 - [Scenario schema reference](docs/en/schema.md) — every field of the format, generated from the JSON Schema
+- [Editor setup](docs/en/editor-setup.md) — connect the scenario JSON Schema to an editor for completion and checks
 - [Docker](docs/en/docker.md) — build/run with docker compose, host uid/gid, secrets, config mount
 - [Changelog](CHANGELOG.md) — what changed in each release
-- Russian originals: [быстрый старт](docs/ru/quickstart.md), [обзор](docs/ru/overview.md), [архитектура](docs/ru/architecture.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [Docker](docs/ru/docker.md), [README](docs/ru/README.md)
+- Russian originals: [быстрый старт](docs/ru/quickstart.md), [обзор](docs/ru/overview.md), [архитектура](docs/ru/architecture.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [настройка редактора](docs/ru/editor-setup.md), [Docker](docs/ru/docker.md), [README](docs/ru/README.md)
 
 ## License
 

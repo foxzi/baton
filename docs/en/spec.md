@@ -15,7 +15,7 @@ Goal: a working binary that can (a) run MR code review from CI on GitLab and Git
 - API packs (section 7.4): a loader with version pinning and checksum, auth schemes including `exchange`, response envelopes, four pagination strategies, jq transforms (gojq), `graphql` operations; interfaces `forge/v1`, `tracker/v1`, `notify/v1`
 - The gateway as an MCP server, tools from packs, `commands`, `fetch`, `state`, `submit_result`
 - The `baton apis import` command — generating a pack stub from OpenAPI
-- A separate `baton-apis` repository with starter packs: `gitlab`, `github`, `gitea` (`forge/v1`), `jira` (`tracker/v1`), `telegram`, `slack` (`notify/v1`)
+- Starter packs in `apis/` of this repository: `gitlab`, `github`, `gitea` (`forge/v1`), `jira`, `jira-server` (`tracker/v1`), `telegram`, `slack` (`notify/v1`)
 - Engines: `claude-code` and `codex` for `agent:`; providers `anthropic`, `openai`, `openrouter`, and any OpenAI-compatible endpoint for `llm:`; `fake` for tests
 - Error classes, retry, `on_error`, `fallback`, `on_failure`, exit codes
 - Run directory, cache, `resume`, tool audit log, secret redaction
@@ -54,7 +54,7 @@ internal/jsonschema    JSON Schema validation of LLM structured output
 internal/gateway       gateway MCP server (streamable HTTP on localhost)
 internal/runstore      runs/ directory: run.json, event log, cost, resume
 internal/cache         content-addressed step result cache
-internal/engine        DAG traversal, step kinds (run/http/llm/agent/foreach/until/assert), retry, on_error, budgets
+internal/engine        DAG traversal, step kinds (run/http/llm/agent/foreach/until/assert/switch/gate), retry, on_error, budgets
 internal/workspace     prepares the agent's working directory (credentials, not files)
 internal/exitcode      process exit codes
 internal/notify        notification channels
@@ -868,7 +868,7 @@ The directory grows with every run and nothing removes runs on its own. `baton r
 
 ### 10.3 Cache
 
-Key: `sha256(normalized step definition without id and when + rendered inputs + hashes of prompt/schema/skill files + the checksum of the pack an http step calls + engine + model + baton version)`. The cache is a `cache/` directory next to `runs/`, its contents are `output.json` and artifacts.
+Key: `sha256(normalized step definition without id and when + rendered inputs + the rendered env values of a run step as a digest + hashes of prompt/schema/skill files + the checksum of the pack an http step calls + engine + model + baton version)`. The cache is a `cache/` directory next to `runs/`, its contents are `output.json` and artifacts. The `env` values enter the key only as a digest and are not written to `input.json`, since they may hold secrets.
 
 By default `cache: true` for `llm` and `run` with `readonly: true`; `false` for `http` with mutating methods and `agent` with `fs.write`. `--no-cache` disables reading from the cache, not writing.
 
@@ -884,17 +884,19 @@ A run with status `waiting` (section 3.11) is resumed with `--approve` or `--rej
 
 ```
 baton run <scenario.yaml> [-i key=val]... [--input-file f.json] [--run-id ID]
-          [--runs-dir DIR] [--workspace DIR] [--no-cache] [--dry-run] [--json] [-v]
+          [--runs-dir DIR] [--workspace DIR] [--config FILE]... [--cache-dir DIR]
+          [--no-cache] [--dry-run] [--json] [-v]
 baton validate <scenario.yaml> [--json]   # validation only, code 0/3
 baton doctor <scenario.yaml>              # scenario, config, providers, files: no step runs
 baton init <directory>                    # a self-contained example scenario with its files
-baton resume <run-id> [--runs-dir DIR] [--approve | --reject] [--reason TEXT]
+baton resume <run-id> [--runs-dir DIR] [--json] [-v] [--approve | --reject] [--reason TEXT]
 baton runs list [--runs-dir DIR] [-n 20] [--json]
-baton runs show <run-id> [--json]         # summary, cost, step statuses
-baton runs logs <run-id> [--step ID]      # step stdout/stderr
-baton runs prune [--keep N] [--older-than 30d] [--dry-run]   # delete old runs; running ones only by age
+baton runs show <run-id> [--runs-dir DIR] [--json]   # summary, cost, step statuses
+baton runs logs <run-id> [--runs-dir DIR] [--step ID]   # step stdout/stderr
+baton runs prune [--runs-dir DIR] [--keep N] [--older-than 30d] [--dry-run]   # delete old runs; running ones only by age
 baton tools <scenario.yaml> --step ID     # what the agent will see: names, schemas, descriptions
 baton schema                              # scenario JSON Schema on stdout
+baton version                             # build identity: version, commit, date
 baton apis import --openapi f --ops a,b   # pack stub from OpenAPI (section 7.4.7)
 baton apis validate <pack.yaml>           # check a pack and its examples/ against interfaces
 baton apis call <scenario> <api>.<op> -a k=v   # call an operation manually, for debugging packs
@@ -968,7 +970,7 @@ mcp_servers:
 - Integration on the `fake` engine: a full run of a review scenario; retry on `schema`; `fallback`; `on_failure` on `budget`; `foreach` with `continue` and `min_success`; `resume` after a failure; `until` with `max_iterations`; `dedupe_key`
 - Providers: a contract test on an `httptest` server for each `kind` — message and tool-call normalization in both directions, all three structured-output levels, parsing usage and cost (including OpenRouter's `usage.cost`), handling 429 with `Retry-After`, switching via `fallback_models`
 - Packs (`internal/httpx`, `internal/packs`): an `httptest` server for each auth scheme, including `exchange` with a chain and cookies; each pagination strategy, including stopping at `max_pages`; an envelope with an error; `form` and `graphql`; token redaction in the URL
-- The `baton-apis` repository: contract tests — `examples/<op>.json` with recorded responses for each API are run through the transforms and checked against the interface schemas in the repository's CI; `baton apis validate` for every pack
+- The `apis/` directory: contract tests — `examples/<op>.json` with recorded responses for each API are run through the transforms and checked against the interface schemas in the repository's CI; `baton apis validate` for every pack
 - One end-to-end test with a real `claude-code` behind the `BATON_E2E=1` flag and one real request per provider behind the `BATON_E2E_PROVIDERS=1` flag, run manually before a release
 - Linter, `go vet`, `-race` in the project's CI
 

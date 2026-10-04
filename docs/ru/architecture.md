@@ -30,7 +30,7 @@ flowchart TB
 
     subgraph Engine["internal/engine"]
         eng[Engine.Run]
-        steps["исполнители шагов:\nrun, http, llm, agent,\nforeach, until, file,\nswitch, assert, notify"]
+        steps["исполнители шагов:\nrun, http, llm, agent,\nforeach, until, file,\nswitch, gate, assert, notify"]
     end
 
     tmplPkg[internal/tmpl\nGo-шаблоны + expr-lang]
@@ -432,7 +432,7 @@ runs/<run-id>/
 
 | Тема | Статус | Где это описано |
 |---|---|---|
-| Девять типов шагов (`run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `assert`) + `notify` | Реализовано | `internal/engine/*.go`, см. таблицу выше |
+| Десять типов шагов (`run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `gate`, `assert`) + `notify` | Реализовано | `internal/engine/*.go`, см. таблицу выше |
 | Паки (локальные + git, `forge/v1`/`tracker/v1`/`notify/v1`, `baton apis import/validate/call`) | Реализовано | `internal/packs`, `internal/ifaces`, `apis/` |
 | MCP-шлюз и профили инструментов для шагов `agent` | Реализовано | `internal/gateway`, `internal/tools`, `internal/agent/policy.go` |
 | Resume, кеш, dedupe | Реализовано | `internal/runstore`, `internal/cache`, `retryable()` в `engine.go` |

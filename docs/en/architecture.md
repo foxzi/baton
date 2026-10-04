@@ -31,7 +31,7 @@ flowchart TB
 
     subgraph Engine["internal/engine"]
         eng[Engine.Run]
-        steps["step executors:\nrun, http, llm, agent,\nforeach, until, file,\nswitch, assert, notify"]
+        steps["step executors:\nrun, http, llm, agent,\nforeach, until, file,\nswitch, gate, assert, notify"]
     end
 
     tmplPkg[internal/tmpl\nGo templates + expr-lang]
@@ -417,7 +417,7 @@ line between what runs today and what is discussed elsewhere:
 
 | Topic | Status | Where it lives |
 |---|---|---|
-| Nine step types (`run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `assert`) + `notify` | Implemented | `internal/engine/*.go`, see table above |
+| Ten step types (`run`, `http`, `llm`, `agent`, `foreach`, `until`, `file`, `switch`, `gate`, `assert`) + `notify` | Implemented | `internal/engine/*.go`, see table above |
 | Packs (local + git, `forge/v1`/`tracker/v1`/`notify/v1`, `baton apis import/validate/call`) | Implemented | `internal/packs`, `internal/ifaces`, `apis/` |
 | MCP gateway + tool profiles for `agent` steps | Implemented | `internal/gateway`, `internal/tools`, `internal/agent/policy.go` |
 | Resume, cache, dedupe | Implemented | `internal/runstore`, `internal/cache`, `retryable()` in `engine.go` |

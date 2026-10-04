@@ -15,7 +15,7 @@
 - API-паки (раздел 7.4): загрузчик с пином версии и чексуммой, схемы авторизации включая `exchange`, конверты ответов, четыре стратегии пагинации, jq-трансформы (gojq), операции `graphql`; интерфейсы `forge/v1`, `tracker/v1`, `notify/v1`
 - Шлюз как MCP-сервер, инструменты из паков, `commands`, `fetch`, `state`, `submit_result`
 - Команда `baton apis import` — генерация заготовки пака из OpenAPI
-- Отдельный репозиторий `baton-apis` со стартовыми паками: `gitlab`, `github`, `gitea` (`forge/v1`), `jira` (`tracker/v1`), `telegram`, `slack` (`notify/v1`)
+- Стартовые паки в `apis/` этого репозитория: `gitlab`, `github`, `gitea` (`forge/v1`), `jira`, `jira-server` (`tracker/v1`), `telegram`, `slack` (`notify/v1`)
 - Движки: `claude-code` и `codex` для `agent:`; провайдеры `anthropic`, `openai`, `openrouter` и любой OpenAI-совместимый endpoint для `llm:`; `fake` для тестов
 - Классы ошибок, retry, `on_error`, `fallback`, `on_failure`, коды выхода
 - Каталог прогона, кеш, `resume`, аудит-лог инструментов, редактирование секретов
@@ -54,7 +54,7 @@ internal/jsonschema    валидация structured output LLM по JSON Schema
 internal/gateway       MCP-сервер шлюза (streamable HTTP на localhost)
 internal/runstore      каталог runs/: run.json, журнал событий, стоимость, resume
 internal/cache         кеш результатов шагов по содержимому (content-addressed)
-internal/engine        обход DAG, виды шагов (run/http/llm/agent/foreach/until/assert), retry, on_error, бюджеты
+internal/engine        обход DAG, виды шагов (run/http/llm/agent/foreach/until/assert/switch/gate), retry, on_error, бюджеты
 internal/workspace     подготовка рабочего каталога агента (креды, а не файлы)
 internal/exitcode      коды выхода процесса
 internal/notify        каналы уведомлений
@@ -868,7 +868,7 @@ runs/<id>/
 
 ### 10.3 Кеш
 
-Ключ: `sha256(нормализованное определение шага без id и when + отрендеренные входы + хеши файлов промптов/схем/навыков + контрольная сумма пака, который вызывает http-шаг + engine + model + версия baton)`. Кеш — каталог `cache/` рядом с `runs/`, содержимое — `output.json` и артефакты.
+Ключ: `sha256(нормализованное определение шага без id и when + отрендеренные входы + отрендеренные значения env шага run в виде дайджеста + хеши файлов промптов/схем/навыков + контрольная сумма пака, который вызывает http-шаг + engine + model + версия baton)`. Кеш — каталог `cache/` рядом с `runs/`, содержимое — `output.json` и артефакты. Значения `env` входят в ключ только как дайджест и не пишутся в `input.json`, так как могут содержать секреты.
 
 По умолчанию `cache: true` для `llm` и `run` с `readonly: true`; `false` для `http` с изменяющими методами и `agent` с `fs.write`. `--no-cache` отключает чтение из кеша, не запись.
 
@@ -884,17 +884,19 @@ runs/<id>/
 
 ```
 baton run <scenario.yaml> [-i key=val]... [--input-file f.json] [--run-id ID]
-          [--runs-dir DIR] [--workspace DIR] [--no-cache] [--dry-run] [--json] [-v]
+          [--runs-dir DIR] [--workspace DIR] [--config FILE]... [--cache-dir DIR]
+          [--no-cache] [--dry-run] [--json] [-v]
 baton validate <scenario.yaml> [--json]   # только валидация, код 0/3
 baton doctor <scenario.yaml>              # сценарий, конфиг, провайдеры, файлы: без запуска шагов
 baton init <directory>                    # самодостаточный пример сценария с его файлами
-baton resume <run-id> [--runs-dir DIR] [--approve | --reject] [--reason TEXT]
+baton resume <run-id> [--runs-dir DIR] [--json] [-v] [--approve | --reject] [--reason TEXT]
 baton runs list [--runs-dir DIR] [-n 20] [--json]
-baton runs show <run-id> [--json]         # сводка, стоимость, статусы шагов
-baton runs logs <run-id> [--step ID]      # stdout/stderr шага
-baton runs prune [--keep N] [--older-than 30d] [--dry-run]   # удалить старые прогоны; running — только по возрасту
+baton runs show <run-id> [--runs-dir DIR] [--json]   # сводка, стоимость, статусы шагов
+baton runs logs <run-id> [--runs-dir DIR] [--step ID]   # stdout/stderr шага
+baton runs prune [--runs-dir DIR] [--keep N] [--older-than 30d] [--dry-run]   # удалить старые прогоны; running — только по возрасту
 baton tools <scenario.yaml> --step ID     # что увидит агент: имена, схемы, описания
 baton schema                              # JSON Schema сценария на stdout
+baton version                             # идентификатор сборки: версия, коммит, дата
 baton apis import --openapi f --ops a,b   # заготовка пака из OpenAPI (раздел 7.4.7)
 baton apis validate <pack.yaml>           # проверка пака и его examples/ против интерфейсов
 baton apis call <scenario> <api>.<op> -a k=v   # вызвать операцию вручную, для отладки паков
@@ -968,7 +970,7 @@ mcp_servers:
 - Интеграция на `fake`-движке: полный прогон ревью-сценария; retry по `schema`; `fallback`; `on_failure` при `budget`; `foreach` с `continue` и `min_success`; `resume` после падения; `until` с `max_iterations`; `dedupe_key`
 - Провайдеры: контрактный тест на `httptest`-сервере для каждого `kind` — нормализация сообщений и tool-calls в обе стороны, три уровня structured output, разбор usage и стоимости (включая `usage.cost` OpenRouter), обработка 429 с `Retry-After`, переключение по `fallback_models`
 - Паки (`internal/httpx`, `internal/packs`): `httptest`-сервер на каждую схему авторизации, включая `exchange` с цепочкой и cookie; каждую стратегию пагинации, включая остановку по `max_pages`; конверт с ошибкой; `form` и `graphql`; редактирование токена в URL
-- Репозиторий `baton-apis`: контрактные тесты — `examples/<op>.json` с записанными ответами каждого API прогоняются через трансформы и проверяются по схемам интерфейсов в CI репозитория; `baton apis validate` на каждый пак
+- Каталог `apis/`: контрактные тесты — `examples/<op>.json` с записанными ответами каждого API прогоняются через трансформы и проверяются по схемам интерфейсов в CI репозитория; `baton apis validate` на каждый пак
 - Один сквозной тест с реальным `claude-code` за флагом `BATON_E2E=1` и по одному реальному запросу на провайдера за флагом `BATON_E2E_PROVIDERS=1`, запускаются вручную перед релизом
 - Линтер, `go vet`, `-race` в CI проекта
 
