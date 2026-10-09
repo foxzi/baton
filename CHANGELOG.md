@@ -8,6 +8,18 @@ Russian version: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
 ## [Unreleased]
 
+### Added
+
+- `skills/baton-scenario`: a skill for Claude Code and similar agents that
+  covers writing, reviewing and debugging Baton scenarios, with a cheatsheet
+  of the format, CLI, packs and verbatim validation messages.
+
+### Fixed
+
+- `baton validate` pricing warnings now resolve an unset `llm.model` through
+  the scenario's `defaults.model` before the global config, in the same
+  order as the engine.
+
 ## [0.7.0] - 2026-10-04
 
 ### Added

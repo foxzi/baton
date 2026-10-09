@@ -205,6 +205,7 @@ Every run writes `runs/<id>/`, read back with `baton runs list`, `runs show <id>
 - [Editor setup](docs/en/editor-setup.md) — connect the scenario JSON Schema to an editor for completion and checks
 - [Docker](docs/en/docker.md) — build/run with docker compose, host uid/gid, secrets, config mount
 - [Changelog](CHANGELOG.md) — what changed in each release
+- [Scenario-writing skill](skills/baton-scenario/SKILL.md) — a skill for Claude Code and similar agents: how to write, review and debug Baton scenarios
 - Russian originals: [быстрый старт](docs/ru/quickstart.md), [обзор](docs/ru/overview.md), [архитектура](docs/ru/architecture.md), [ТЗ](docs/ru/spec.md), [справочник схемы](docs/ru/schema.md), [настройка редактора](docs/ru/editor-setup.md), [Docker](docs/ru/docker.md), [README](docs/ru/README.md)
 
 ## License
