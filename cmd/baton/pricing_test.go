@@ -88,6 +88,28 @@ steps:
 	}
 }
 
+// TestPricingWarningsPrefersScenarioDefault checks that the scenario's own
+// defaults.model wins over the global one, as it does in the engine.
+func TestPricingWarningsPrefersScenarioDefault(t *testing.T) {
+	scn := parseScenario(t, `
+version: 1
+name: defaulted
+defaults:
+  model: openrouter/x/y
+steps:
+  - id: ask
+    llm:
+      prompt: "hi"
+      schema: s.json
+`)
+	cfg := &config.Config{Defaults: config.Defaults{Model: "openai/gpt-5"}}
+
+	warnings := pricingWarnings(scn, cfg)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].Message, "openrouter/x/y") {
+		t.Fatalf("warnings = %v, want one about openrouter/x/y", warnings)
+	}
+}
+
 // TestPricingWarningsWithoutModel checks that a scenario with no model at all
 // stays quiet: there is nothing to price.
 func TestPricingWarningsWithoutModel(t *testing.T) {

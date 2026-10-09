@@ -41,7 +41,11 @@ func pricingWarnings(scn *scenario.Scenario, cfg *config.Config) []scenario.Diag
 		}
 		model := step.LLM.Model
 		if model == "" {
-			// An unset model falls back to defaults.model (section 12).
+			// An unset model falls back to the scenario's defaults.model, then
+			// to the global one, in the same order as the engine (section 12).
+			model = scn.Defaults.Model
+		}
+		if model == "" {
 			model = cfg.Defaults.Model
 		}
 		warn(step, "model", model)
